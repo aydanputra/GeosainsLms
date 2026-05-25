@@ -271,6 +271,7 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
       'min-h-[150px]',
       'p-4',
       'text-slate-800',
+      'rte-content',
       'placeholder:text-slate-400',
       'prose-headings:font-bold',
       'prose-headings:text-slate-900',

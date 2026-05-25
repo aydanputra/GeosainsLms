@@ -218,6 +218,71 @@ select {
   border-color: rgb(var(--brand-rgb));
 }
 
+.rte-content {
+  line-height: 1.65;
+}
+
+.rte-content p {
+  margin: 0 0 0.9em 0;
+}
+
+.rte-content p:last-child {
+  margin-bottom: 0;
+}
+
+.rte-content h1 {
+  margin: 1.1em 0 0.55em 0;
+  font-weight: 800;
+  font-size: 1.75rem;
+  line-height: 1.2;
+}
+
+.rte-content h2 {
+  margin: 1.05em 0 0.5em 0;
+  font-weight: 800;
+  font-size: 1.5rem;
+  line-height: 1.25;
+}
+
+.rte-content h3 {
+  margin: 1em 0 0.45em 0;
+  font-weight: 800;
+  font-size: 1.25rem;
+  line-height: 1.3;
+}
+
+.rte-content h4,
+.rte-content h5,
+.rte-content h6 {
+  margin: 0.95em 0 0.4em 0;
+  font-weight: 800;
+  font-size: 1.1rem;
+  line-height: 1.35;
+}
+
+.rte-content ul,
+.rte-content ol {
+  margin: 0.75em 0 0.9em 1.25em;
+  padding: 0;
+}
+
+.rte-content li {
+  margin: 0.25em 0;
+}
+
+.rte-content blockquote {
+  margin: 0.9em 0;
+  padding-left: 1em;
+  border-left: 4px solid rgb(226, 232, 240);
+  color: rgb(71, 85, 105);
+}
+
+.rte-content hr {
+  margin: 1.25em 0;
+  border: 0;
+  border-top: 1px solid rgb(226, 232, 240);
+}
+
 .border-blue-700 {
   border-color: rgb(var(--brand-rgb));
 }
