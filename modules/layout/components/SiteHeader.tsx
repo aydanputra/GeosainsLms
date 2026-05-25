@@ -27,6 +27,7 @@ export default function SiteHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [elearningOpen, setElearningOpen] = useState(false);
   const [categories, setCategories] = useState<CourseCategory[]>([]);
@@ -42,7 +43,14 @@ export default function SiteHeader() {
   const elearningRef = useRef<HTMLDivElement | null>(null);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const cartCount = useMemo(() => cartItems.reduce((acc, item) => acc + Number(item.quantity || 0), 0), [cartItems]);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const cartCount = useMemo(() => {
+    if (!mounted) return 0;
+    return cartItems.reduce((acc, item) => acc + Number(item.quantity || 0), 0);
+  }, [cartItems, mounted]);
 
   const hidden = useMemo(() => {
     if (!pathname) return false;
