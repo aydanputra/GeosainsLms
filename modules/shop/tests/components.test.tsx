@@ -27,12 +27,12 @@ describe('Shop Components', () => {
     it('should render product details', () => {
       render(<ProductCard product={product} />);
       expect(screen.getByText('Test Product')).toBeDefined();
-      expect(screen.getByText('IDR 10,000')).toBeDefined();
+      expect(screen.getByText(/IDR\s*10[.,]000/)).toBeDefined();
     });
 
     it('should add to cart', () => {
       render(<ProductCard product={product} />);
-      fireEvent.click(screen.getByText('Add to Cart'));
+      fireEvent.click(screen.getByLabelText('Tambah ke Keranjang'));
       expect(useCartStore.getState().items).toHaveLength(1);
       expect(useCartStore.getState().items[0].quantity).toBe(1);
     });
@@ -41,7 +41,7 @@ describe('Shop Components', () => {
   describe('CartList', () => {
     it('should show empty message when cart is empty', () => {
       render(<CartList />);
-      expect(screen.getByText('Your cart is empty.')).toBeDefined();
+      expect(screen.getByText('Keranjang masih kosong')).toBeDefined();
     });
 
     it('should list items and update quantity', () => {
@@ -52,10 +52,10 @@ describe('Shop Components', () => {
       
       expect(screen.getByText('P1')).toBeDefined();
       
-      fireEvent.click(screen.getByText('+'));
+      fireEvent.click(screen.getByLabelText('Tambah jumlah'));
       expect(useCartStore.getState().items[0].quantity).toBe(2);
       
-      fireEvent.click(screen.getByText('Remove'));
+      fireEvent.click(screen.getByText('Hapus'));
       expect(useCartStore.getState().items).toHaveLength(0);
     });
   });
