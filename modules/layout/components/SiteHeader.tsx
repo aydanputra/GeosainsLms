@@ -268,10 +268,6 @@ export default function SiteHeader() {
     router.push(`/courses?q=${encodeURIComponent(q)}`);
   };
 
-  const closeMobileSoon = () => {
-    window.requestAnimationFrame(() => setMobileOpen(false));
-  };
-
   return (
     <header
       className={[
@@ -566,7 +562,7 @@ export default function SiteHeader() {
         <button
           type="button"
           className={[
-            'absolute inset-0 bg-slate-900/40 transition-opacity duration-300',
+            'absolute inset-0 bg-slate-900/40 transition-opacity duration-300 z-0',
             mobileOpen ? 'opacity-100' : 'opacity-0',
           ].join(' ')}
           aria-label="Tutup menu"
@@ -574,7 +570,7 @@ export default function SiteHeader() {
         />
         <div
           className={[
-            'absolute top-0 right-0 h-full w-[86%] max-w-sm bg-white border-l border-slate-200 shadow-2xl',
+            'absolute top-0 right-0 h-full w-[86%] max-w-sm bg-white border-l border-slate-200 shadow-2xl z-10',
             'transition-transform duration-300 ease-out',
             mobileOpen ? 'translate-x-0' : 'translate-x-full',
           ].join(' ')}
@@ -611,14 +607,12 @@ export default function SiteHeader() {
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <Link
                     href="/dashboard/profile"
-                    onClick={closeMobileSoon}
                     className="px-3 py-2 rounded-2xl text-sm font-extrabold text-slate-800 bg-white border border-slate-200 text-center hover:bg-slate-50"
                   >
                     Profil
                   </Link>
                   <Link
                     href={dashboardHref}
-                    onClick={closeMobileSoon}
                     className="px-3 py-2 rounded-2xl text-sm font-extrabold text-slate-800 bg-white border border-slate-200 text-center hover:bg-slate-50"
                   >
                     Dashboard
@@ -631,14 +625,12 @@ export default function SiteHeader() {
                 <div className="mt-3 flex items-center gap-2">
                   <Link
                     href="/login"
-                    onClick={closeMobileSoon}
                     className="flex-1 px-3 py-2 rounded-2xl text-sm font-extrabold text-slate-700 border border-slate-200 text-center hover:bg-slate-50 bg-white"
                   >
                     Masuk
                   </Link>
                   <Link
                     href="/register"
-                    onClick={closeMobileSoon}
                     className="flex-1 px-3 py-2 rounded-2xl text-sm font-extrabold bg-brand-gradient text-white text-center hover:opacity-90"
                   >
                     Daftar
@@ -650,7 +642,6 @@ export default function SiteHeader() {
             <div className="space-y-2">
               <Link
                 href="/"
-                onClick={closeMobileSoon}
                 className="flex items-center justify-between px-3 py-3 rounded-2xl text-sm font-extrabold text-slate-800 border border-slate-200 hover:bg-slate-50"
               >
                 <span>Home</span>
@@ -700,7 +691,6 @@ export default function SiteHeader() {
 
               <Link
                 href="/cart"
-                onClick={closeMobileSoon}
                 className="flex items-center justify-between px-3 py-3 rounded-2xl text-sm font-extrabold text-slate-800 border border-slate-200 hover:bg-slate-50"
               >
                 <span className="inline-flex items-center gap-2">
@@ -728,7 +718,6 @@ export default function SiteHeader() {
                 <div className="p-2 border-t border-slate-200 bg-white">
                   <Link
                     href="/courses"
-                    onClick={closeMobileSoon}
                     className="block px-3 py-2 rounded-2xl text-sm font-extrabold text-slate-900 hover:bg-slate-50"
                   >
                     Semua Kursus
@@ -737,7 +726,6 @@ export default function SiteHeader() {
                     <Link
                       key={cat.id}
                       href={`/courses?category=${encodeURIComponent(cat.slug)}`}
-                      onClick={closeMobileSoon}
                       className="block px-3 py-2 rounded-2xl text-sm font-semibold text-slate-700 hover:bg-slate-50"
                     >
                       {cat.name}
@@ -752,7 +740,6 @@ export default function SiteHeader() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  onClick={closeMobileSoon}
                   className="block px-4 py-3 rounded-2xl text-sm font-extrabold text-slate-800 border border-slate-200 hover:bg-slate-50"
                 >
                   {item.label}
