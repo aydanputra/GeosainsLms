@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
-import { Bell, ChevronDown, Menu, MessageSquare, Search, ShoppingCart, X } from 'lucide-react';
+import { Bell, ChevronDown, LogOut, Menu, MessageSquare, Search, ShoppingCart, X } from 'lucide-react';
 import { useCartStore } from '@/modules/shop/store/useCartStore';
 
 type CourseCategory = { id: string; name: string; slug: string };
@@ -259,6 +259,14 @@ export default function SiteHeader() {
         ? '/dashboard/mentor/inbox'
         : '/dashboard/student/inbox';
 
+  const greetingName = useMemo(() => {
+    const fallback = user?.email ? user.email.split('@')[0] : '';
+    const raw = (user?.name || fallback || '').trim();
+    if (!raw) return '';
+    const first = raw.split(/\s+/)[0];
+    return first || raw;
+  }, [user?.name, user?.email]);
+
   const submitSearch = () => {
     const q = searchQuery.trim();
     setSearchOpen(false);
@@ -397,42 +405,6 @@ export default function SiteHeader() {
           >
             <Search className="w-5 h-5" />
           </button>
-          <button
-            type="button"
-            onClick={() => {
-              const redirect = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/';
-              if (!user) window.location.href = `/login?redirect=${encodeURIComponent(redirect)}`;
-              else window.location.href = inboxHref;
-            }}
-            className="relative hidden sm:flex w-10 h-10 rounded-2xl bg-white border border-slate-200 items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-            title="Pesan"
-            aria-label="Pesan"
-          >
-            <MessageSquare className="w-5 h-5" />
-            {user && messageUnreadCount > 0 ? (
-              <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-rose-600 text-white text-[10px] font-extrabold flex items-center justify-center border-2 border-white">
-                {messageUnreadCount > 99 ? '99+' : String(messageUnreadCount)}
-              </span>
-            ) : null}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const redirect = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/';
-              if (!user) window.location.href = `/login?redirect=${encodeURIComponent(redirect)}`;
-              else window.location.href = '/dashboard/notifications';
-            }}
-            className="relative hidden sm:flex w-10 h-10 rounded-2xl bg-white border border-slate-200 items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-            title="Notifikasi"
-            aria-label="Notifikasi"
-          >
-            <Bell className="w-5 h-5" />
-            {user && notificationUnreadCount > 0 ? (
-              <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-amber-500 text-white text-[10px] font-extrabold flex items-center justify-center border-2 border-white">
-                {notificationUnreadCount > 99 ? '99+' : String(notificationUnreadCount)}
-              </span>
-            ) : null}
-          </button>
 
           {user ? (
             <div className="relative hidden sm:block" ref={userMenuRef}>
@@ -442,7 +414,7 @@ export default function SiteHeader() {
                 className="flex items-center gap-3 pl-2 pr-2 py-2 rounded-2xl hover:bg-white transition-colors"
               >
                 <div className="hidden sm:block text-sm font-bold text-slate-900">
-                  Halo, {user.name || user.email.split('@')[0]}
+                  Halo, {greetingName || user.email.split('@')[0]}
                 </div>
                 <div className="w-10 h-10 rounded-full bg-slate-200 border border-slate-200 overflow-hidden relative">
                   {typeof user.avatarUrl === 'string' && user.avatarUrl.trim() && !user.avatarUrl.startsWith('blob:') ? (
@@ -461,6 +433,42 @@ export default function SiteHeader() {
                     <div className="text-xs text-slate-500 truncate">{user.email}</div>
                   </div>
                   <div className="p-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        window.location.href = inboxHref;
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <MessageSquare className="w-4 h-4 text-slate-500" />
+                        Pesan
+                      </span>
+                      {messageUnreadCount > 0 ? (
+                        <span className="min-w-5 h-5 px-1 rounded-full bg-rose-600 text-white text-[10px] font-extrabold flex items-center justify-center">
+                          {messageUnreadCount > 99 ? '99+' : String(messageUnreadCount)}
+                        </span>
+                      ) : null}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        window.location.href = '/dashboard/notifications';
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <Bell className="w-4 h-4 text-slate-500" />
+                        Notifikasi
+                      </span>
+                      {notificationUnreadCount > 0 ? (
+                        <span className="min-w-5 h-5 px-1 rounded-full bg-amber-500 text-white text-[10px] font-extrabold flex items-center justify-center">
+                          {notificationUnreadCount > 99 ? '99+' : String(notificationUnreadCount)}
+                        </span>
+                      ) : null}
+                    </button>
                     <Link href="/dashboard/settings" className="block px-3 py-2 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50">
                       Profil Saya
                     </Link>
@@ -571,7 +579,8 @@ export default function SiteHeader() {
         />
         <div
           className={[
-            'absolute top-0 right-0 h-full w-[86%] max-w-sm bg-white border-l border-slate-200 shadow-2xl z-10',
+            'absolute top-0 right-0 w-[86%] max-w-sm bg-white border-l border-slate-200 shadow-2xl z-10',
+            'h-[100dvh] flex flex-col overflow-hidden',
             'transition-transform duration-300 ease-out',
             mobileOpen ? 'translate-x-0' : 'translate-x-full',
           ].join(' ')}
@@ -589,11 +598,11 @@ export default function SiteHeader() {
             </button>
           </div>
 
-          <div className="p-4 space-y-3 overflow-auto h-[calc(100vh-4rem)]">
+          <div className="flex-1 min-h-0 p-4 pb-8 space-y-3 overflow-y-auto overscroll-contain touch-pan-y [-webkit-overflow-scrolling:touch]">
             {user ? (
               <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 overflow-hidden relative">
+                  <div className="w-10 h-10 rounded-2xl bg-white border border-slate-200 overflow-hidden relative shrink-0">
                     {typeof user.avatarUrl === 'string' && user.avatarUrl.trim() && !user.avatarUrl.startsWith('blob:') ? (
                       <Image src={user.avatarUrl} alt={user.name || user.email} fill unoptimized className="object-cover" />
                     ) : (
@@ -619,6 +628,22 @@ export default function SiteHeader() {
                     Dashboard
                   </Link>
                 </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+                    } catch {
+                    }
+                    setUser(null);
+                    setMobileOpen(false);
+                    window.location.href = '/login';
+                  }}
+                  className="mt-2 w-full px-3 py-2 rounded-2xl text-sm font-extrabold text-red-700 border border-slate-200 bg-white hover:bg-red-50 flex items-center justify-center gap-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Keluar
+                </button>
               </div>
             ) : (
               <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
@@ -747,24 +772,6 @@ export default function SiteHeader() {
                 </Link>
               ))}
             </div>
-
-            {user ? (
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-                  } catch {
-                  }
-                  setUser(null);
-                  setMobileOpen(false);
-                  window.location.href = '/login';
-                }}
-                className="w-full px-4 py-3 rounded-2xl text-sm font-extrabold text-red-700 border border-slate-200 hover:bg-red-50"
-              >
-                Keluar
-              </button>
-            ) : null}
           </div>
         </div>
       </div>
