@@ -48,7 +48,7 @@ export default function CartList() {
                   {(item.type || 'PHYSICAL') === 'SERVICE' ? 'Jasa' : (item.type || 'PHYSICAL') === 'RENTAL' ? 'Sewa' : 'Produk'}
                 </span>
               </div>
-              <div className="mt-1 text-sm font-bold text-slate-700">IDR {item.price.toLocaleString()}</div>
+              <div className="mt-1 text-sm font-bold text-slate-700">IDR {Number(item.price || 0).toLocaleString()}</div>
             </div>
           </div>
           

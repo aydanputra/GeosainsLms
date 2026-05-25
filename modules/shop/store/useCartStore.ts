@@ -56,15 +56,25 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: 'cart-storage',
-      version: 1,
+      version: 2,
       migrate: (persisted: any) => {
-        const state = persisted && typeof persisted === 'object' ? persisted : {};
+        const persistedObj = persisted && typeof persisted === 'object' ? persisted : {};
+        const state =
+          persistedObj && typeof persistedObj.state === 'object' && persistedObj.state
+            ? (persistedObj.state as any)
+            : persistedObj;
         const items = Array.isArray(state.items) ? state.items : [];
         const c: any = (globalThis as any).crypto;
         const nextItems = items.map((it: any) => {
           const id = typeof it?.id === 'string' && it.id ? it.id : c && typeof c.randomUUID === 'function' ? c.randomUUID() : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
           const type = it?.type === 'SERVICE' || it?.type === 'RENTAL' || it?.type === 'PHYSICAL' ? it.type : 'PHYSICAL';
-          return { ...it, id, type };
+          const priceRaw = typeof it?.price === 'number' ? it.price : Number(it?.price);
+          const quantityRaw = typeof it?.quantity === 'number' ? it.quantity : Number(it?.quantity);
+          const price = Number.isFinite(priceRaw) ? priceRaw : 0;
+          const quantity = Number.isFinite(quantityRaw) && quantityRaw > 0 ? Math.floor(quantityRaw) : 1;
+          const name = typeof it?.name === 'string' ? it.name : String(it?.name || '');
+          const productId = typeof it?.productId === 'string' ? it.productId : String(it?.productId || '');
+          return { ...it, id, type, price, quantity, name, productId };
         });
         return { ...state, items: nextItems };
       },
