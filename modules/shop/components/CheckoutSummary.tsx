@@ -5,7 +5,7 @@ import Link from 'next/link';
 
 export default function CheckoutSummary() {
   const { getTotal } = useCartStore();
-  const total = getTotal();
+  const total = Number(getTotal() || 0);
   const isEmpty = total === 0;
 
   return (
