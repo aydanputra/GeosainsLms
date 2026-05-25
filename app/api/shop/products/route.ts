@@ -33,8 +33,9 @@ export async function GET(_req: NextRequest) {
     const url = new URL(_req.url);
     const vendorId = (url.searchParams.get('vendorId') || '').trim();
     const vendorIdsRaw = (url.searchParams.get('vendorIds') || '').trim();
-    const takeRaw = Number(url.searchParams.get('take') || '');
-    const take = Number.isFinite(takeRaw) ? Math.max(1, Math.min(100, takeRaw)) : undefined;
+    const takeStr = url.searchParams.get('take');
+    const takeRaw = takeStr === null ? null : Number(takeStr);
+    const take = typeof takeRaw === 'number' && Number.isFinite(takeRaw) && takeRaw > 0 ? Math.max(1, Math.min(100, takeRaw)) : undefined;
 
     const vendorIds = vendorIdsRaw
       ? Array.from(

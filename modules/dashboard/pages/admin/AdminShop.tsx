@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Table from '../../components/Tables';
 import Cards from '../../components/Cards';
 import EmptyState from '../../components/EmptyState';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plus, Search, Filter, Edit2, Trash2, Eye, ShoppingBag, Image as ImageIcon } from 'lucide-react';
+import { Plus, Search, Filter, Edit2, Trash2, Eye, ShoppingBag, Image as ImageIcon, ChevronDown } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 import { toast } from 'sonner';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -99,6 +99,19 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
   const [mediaTargetIndex, setMediaTargetIndex] = useState<number | null>(null);
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [vendors, setVendors] = useState<Array<{ id: string; name: string }>>([]);
+  const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
+  const [categoryPickerQuery, setCategoryPickerQuery] = useState('');
+  const categoryPickerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!categoryPickerOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (!categoryPickerRef.current) return;
+      if (!categoryPickerRef.current.contains(e.target as Node)) setCategoryPickerOpen(false);
+    };
+    window.addEventListener('mousedown', handler);
+    return () => window.removeEventListener('mousedown', handler);
+  }, [categoryPickerOpen]);
 
   useEffect(() => {
     const editId = searchParams?.get('edit');
@@ -150,6 +163,19 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
       return matchesSearch && matchesCategory && matchesVendor;
     });
   }, [products, searchQuery, filterCategory, filterVendor]);
+
+  const filteredCategoryOptions = useMemo(() => {
+    const q = categoryPickerQuery.trim().toLowerCase();
+    if (!q) return categories;
+    return categories.filter((c) => c.name.toLowerCase().includes(q));
+  }, [categories, categoryPickerQuery]);
+
+  const selectedCategoryNames = useMemo(() => {
+    const selectedIds = Array.isArray(editorValue.categoryIds) ? editorValue.categoryIds.map(String) : [];
+    if (selectedIds.length === 0) return [];
+    const map = new Map(categories.map((c) => [String(c.id), String(c.name)] as const));
+    return selectedIds.map((id) => map.get(id)).filter(Boolean) as string[];
+  }, [editorValue.categoryIds, categories]);
 
   const visibleIds = useMemo(() => filteredProducts.map((p: any) => p.id as string), [filteredProducts]);
   const isAllVisibleSelected = useMemo(() => {
@@ -378,17 +404,21 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
       price: 0,
       stock: 0,
       category: 'OTHER',
-      categoryIds: categories[0]?.id ? [categories[0].id] : [],
+      categoryIds: [],
       vendorId: vendors[0]?.id || '',
       imageUrl: '',
       imageUrls: [],
     });
+    setCategoryPickerQuery('');
+    setCategoryPickerOpen(false);
     setEditorOpen(true);
   };
 
   const openEdit = (row: any) => {
     setEditorMode('EDIT');
     setEditorValue(normalizeProductForm(row));
+    setCategoryPickerQuery('');
+    setCategoryPickerOpen(false);
     setEditorOpen(true);
   };
 
@@ -707,21 +737,77 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
                 </div>
                   <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-600">Kategori Produk</label>
-                  <select
-                    multiple
-                    value={editorValue.categoryIds}
-                    onChange={(e) => {
-                      const selected = Array.from(e.target.selectedOptions).map((o) => String(o.value));
-                      setEditorValue((prev) => ({ ...prev, categoryIds: selected }));
-                    }}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  >
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative" ref={categoryPickerRef}>
+                    <button
+                      type="button"
+                      onClick={() => setCategoryPickerOpen((v) => !v)}
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    >
+                      <span className="flex items-center justify-between gap-3">
+                        <span className="truncate text-left">
+                          {selectedCategoryNames.length > 0
+                            ? `${selectedCategoryNames[0]}${selectedCategoryNames.length > 1 ? ` +${selectedCategoryNames.length - 1}` : ''}`
+                            : 'Pilih kategori...'}
+                        </span>
+                        <ChevronDown
+                          className={twMerge('w-4 h-4 text-slate-500 shrink-0 transition-transform', categoryPickerOpen ? 'rotate-180' : '')}
+                        />
+                      </span>
+                    </button>
+
+                    {categoryPickerOpen ? (
+                      <div className="absolute z-20 mt-2 w-full rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+                        <div className="p-2 border-b border-slate-100">
+                          <input
+                            value={categoryPickerQuery}
+                            onChange={(e) => setCategoryPickerQuery(e.target.value)}
+                            placeholder="Cari kategori..."
+                            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                            autoFocus
+                          />
+                        </div>
+                        <div className="max-h-64 overflow-y-auto p-2 space-y-1">
+                          {filteredCategoryOptions.length > 0 ? (
+                            filteredCategoryOptions.map((c) => {
+                              const selected = Array.isArray(editorValue.categoryIds)
+                                ? editorValue.categoryIds.map(String).includes(String(c.id))
+                                : false;
+                              return (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setEditorValue((prev) => {
+                                      const prevIds = Array.isArray(prev.categoryIds) ? prev.categoryIds.map(String) : [];
+                                      const id = String(c.id);
+                                      const next = prevIds.includes(id) ? prevIds.filter((x) => x !== id) : [...prevIds, id];
+                                      return { ...prev, categoryIds: next };
+                                    });
+                                  }}
+                                  className={twMerge(
+                                    'w-full flex items-center justify-between gap-3 px-3 py-2 rounded-xl text-left text-sm font-bold border',
+                                    selected ? 'bg-indigo-50 text-indigo-800 border-indigo-200' : 'bg-white text-slate-800 border-transparent hover:bg-slate-50'
+                                  )}
+                                >
+                                  <span className="truncate">{c.name}</span>
+                                  <span
+                                    className={twMerge(
+                                      'h-5 w-5 rounded-md border flex items-center justify-center text-[10px] font-extrabold',
+                                      selected ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-transparent border-slate-300'
+                                    )}
+                                  >
+                                    ✓
+                                  </span>
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <div className="px-3 py-2 text-sm text-slate-500">Kategori tidak ditemukan.</div>
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                   {editorValue.categoryIds.length === 0 ? (
                     <select
                       value={editorValue.category}

@@ -55,6 +55,36 @@ function sanitizePastedHtml(rawHtml: string) {
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, 'text/html');
+  const removeLeadingChars = (root: HTMLElement, count: number) => {
+    let remaining = Math.max(0, Math.floor(count));
+    if (!remaining) return;
+    const w = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const toRemove: Text[] = [];
+    while (remaining > 0 && w.nextNode()) {
+      const textNode = w.currentNode as Text;
+      const v = textNode.nodeValue || '';
+      if (v.length <= remaining) {
+        remaining -= v.length;
+        toRemove.push(textNode);
+      } else {
+        textNode.nodeValue = v.slice(remaining);
+        remaining = 0;
+      }
+    }
+    toRemove.forEach((n) => n.remove());
+  };
+
+  const detectListMarker = (el: HTMLElement) => {
+    const raw = String(el.textContent || '');
+    const trimmed = raw.replace(/^\s+/, '');
+    const leadingWsLen = raw.length - trimmed.length;
+    if (!trimmed) return null;
+    const ol = trimmed.match(/^(\d{1,3})[.)]\s+/);
+    if (ol) return { type: 'ol' as const, removeChars: leadingWsLen + ol[0].length };
+    const ul = trimmed.match(/^([•·‣▪●○-])\s+/);
+    if (ul) return { type: 'ul' as const, removeChars: leadingWsLen + ul[0].length };
+    return null;
+  };
 
   const removeNodes = doc.querySelectorAll(
     'script,style,meta,link,title,noscript,iframe,object,embed,form,input,button,textarea,select,option,svg'
@@ -162,6 +192,44 @@ function sanitizePastedHtml(rawHtml: string) {
     }
   });
 
+  const body = doc.body;
+  const fragment = doc.createDocumentFragment();
+  let currentList: HTMLOListElement | HTMLUListElement | null = null;
+  let currentListType: 'ol' | 'ul' | null = null;
+  Array.from(body.children).forEach((child) => {
+    const tag = child.tagName.toLowerCase();
+    const isParagraph = tag === 'p';
+    const marker = isParagraph ? detectListMarker(child as HTMLElement) : null;
+
+    if (isParagraph && marker) {
+      if (!currentList || currentListType !== marker.type) {
+        if (currentList) fragment.appendChild(currentList);
+        currentList = doc.createElement(marker.type) as any;
+        currentListType = marker.type;
+      }
+
+      const p = child as HTMLElement;
+      removeLeadingChars(p, marker.removeChars);
+      const li = doc.createElement('li');
+      while (p.firstChild) li.appendChild(p.firstChild);
+      const liText = String(li.textContent || '').replace(/\u00a0/g, ' ').trim();
+      const listEl = currentList;
+      if (liText && listEl) listEl.appendChild(li);
+      return;
+    }
+
+    if (currentList) {
+      fragment.appendChild(currentList);
+      currentList = null;
+      currentListType = null;
+    }
+
+    fragment.appendChild(child);
+  });
+  if (currentList) fragment.appendChild(currentList);
+  body.innerHTML = '';
+  body.appendChild(fragment);
+
   const out = (doc.body.innerHTML || '').replace(/\u00a0/g, ' ').trim();
   return out;
 }
@@ -203,6 +271,7 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
       'min-h-[150px]',
       'p-4',
       'text-slate-800',
+      'rte-content',
       'placeholder:text-slate-400',
       'prose-headings:font-bold',
       'prose-headings:text-slate-900',

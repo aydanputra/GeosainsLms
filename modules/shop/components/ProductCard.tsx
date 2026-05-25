@@ -18,7 +18,7 @@ interface ProductCardProps {
   addToCartVariant?: 'text' | 'icon';
 }
 
-export default function ProductCard({ product, addToCartVariant = 'text' }: ProductCardProps) {
+export default function ProductCard({ product, addToCartVariant = 'icon' }: ProductCardProps) {
   const addItem = useCartStore((state) => state.addItem);
   const href = `/shop/products/${product.slug || product.id}`;
 

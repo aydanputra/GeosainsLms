@@ -120,7 +120,7 @@ export default function PostDetail({ post }: PostDetailProps) {
           </header>
 
           <div className="px-6 sm:px-8 pb-8">
-            <div className="prose prose-lg prose-indigo max-w-none text-slate-700">
+            <div className="rte-content text-slate-700">
               <div dangerouslySetInnerHTML={{ __html: post.content }} />
             </div>
           </div>
