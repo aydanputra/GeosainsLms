@@ -25,7 +25,7 @@ function resolveDatabaseUrl() {
 const databaseUrl = resolveDatabaseUrl()
 
 export const prisma =
-  globalForPrisma.prisma ||
+  globalForPrisma.prisma ??
   new PrismaClient({
     datasources: {
       db: {
@@ -34,4 +34,4 @@ export const prisma =
     },
   })
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+globalForPrisma.prisma = prisma
