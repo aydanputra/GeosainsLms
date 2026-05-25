@@ -266,7 +266,16 @@ select {
   padding: 0;
 }
 
+.rte-content ul {
+  list-style-type: disc;
+}
+
+.rte-content ol {
+  list-style-type: decimal;
+}
+
 .rte-content li {
+  display: list-item;
   margin: 0.25em 0;
 }
 
