@@ -173,13 +173,14 @@ export default function SiteHeader() {
 
   useEffect(() => {
     if (!elearningOpen) return;
+    if (mobileOpen) return;
     const handler = (e: MouseEvent) => {
       if (!elearningRef.current) return;
       if (!elearningRef.current.contains(e.target as Node)) setElearningOpen(false);
     };
     window.addEventListener('mousedown', handler);
     return () => window.removeEventListener('mousedown', handler);
-  }, [elearningOpen]);
+  }, [elearningOpen, mobileOpen]);
 
   useEffect(() => {
     if (!userMenuOpen) return;
