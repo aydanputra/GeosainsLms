@@ -79,11 +79,18 @@ export default function ArticleEditor({
 
   const [tagInput, setTagInput] = useState('');
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [categorySearch, setCategorySearch] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [isMediaOpen, setIsMediaOpen] = useState(false);
 
   const categoriesState = Array.isArray(categories) ? categories : [];
   const tagsState = Array.isArray(tags) ? tags : [];
+
+  const filteredCategories = useMemo(() => {
+    const q = categorySearch.trim().toLowerCase();
+    if (!q) return categoriesState;
+    return categoriesState.filter((c: any) => String(c?.name || '').toLowerCase().includes(q));
+  }, [categoriesState, categorySearch]);
 
   const isEdit = mode === 'EDIT' && Boolean(value.id);
 
@@ -277,13 +284,19 @@ export default function ArticleEditor({
                 Kelola
               </Link>
             </div>
+            <input
+              value={categorySearch}
+              onChange={(e) => setCategorySearch(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+              placeholder="Cari kategori..."
+            />
             <select
               value={value.categoryId}
               onChange={(e) => setValue((p) => ({ ...p, categoryId: e.target.value, categoryName: '' }))}
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
             >
               <option value="">Tanpa kategori</option>
-              {categoriesState.map((c: any) => (
+              {filteredCategories.map((c: any) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
@@ -384,4 +397,3 @@ export default function ArticleEditor({
     </div>
   );
 }
-
