@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 import { Bell, ChevronDown, Menu, MessageSquare, Search, ShoppingCart, X } from 'lucide-react';
 import { useCartStore } from '@/modules/shop/store/useCartStore';
@@ -24,6 +24,7 @@ type SiteSettings = {
 };
 
 export default function SiteHeader() {
+  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -35,6 +36,9 @@ export default function SiteHeader() {
   const [siteSettings, setSiteSettings] = useState<SiteSettings>({});
   const { items: cartItems } = useCartStore();
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const elearningRef = useRef<HTMLDivElement | null>(null);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -81,7 +85,7 @@ export default function SiteHeader() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     let active = true;
@@ -105,6 +109,39 @@ export default function SiteHeader() {
       } catch {
         if (!active) return;
         setMessageUnreadCount(0);
+      }
+    };
+
+    load();
+    timer = setInterval(load, 20000);
+    return () => {
+      active = false;
+      if (timer) clearInterval(timer);
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    let active = true;
+    let timer: any = null;
+
+    const load = async () => {
+      try {
+        if (!user?.id) {
+          if (!active) return;
+          setNotificationUnreadCount(0);
+          return;
+        }
+        const res = await fetch('/api/notifications?limit=1&kind=alerts', { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!active) return;
+        if (!res.ok) {
+          setNotificationUnreadCount(0);
+          return;
+        }
+        setNotificationUnreadCount(typeof data?.unreadCount === 'number' ? data.unreadCount : 0);
+      } catch {
+        if (!active) return;
+        setNotificationUnreadCount(0);
       }
     };
 
@@ -159,6 +196,7 @@ export default function SiteHeader() {
       setMobileOpen(false);
       setElearningOpen(false);
       setUserMenuOpen(false);
+      setSearchOpen(false);
     });
     return () => window.cancelAnimationFrame(raf);
   }, [pathname]);
@@ -187,6 +225,15 @@ export default function SiteHeader() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileOpen]);
+
   if (hidden) return null;
 
   const menuItems = [
@@ -210,6 +257,16 @@ export default function SiteHeader() {
       : user?.role === 'MENTOR'
         ? '/dashboard/mentor/inbox'
         : '/dashboard/student/inbox';
+
+  const submitSearch = () => {
+    const q = searchQuery.trim();
+    setSearchOpen(false);
+    if (!q) {
+      router.push('/courses');
+      return;
+    }
+    router.push(`/courses?q=${encodeURIComponent(q)}`);
+  };
 
   return (
     <header
@@ -332,12 +389,21 @@ export default function SiteHeader() {
           </Link>
           <button
             type="button"
+            onClick={() => setSearchOpen(true)}
+            className="w-10 h-10 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            title="Cari"
+            aria-label="Cari"
+          >
+            <Search className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
             onClick={() => {
               const redirect = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/';
               if (!user) window.location.href = `/login?redirect=${encodeURIComponent(redirect)}`;
               else window.location.href = inboxHref;
             }}
-            className="relative w-10 h-10 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            className="relative hidden sm:flex w-10 h-10 rounded-2xl bg-white border border-slate-200 items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-50"
             title="Pesan"
             aria-label="Pesan"
           >
@@ -350,21 +416,25 @@ export default function SiteHeader() {
           </button>
           <button
             type="button"
-            className="w-10 h-10 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+            onClick={() => {
+              const redirect = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/';
+              if (!user) window.location.href = `/login?redirect=${encodeURIComponent(redirect)}`;
+              else window.location.href = '/dashboard/notifications';
+            }}
+            className="relative hidden sm:flex w-10 h-10 rounded-2xl bg-white border border-slate-200 items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-50"
             title="Notifikasi"
+            aria-label="Notifikasi"
           >
             <Bell className="w-5 h-5" />
-          </button>
-          <button
-            type="button"
-            className="w-10 h-10 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-            title="Cari"
-          >
-            <Search className="w-5 h-5" />
+            {user && notificationUnreadCount > 0 ? (
+              <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-amber-500 text-white text-[10px] font-extrabold flex items-center justify-center border-2 border-white">
+                {notificationUnreadCount > 99 ? '99+' : String(notificationUnreadCount)}
+              </span>
+            ) : null}
           </button>
 
           {user ? (
-            <div className="relative" ref={userMenuRef}>
+            <div className="relative hidden sm:block" ref={userMenuRef}>
               <button
                 type="button"
                 onClick={() => setUserMenuOpen((v) => !v)}
@@ -436,43 +506,235 @@ export default function SiteHeader() {
         </div>
       </div>
 
-      {mobileOpen ? (
-        <div className="lg:hidden border-t border-slate-200 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-2">
-            <Link
-              href="/cart"
-              className="flex items-center justify-between px-3 py-2 rounded-xl text-sm font-bold text-slate-800 hover:bg-slate-50"
-            >
-              <span>Keranjang</span>
-              {cartCount > 0 ? (
-                <span className="min-w-6 h-6 px-2 rounded-full bg-indigo-600 text-white text-[10px] font-extrabold flex items-center justify-center">
-                  {cartCount > 99 ? '99+' : String(cartCount)}
-                </span>
-              ) : null}
-            </Link>
-            <Link href="/" className="block px-3 py-2 rounded-xl text-sm font-bold text-slate-800 hover:bg-slate-50">
-              Home
-            </Link>
+      {searchOpen ? (
+        <div className="fixed inset-0 z-[60]">
+          <button
+            type="button"
+            className="absolute inset-0 bg-slate-900/50"
+            aria-label="Tutup pencarian"
+            onClick={() => setSearchOpen(false)}
+          />
+          <div className="relative max-w-2xl mx-auto pt-24 px-4">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden">
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between gap-3">
+                <div className="text-sm font-extrabold text-slate-900">Cari Kursus</div>
+                <button
+                  type="button"
+                  onClick={() => setSearchOpen(false)}
+                  className="h-9 w-9 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center"
+                  aria-label="Tutup"
+                >
+                  <X className="w-4 h-4 text-slate-700" />
+                </button>
+              </div>
+              <div className="p-4">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    submitSearch();
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <div className="flex-1 relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-4 top-3.5" />
+                    <input
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Cari judul kursus..."
+                      className="w-full h-11 pl-11 pr-4 rounded-2xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-600 transition-all"
+                      autoFocus
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="h-11 px-4 rounded-2xl bg-indigo-600 text-white font-extrabold hover:bg-indigo-700"
+                  >
+                    Cari
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
-            <div className="border border-slate-200 rounded-2xl overflow-hidden">
+      <div className={mobileOpen ? 'lg:hidden fixed inset-0 z-[55]' : 'lg:hidden fixed inset-0 z-[55] pointer-events-none'}>
+        <button
+          type="button"
+          className={[
+            'absolute inset-0 bg-slate-900/40 transition-opacity duration-300',
+            mobileOpen ? 'opacity-100' : 'opacity-0',
+          ].join(' ')}
+          aria-label="Tutup menu"
+          onClick={() => setMobileOpen(false)}
+        />
+        <div
+          className={[
+            'absolute top-0 right-0 h-full w-[86%] max-w-sm bg-white border-l border-slate-200 shadow-2xl',
+            'transition-transform duration-300 ease-out',
+            mobileOpen ? 'translate-x-0' : 'translate-x-full',
+          ].join(' ')}
+          style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        >
+          <div className="h-16 px-4 border-b border-slate-200 flex items-center justify-between">
+            <div className="text-sm font-extrabold text-slate-900">Menu</div>
+            <button
+              type="button"
+              onClick={() => setMobileOpen(false)}
+              className="h-10 w-10 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 flex items-center justify-center"
+              aria-label="Tutup"
+            >
+              <X className="w-5 h-5 text-slate-700" />
+            </button>
+          </div>
+
+          <div className="p-4 space-y-3 overflow-auto h-[calc(100vh-4rem)]">
+            {user ? (
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 overflow-hidden relative">
+                    {typeof user.avatarUrl === 'string' && user.avatarUrl.trim() && !user.avatarUrl.startsWith('blob:') ? (
+                      <Image src={user.avatarUrl} alt={user.name || user.email} fill unoptimized className="object-cover" />
+                    ) : (
+                      <Image src="/window.svg" alt={user.name || user.email} fill className="object-cover" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-extrabold text-slate-900 truncate">{user.name || user.email}</div>
+                    <div className="text-xs text-slate-500 truncate">{user.email}</div>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Link
+                    href="/dashboard/profile"
+                    onClick={() => setMobileOpen(false)}
+                    className="px-3 py-2 rounded-2xl text-sm font-extrabold text-slate-800 bg-white border border-slate-200 text-center hover:bg-slate-50"
+                  >
+                    Profil
+                  </Link>
+                  <Link
+                    href={dashboardHref}
+                    onClick={() => setMobileOpen(false)}
+                    className="px-3 py-2 rounded-2xl text-sm font-extrabold text-slate-800 bg-white border border-slate-200 text-center hover:bg-slate-50"
+                  >
+                    Dashboard
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm font-extrabold text-slate-900">Akun</div>
+                <div className="mt-3 flex items-center gap-2">
+                  <Link
+                    href="/login"
+                    onClick={() => setMobileOpen(false)}
+                    className="flex-1 px-3 py-2 rounded-2xl text-sm font-extrabold text-slate-700 border border-slate-200 text-center hover:bg-slate-50 bg-white"
+                  >
+                    Masuk
+                  </Link>
+                  <Link
+                    href="/register"
+                    onClick={() => setMobileOpen(false)}
+                    className="flex-1 px-3 py-2 rounded-2xl text-sm font-extrabold bg-brand-gradient text-white text-center hover:opacity-90"
+                  >
+                    Daftar
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Link
+                href="/"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center justify-between px-3 py-3 rounded-2xl text-sm font-extrabold text-slate-800 border border-slate-200 hover:bg-slate-50"
+              >
+                <span>Home</span>
+              </Link>
+
+              {user ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileOpen(false);
+                      window.location.href = inboxHref;
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-3 rounded-2xl text-sm font-extrabold text-slate-800 border border-slate-200 hover:bg-slate-50"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <MessageSquare className="w-4 h-4 text-slate-500" />
+                      Pesan
+                    </span>
+                    {messageUnreadCount > 0 ? (
+                      <span className="min-w-6 h-6 px-2 rounded-full bg-rose-600 text-white text-[10px] font-extrabold flex items-center justify-center">
+                        {messageUnreadCount > 99 ? '99+' : String(messageUnreadCount)}
+                      </span>
+                    ) : null}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileOpen(false);
+                      window.location.href = '/dashboard/notifications';
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-3 rounded-2xl text-sm font-extrabold text-slate-800 border border-slate-200 hover:bg-slate-50"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Bell className="w-4 h-4 text-slate-500" />
+                      Notifikasi
+                    </span>
+                    {notificationUnreadCount > 0 ? (
+                      <span className="min-w-6 h-6 px-2 rounded-full bg-amber-500 text-white text-[10px] font-extrabold flex items-center justify-center">
+                        {notificationUnreadCount > 99 ? '99+' : String(notificationUnreadCount)}
+                      </span>
+                    ) : null}
+                  </button>
+                </>
+              ) : null}
+
+              <Link
+                href="/cart"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center justify-between px-3 py-3 rounded-2xl text-sm font-extrabold text-slate-800 border border-slate-200 hover:bg-slate-50"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <ShoppingCart className="w-4 h-4 text-slate-500" />
+                  Keranjang
+                </span>
+                {cartCount > 0 ? (
+                  <span className="min-w-6 h-6 px-2 rounded-full bg-indigo-600 text-white text-[10px] font-extrabold flex items-center justify-center">
+                    {cartCount > 99 ? '99+' : String(cartCount)}
+                  </span>
+                ) : null}
+              </Link>
+            </div>
+
+            <div className="border border-slate-200 rounded-3xl overflow-hidden">
               <button
                 type="button"
                 onClick={() => setElearningOpen((v) => !v)}
-                className="w-full px-3 py-2 text-left text-sm font-bold text-slate-800 hover:bg-slate-50 flex items-center justify-between"
+                className="w-full px-4 py-3 text-left text-sm font-extrabold text-slate-800 hover:bg-slate-50 flex items-center justify-between"
               >
                 E-Learning
                 <ChevronDown className={`w-4 h-4 transition-transform ${elearningOpen ? 'rotate-180' : ''}`} />
               </button>
               {elearningOpen ? (
                 <div className="p-2 border-t border-slate-200 bg-white">
-                  <Link href="/courses" className="block px-3 py-2 rounded-xl text-sm font-bold text-slate-900 hover:bg-slate-50">
+                  <Link
+                    href="/courses"
+                    onClick={() => setMobileOpen(false)}
+                    className="block px-3 py-2 rounded-2xl text-sm font-extrabold text-slate-900 hover:bg-slate-50"
+                  >
                     Semua Kursus
                   </Link>
                   {categories.map((cat) => (
                     <Link
                       key={cat.id}
                       href={`/courses?category=${encodeURIComponent(cat.slug)}`}
-                      className="block px-3 py-2 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                      onClick={() => setMobileOpen(false)}
+                      className="block px-3 py-2 rounded-2xl text-sm font-semibold text-slate-700 hover:bg-slate-50"
                     >
                       {cat.name}
                     </Link>
@@ -481,54 +743,39 @@ export default function SiteHeader() {
               ) : null}
             </div>
 
-            {menuItems.map((item) => (
-              <Link key={item.href} href={item.href} className="block px-3 py-2 rounded-xl text-sm font-bold text-slate-800 hover:bg-slate-50">
-                {item.label}
-              </Link>
-            ))}
+            <div className="space-y-2">
+              {menuItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileOpen(false)}
+                  className="block px-4 py-3 rounded-2xl text-sm font-extrabold text-slate-800 border border-slate-200 hover:bg-slate-50"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
 
-            {!user ? (
-              <div className="pt-2 flex items-center gap-2">
-                <Link href="/login" className="flex-1 px-3 py-2 rounded-xl text-sm font-bold text-slate-700 border border-slate-200 text-center hover:bg-slate-50">
-                  Masuk
-                </Link>
-                <Link href="/register" className="flex-1 px-3 py-2 rounded-xl text-sm font-bold bg-brand-gradient text-white text-center hover:opacity-90">
-                  Daftar
-                </Link>
-              </div>
-            ) : (
-              <div className="pt-2 grid grid-cols-2 gap-2">
-                <Link
-                  href="/profile"
-                  className="px-3 py-2 rounded-xl text-sm font-bold text-slate-700 border border-slate-200 text-center hover:bg-slate-50"
-                >
-                  Profil
-                </Link>
-                <Link
-                  href={dashboardHref}
-                  className="px-3 py-2 rounded-xl text-sm font-bold text-slate-700 border border-slate-200 text-center hover:bg-slate-50"
-                >
-                  Dashboard
-                </Link>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-                    } catch {
-                    }
-                    setUser(null);
-                    window.location.href = '/login';
-                  }}
-                  className="col-span-2 px-3 py-2 rounded-xl text-sm font-bold text-red-700 border border-slate-200 text-center hover:bg-red-50"
-                >
-                  Keluar
-                </button>
-              </div>
-            )}
+            {user ? (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+                  } catch {
+                  }
+                  setUser(null);
+                  setMobileOpen(false);
+                  window.location.href = '/login';
+                }}
+                className="w-full px-4 py-3 rounded-2xl text-sm font-extrabold text-red-700 border border-slate-200 hover:bg-red-50"
+              >
+                Keluar
+              </button>
+            ) : null}
           </div>
         </div>
-      ) : null}
+      </div>
     </header>
   );
 }
