@@ -773,7 +773,11 @@ export default function CourseInfoTabs({
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3 min-w-0">
                         <div className="h-10 w-10 rounded-full overflow-hidden border border-slate-200 bg-indigo-100 shrink-0 flex items-center justify-center text-indigo-700 font-extrabold">
-                          {r.studentAvatarUrl ? <img src={r.studentAvatarUrl} className="w-full h-full object-cover" /> : initials}
+                          {r.studentAvatarUrl ? (
+                            <img src={r.studentAvatarUrl} alt={r.studentName} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                          ) : (
+                            initials
+                          )}
                         </div>
                         <div className="min-w-0">
                           <div className="font-extrabold text-slate-900 truncate">{r.studentName}</div>
@@ -945,7 +949,7 @@ export default function CourseInfoTabs({
                         <div className="flex items-start gap-3">
                           <div className="h-10 w-10 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 shrink-0 flex items-center justify-center">
                             {c.userAvatarUrl ? (
-                              <img src={c.userAvatarUrl} className="w-full h-full object-cover" />
+                              <img src={c.userAvatarUrl} alt={c.userName} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                             ) : (
                               <div className="text-sm font-extrabold text-slate-600">{initials}</div>
                             )}
@@ -973,7 +977,7 @@ export default function CourseInfoTabs({
                                       <div className="flex items-start gap-3">
                                         <div className="h-9 w-9 rounded-2xl overflow-hidden border border-slate-200 bg-white shrink-0 flex items-center justify-center">
                                           {r.userAvatarUrl ? (
-                                            <img src={r.userAvatarUrl} className="w-full h-full object-cover" />
+                                            <img src={r.userAvatarUrl} alt={r.userName} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                                           ) : (
                                             <div className="text-xs font-extrabold text-slate-600">{rInitials}</div>
                                           )}
@@ -1061,11 +1065,13 @@ export default function CourseInfoTabs({
 
           <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
             <div className="relative h-32 bg-slate-900">
-              {mentor.profileCoverUrl ? <img src={mentor.profileCoverUrl} className="absolute inset-0 w-full h-full object-cover" /> : null}
+              {mentor.profileCoverUrl ? (
+                <img src={mentor.profileCoverUrl} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+              ) : null}
               <div className="absolute inset-0 bg-gradient-to-r from-slate-900/70 via-slate-900/30 to-transparent" />
               <div className="absolute -bottom-10 left-5 h-20 w-20 rounded-2xl overflow-hidden border-4 border-white bg-slate-100 flex items-center justify-center shadow-sm">
                 {mentor.avatarUrl ? (
-                  <img src={mentor.avatarUrl} className="w-full h-full object-cover" />
+                  <img src={mentor.avatarUrl} alt={mentor.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 ) : (
                   <div className="text-xl font-extrabold text-slate-600">{String(mentor.name || 'M').trim().slice(0, 1).toUpperCase()}</div>
                 )}

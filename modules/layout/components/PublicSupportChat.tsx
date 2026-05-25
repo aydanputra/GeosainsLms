@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { MessageSquare, Send, X } from 'lucide-react';
+import { Loader2, MessageSquare, Send, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { twMerge } from 'tailwind-merge';
 
@@ -13,6 +13,7 @@ export default function PublicSupportChat(props: { adminId: string | null; admin
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [panelTab, setPanelTab] = useState<'send' | 'history'>('send');
+  const [isSmallScreen, setIsSmallScreen] = useState(false);
   const [me, setMe] = useState<SessionUser>(null);
   const [loadingMe, setLoadingMe] = useState(false);
   const [topic, setTopic] = useState<string>('');
@@ -47,6 +48,22 @@ export default function PublicSupportChat(props: { adminId: string | null; admin
 
   const adminId = props.adminId ? String(props.adminId) : null;
   const loginRedirect = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '/';
+  const isCourseDetail = useMemo(() => {
+    if (!pathname) return false;
+    if (!pathname.startsWith('/courses/')) return false;
+    const parts = pathname.split('/').filter(Boolean);
+    return parts.length === 2;
+  }, [pathname]);
+
+  const floatingBottom = useMemo(() => {
+    const extra = isSmallScreen && isCourseDetail ? 84 : 0;
+    return `calc(24px + ${extra}px + env(safe-area-inset-bottom, 0px))`;
+  }, [isCourseDetail, isSmallScreen]);
+
+  const panelBottom = useMemo(() => {
+    const extra = isSmallScreen && isCourseDetail ? 84 : 0;
+    return `calc(96px + ${extra}px + env(safe-area-inset-bottom, 0px))`;
+  }, [isCourseDetail, isSmallScreen]);
 
   const ensureMe = async () => {
     if (loadingMe) return;
@@ -241,6 +258,15 @@ export default function PublicSupportChat(props: { adminId: string | null; admin
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(max-width: 640px)');
+    const apply = () => setIsSmallScreen(Boolean(mq.matches));
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     if (hidden || !adminId) return;
     window.sessionStorage.setItem('public_support_open', open ? '1' : '0');
     if (!open) stopPolling();
@@ -303,42 +329,46 @@ export default function PublicSupportChat(props: { adminId: string | null; admin
         type="button"
         onClick={openPanel}
         className={twMerge(
-          'fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full shadow-lg border border-slate-200 bg-indigo-600 text-white flex items-center justify-center',
+          'fixed right-4 sm:right-6 z-40 h-14 w-14 rounded-full shadow-lg border border-slate-200 bg-indigo-600 text-white flex items-center justify-center',
           'hover:bg-indigo-700 active:bg-indigo-800'
         )}
+        style={{ bottom: floatingBottom }}
         aria-label="Kirim pesan ke admin"
       >
         <MessageSquare className="w-6 h-6" />
       </button>
 
       {open ? (
-        <div className="fixed bottom-24 right-6 z-50 w-[360px] max-w-[calc(100vw-48px)]">
+        <div
+          className={twMerge('fixed z-50 left-3 right-3 sm:left-auto sm:right-6 sm:w-[360px] sm:max-w-[calc(100vw-48px)]')}
+          style={{ bottom: panelBottom }}
+        >
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
-              <div className="min-w-0 flex items-center gap-2">
+              <div className="min-w-0 flex items-center gap-2 flex-1">
                 <button
                   type="button"
                   onClick={() => setPanelTab('send')}
                   className={twMerge(
-                    'h-9 px-3 rounded-xl text-xs font-extrabold border transition-colors',
+                    'h-9 px-2 sm:px-3 rounded-xl text-xs font-extrabold border transition-colors flex-1 text-center whitespace-nowrap',
                     panelTab === 'send'
                       ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
                       : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                   )}
                 >
-                  Kirim Pesan
+                  Pesan
                 </button>
                 <button
                   type="button"
                   onClick={() => setPanelTab('history')}
                   className={twMerge(
-                    'h-9 px-3 rounded-xl text-xs font-extrabold border transition-colors',
+                    'h-9 px-2 sm:px-3 rounded-xl text-xs font-extrabold border transition-colors flex-1 text-center whitespace-nowrap',
                     panelTab === 'history'
                       ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
                       : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
                   )}
                 >
-                  Riwayat Chat
+                  Riwayat
                 </button>
               </div>
               <button
@@ -351,25 +381,34 @@ export default function PublicSupportChat(props: { adminId: string | null; admin
               </button>
             </div>
 
-            {!loadingMe && !me?.id ? (
+            {!me?.id ? (
               <div className="p-4 space-y-3">
-                <div className="text-sm text-slate-700">Untuk membuat tiket, silakan login atau daftar terlebih dahulu.</div>
-                <div className="flex items-center gap-2 justify-end">
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/register?redirect=${encodeURIComponent(loginRedirect)}`)}
-                    className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 font-extrabold text-sm hover:bg-slate-50"
-                  >
-                    Daftar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => router.push(`/login?redirect=${encodeURIComponent(loginRedirect)}`)}
-                    className="h-10 px-4 rounded-xl bg-indigo-600 text-white font-extrabold text-sm hover:bg-indigo-700"
-                  >
-                    Login
-                  </button>
-                </div>
+                {loadingMe ? (
+                  <div className="py-10 flex flex-col items-center justify-center text-slate-600 gap-3">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <div className="text-sm font-semibold">Memuat sesi...</div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="text-sm text-slate-700">Untuk membuat tiket, silakan login atau daftar terlebih dahulu.</div>
+                    <div className="flex items-center gap-2 justify-end">
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/register?redirect=${encodeURIComponent(loginRedirect)}`)}
+                        className="h-10 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 font-extrabold text-sm hover:bg-slate-50"
+                      >
+                        Daftar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/login?redirect=${encodeURIComponent(loginRedirect)}`)}
+                        className="h-10 px-4 rounded-xl bg-indigo-600 text-white font-extrabold text-sm hover:bg-indigo-700"
+                      >
+                        Login
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ) : panelTab === 'history' ? (
               <div className="p-4">
@@ -383,10 +422,17 @@ export default function PublicSupportChat(props: { adminId: string | null; admin
                       const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
                       shouldAutoScrollRef.current = distance < 160;
                     }}
-                    className="h-[420px] overflow-y-auto p-3 bg-slate-50 space-y-2 rounded-2xl border border-slate-200"
+                    className="h-[60vh] sm:h-[420px] overflow-y-auto p-3 bg-slate-50 space-y-2 rounded-2xl border border-slate-200"
                   >
                     {loadingMessages ? (
-                      <div className="text-sm text-slate-600 py-8 text-center">Memuat...</div>
+                      <div className="py-10 flex flex-col items-center justify-center text-slate-600 gap-3">
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <div className="w-full max-w-[240px] space-y-2">
+                          <div className="h-3 rounded bg-slate-200/80 animate-pulse" />
+                          <div className="h-3 rounded bg-slate-200/80 animate-pulse w-[75%]" />
+                          <div className="h-3 rounded bg-slate-200/80 animate-pulse w-[55%]" />
+                        </div>
+                      </div>
                     ) : messages.length === 0 ? (
                       <div className="text-sm text-slate-600 text-center py-10">Belum ada pesan.</div>
                     ) : (
@@ -471,10 +517,17 @@ export default function PublicSupportChat(props: { adminId: string | null; admin
                     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
                     shouldAutoScrollRef.current = distance < 160;
                   }}
-                  className="h-[320px] overflow-y-auto p-3 bg-slate-50 space-y-2"
+                  className="h-[45vh] sm:h-[320px] overflow-y-auto p-3 bg-slate-50 space-y-2"
                 >
                   {loadingMessages ? (
-                    <div className="text-sm text-slate-600 py-8 text-center">Memuat...</div>
+                    <div className="py-8 flex flex-col items-center justify-center text-slate-600 gap-3">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <div className="w-full space-y-2">
+                        <div className="h-10 rounded-2xl bg-slate-200/80 animate-pulse w-[72%]" />
+                        <div className="h-10 rounded-2xl bg-slate-200/80 animate-pulse w-[58%] ml-auto" />
+                        <div className="h-10 rounded-2xl bg-slate-200/80 animate-pulse w-[66%]" />
+                      </div>
+                    </div>
                   ) : (
                     <>
                       {systemHints.map((h) => (

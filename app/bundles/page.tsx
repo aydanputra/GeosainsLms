@@ -85,7 +85,7 @@ export default async function BundlesPage() {
               >
                 <div className="aspect-[16/9] bg-slate-900">
                   {b.imageUrl ? (
-                    <img src={b.imageUrl} alt={b.name} className="w-full h-full object-cover" />
+                    <img src={b.imageUrl} alt={b.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900" />
                   )}

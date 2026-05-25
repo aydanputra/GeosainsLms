@@ -121,11 +121,13 @@ export default function CourseCTA({ course, isEnrolled, isLoggedIn, totalLessons
       });
 
       googleButtonRef.current.innerHTML = '';
+      const containerWidth = googleButtonRef.current.clientWidth || 0;
+      const buttonWidth = Math.min(420, Math.max(240, Math.floor(containerWidth || 320)));
       w.google.accounts.id.renderButton(googleButtonRef.current, {
         theme: 'outline',
         size: 'large',
         shape: 'pill',
-        width: 420,
+        width: buttonWidth,
         text: 'signin_with',
       });
       googleInitializedRef.current = true;
@@ -469,7 +471,9 @@ export default function CourseCTA({ course, isEnrolled, isLoggedIn, totalLessons
             <div className="p-5">
               {authTab === 'LOGIN' && authStep === 'FORM' && googleClientId ? (
                 <div className="mb-4">
-                  <div ref={googleButtonRef} />
+                  <div className="w-full max-w-[420px] mx-auto">
+                    <div ref={googleButtonRef} className={authLoading ? 'pointer-events-none opacity-60 w-full' : 'w-full'} />
+                  </div>
                   <div className="mt-4 flex items-center gap-3">
                     <div className="h-px flex-1 bg-slate-200" />
                     <div className="text-[11px] font-extrabold text-slate-500">atau</div>

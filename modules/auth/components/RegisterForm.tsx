@@ -184,11 +184,13 @@ export default function RegisterForm() {
       });
 
       googleButtonRef.current.innerHTML = '';
+      const containerWidth = googleButtonRef.current.clientWidth || 0;
+      const buttonWidth = Math.min(420, Math.max(240, Math.floor(containerWidth || 320)));
       w.google.accounts.id.renderButton(googleButtonRef.current, {
         theme: 'outline',
         size: 'large',
         shape: 'pill',
-        width: 420,
+        width: buttonWidth,
         text: 'signup_with',
       });
 
@@ -234,10 +236,10 @@ export default function RegisterForm() {
 
               {googleClientId ? (
                 <div className="mt-6 space-y-4">
-                  <div className="w-full flex justify-center">
+                  <div className="w-full max-w-[420px] mx-auto">
                     <div
                       ref={googleButtonRef}
-                      className={googleLoading ? 'pointer-events-none opacity-60' : undefined}
+                      className={googleLoading ? 'pointer-events-none opacity-60 w-full' : 'w-full'}
                     />
                   </div>
                   {process.env.NODE_ENV !== 'production' ? (
