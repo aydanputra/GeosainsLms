@@ -35,7 +35,13 @@ export default function ProductList({ addToCart }: { addToCart: (id: string) => 
       {products.map((product) => (
         <div key={product.id} className="border rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
           {product.imageUrl && (
-            <img src={product.imageUrl} alt={product.name} className="w-full h-48 object-cover mb-4 rounded" />
+            <img
+              src={product.imageUrl}
+              alt={product.name}
+              loading="lazy"
+              decoding="async"
+              className="w-full h-48 object-cover mb-4 rounded"
+            />
           )}
           <h3 className="text-xl font-semibold mb-2">{product.name}</h3>
           <p className="text-gray-600 mb-4 line-clamp-2">{product.description}</p>

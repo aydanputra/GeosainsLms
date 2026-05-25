@@ -95,7 +95,7 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ s
             <div className="hidden lg:block">
               <div className="aspect-[16/9] rounded-2xl overflow-hidden border border-white/10 bg-slate-800">
                 {thumbnailUrl ? (
-                  <img src={thumbnailUrl} alt={bundle.name} className="w-full h-full object-cover" />
+                  <img src={thumbnailUrl} alt={bundle.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-slate-800 via-slate-700 to-indigo-800" />
                 )}
@@ -148,7 +148,7 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ s
                       >
                         <div className="aspect-[16/9] bg-slate-900">
                           {img ? (
-                            <img src={img} alt={c.title} className="w-full h-full object-cover" />
+                            <img src={img} alt={c.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                           ) : (
                             <div className="w-full h-full bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900" />
                           )}
