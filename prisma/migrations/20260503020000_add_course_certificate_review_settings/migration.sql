@@ -1,0 +1,3 @@
+ALTER TABLE "Course" ADD COLUMN "reviewsEnabled" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "Course" ADD COLUMN "certificateEnabled" BOOLEAN NOT NULL DEFAULT true;
+

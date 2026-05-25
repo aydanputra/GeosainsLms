@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "DirectThread" ADD COLUMN     "unreadCountA" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "unreadCountB" INTEGER NOT NULL DEFAULT 0;
