@@ -6,6 +6,7 @@ import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { writeAuditLog } from '@/utils/audit';
+import { createHash } from 'crypto';
 
 export const runtime = 'nodejs';
 
@@ -18,6 +19,56 @@ function sanitizeSegment(value: string) {
 
 function sanitizeFilename(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+function getCloudinaryConfig() {
+  const cloudName = (process.env.CLOUDINARY_CLOUD_NAME || '').trim();
+  const apiKey = (process.env.CLOUDINARY_API_KEY || '').trim();
+  const apiSecret = (process.env.CLOUDINARY_API_SECRET || '').trim();
+  if (!cloudName || !apiKey || !apiSecret) return null;
+  return { cloudName, apiKey, apiSecret };
+}
+
+async function uploadToCloudinary(opts: {
+  file: File;
+  buffer: Buffer;
+  safeUserId: string;
+  originalFilename: string;
+}) {
+  const cfg = getCloudinaryConfig();
+  if (!cfg) return null;
+
+  const timestamp = Math.floor(Date.now() / 1000);
+  const folder = `geosains-lms/${opts.safeUserId}`;
+  const paramsToSign = `folder=${folder}&timestamp=${timestamp}`;
+  const signature = createHash('sha1').update(paramsToSign + cfg.apiSecret).digest('hex');
+
+  const form = new FormData();
+  const bytes = new Uint8Array(opts.buffer);
+  form.set('file', new Blob([bytes], { type: opts.file.type }), opts.originalFilename);
+  form.set('api_key', cfg.apiKey);
+  form.set('timestamp', String(timestamp));
+  form.set('folder', folder);
+  form.set('signature', signature);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${cfg.cloudName}/image/upload`, {
+    method: 'POST',
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg =
+      typeof data?.error?.message === 'string'
+        ? data.error.message
+        : typeof data?.message === 'string'
+          ? data.message
+          : 'Gagal upload ke Cloudinary';
+    throw new Error(msg);
+  }
+  const secureUrl = typeof data?.secure_url === 'string' ? data.secure_url : '';
+  const publicId = typeof data?.public_id === 'string' ? data.public_id : '';
+  if (!secureUrl) throw new Error('Cloudinary tidak mengembalikan secure_url');
+  return { url: secureUrl, storagePath: publicId ? `cloudinary:${publicId}` : 'cloudinary' };
 }
 
 export async function POST(req: NextRequest) {
@@ -64,18 +115,36 @@ export async function POST(req: NextRequest) {
     }
 
     const safeUserId = sanitizeSegment(String(user.id));
-    const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'media', safeUserId);
-    await mkdir(uploadDir, { recursive: true });
-
-    const timestamp = Date.now();
     const safeName = sanitizeFilename(file.name);
-    const filename = `${timestamp}-${uuidv4().slice(0, 8)}-${safeName}`;
-    const absolutePath = path.join(uploadDir, filename);
+    const cloud = await uploadToCloudinary({ file, buffer, safeUserId, originalFilename: safeName });
 
-    await writeFile(absolutePath, buffer);
+    let storagePath: string | null = null;
+    let url = '';
+    if (cloud) {
+      storagePath = cloud.storagePath;
+      url = cloud.url;
+    } else {
+      if (process.env.VERCEL) {
+        return NextResponse.json(
+          {
+            error:
+              'Upload media di Vercel membutuhkan storage eksternal. Set env: CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET.',
+          },
+          { status: 400 }
+        );
+      }
 
-    const storagePath = path.join('public', 'uploads', 'media', safeUserId, filename);
-    const url = `/uploads/media/${safeUserId}/${filename}`;
+      const uploadDir = path.join(process.cwd(), 'public', 'uploads', 'media', safeUserId);
+      await mkdir(uploadDir, { recursive: true });
+
+      const timestamp = Date.now();
+      const filename = `${timestamp}-${uuidv4().slice(0, 8)}-${safeName}`;
+      const absolutePath = path.join(uploadDir, filename);
+      await writeFile(absolutePath, buffer);
+
+      storagePath = path.join('public', 'uploads', 'media', safeUserId, filename);
+      url = `/uploads/media/${safeUserId}/${filename}`;
+    }
 
     const created = await prisma.mediaAsset.create({
       data: {
@@ -100,7 +169,8 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json(created, { status: 201 });
-  } catch (error: unknown) {
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+  } catch (error: any) {
+    const message = typeof error?.message === 'string' ? error.message : 'Internal Server Error';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
