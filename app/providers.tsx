@@ -9,6 +9,37 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const lastTrackedRef = useRef<string>('');
+  const [routeLoading, setRouteLoading] = useState(false);
+  const routeLoadingStartedAtRef = useRef<number | null>(null);
+  const routeLoadingTimeoutRef = useRef<any>(null);
+
+  const startRouteLoading = () => {
+    if (routeLoadingTimeoutRef.current) clearTimeout(routeLoadingTimeoutRef.current);
+    routeLoadingStartedAtRef.current = Date.now();
+    setRouteLoading(true);
+    routeLoadingTimeoutRef.current = setTimeout(() => {
+      setRouteLoading(false);
+      routeLoadingStartedAtRef.current = null;
+      routeLoadingTimeoutRef.current = null;
+    }, 10000);
+  };
+
+  const stopRouteLoading = () => {
+    if (routeLoadingTimeoutRef.current) clearTimeout(routeLoadingTimeoutRef.current);
+    routeLoadingTimeoutRef.current = null;
+    const startedAt = routeLoadingStartedAtRef.current;
+    if (!startedAt) {
+      setRouteLoading(false);
+      return;
+    }
+    const elapsed = Date.now() - startedAt;
+    const remaining = Math.max(0, 250 - elapsed);
+    routeLoadingTimeoutRef.current = setTimeout(() => {
+      setRouteLoading(false);
+      routeLoadingStartedAtRef.current = null;
+      routeLoadingTimeoutRef.current = null;
+    }, remaining);
+  };
 
   useEffect(() => {
     try {
@@ -34,6 +65,40 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       window.history.replaceState({}, '', url.toString());
     } catch {}
   }, []);
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      try {
+        if (e.defaultPrevented) return;
+        if (e.button !== 0) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        const target = e.target as Element | null;
+        const anchor = target?.closest('a');
+        if (!anchor) return;
+        const href = anchor.getAttribute('href');
+        if (!href) return;
+        if (href.startsWith('#')) return;
+        if (href.startsWith('mailto:') || href.startsWith('tel:')) return;
+        const a = anchor as HTMLAnchorElement;
+        if (a.target && a.target !== '_self') return;
+        if (a.hasAttribute('download')) return;
+        const nextUrl = new URL(href, window.location.href);
+        if (nextUrl.origin !== window.location.origin) return;
+        if (nextUrl.pathname.startsWith('/api')) return;
+        const current = window.location.pathname + window.location.search + window.location.hash;
+        const next = nextUrl.pathname + nextUrl.search + nextUrl.hash;
+        if (current === next) return;
+        startRouteLoading();
+      } catch {}
+    };
+
+    window.addEventListener('click', onClick, true);
+    return () => window.removeEventListener('click', onClick, true);
+  }, []);
+
+  useEffect(() => {
+    stopRouteLoading();
+  }, [pathname, searchParams]);
 
   useEffect(() => {
     try {
@@ -85,6 +150,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
+      {routeLoading ? <div className="top-loading-bar" role="progressbar" aria-label="Memuat" /> : null}
       {children}
     </QueryClientProvider>
   );
