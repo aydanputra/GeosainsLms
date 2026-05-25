@@ -40,7 +40,7 @@ export default function DashboardLayoutClient({
 
   useEffect(() => {
     let active = true;
-    (async () => {
+    const load = async () => {
       try {
         const res = await fetch('/api/me', { cache: 'no-store' });
         const data = await res.json().catch(() => ({ user: null }));
@@ -48,14 +48,15 @@ export default function DashboardLayoutClient({
         const u = data?.user;
         if (u && typeof u.id === 'string' && typeof u.email === 'string' && typeof u.role === 'string') {
           const allowedRoles = new Set(['ADMIN', 'MENTOR', 'STUDENT', 'VENDOR']);
-          const normalizedRole = allowedRoles.has(u.role) ? u.role : 'STUDENT';
+          const normalizedRole = (allowedRoles.has(u.role) ? u.role : 'STUDENT') as 'ADMIN' | 'MENTOR' | 'STUDENT' | 'VENDOR';
           setUser({
             id: u.id,
             name: typeof u.name === 'string' && u.name ? u.name : u.email.split('@')[0],
             email: u.email,
+            avatarUrl: typeof u.avatarUrl === 'string' ? u.avatarUrl : null,
             role: normalizedRole,
             isSuperAdmin: Boolean((u as any)?.isSuperAdmin),
-          } as any);
+          });
         } else {
           clearUser();
         }
@@ -63,11 +64,21 @@ export default function DashboardLayoutClient({
         if (!active) return;
         clearUser();
       }
-    })();
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') load();
+    };
+
+    load();
+    window.addEventListener('focus', load);
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       active = false;
+      window.removeEventListener('focus', load);
+      document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [setUser, clearUser]);
+  }, [pathname, setUser, clearUser]);
 
   useEffect(() => {
     stopNavigation();

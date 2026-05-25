@@ -11,10 +11,12 @@ import {
   Settings,
   HelpCircle,
   MessageSquare,
+  Eye,
   PanelLeftClose,
   PanelLeftOpen
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 
 function formatBadgeCount(value: number) {
   if (!value || value <= 0) return '';
@@ -249,6 +251,19 @@ export default function Topbar({
       </div>
 
       <div className="flex items-center gap-2 md:gap-4">
+        <button
+          type="button"
+          onClick={() => {
+            startNavigation();
+            router.push('/');
+          }}
+          className="p-2 rounded-full hover:bg-slate-100 text-slate-500 hover:text-indigo-600 transition-colors"
+          title="Lihat Beranda Publik"
+          aria-label="Lihat Beranda Publik"
+        >
+          <Eye className="w-5 h-5" />
+        </button>
+
         <div className="relative" ref={messagesMenuRef}>
           <button
             onClick={() => {
@@ -448,8 +463,12 @@ export default function Topbar({
             onClick={() => setIsProfileOpen(!isProfileOpen)}
             className="flex items-center gap-3 hover:bg-slate-50 p-1.5 rounded-full pr-4 transition-colors border border-transparent hover:border-slate-200"
           >
-            <div className="w-8 h-8 rounded-full bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 font-bold text-sm">
-              {user?.name?.[0] || 'U'}
+            <div className="w-8 h-8 rounded-full bg-indigo-100 border border-indigo-200 overflow-hidden relative flex items-center justify-center text-indigo-700 font-bold text-sm">
+              {typeof user?.avatarUrl === 'string' && user.avatarUrl.trim() && !user.avatarUrl.startsWith('blob:') ? (
+                <Image src={user.avatarUrl} alt={user?.name || 'User'} fill unoptimized className="object-cover" />
+              ) : (
+                <span>{user?.name?.[0] || 'U'}</span>
+              )}
             </div>
             <div className="hidden md:block text-left">
               <p className="text-sm font-semibold text-slate-700 leading-none">{user?.name || 'User'}</p>

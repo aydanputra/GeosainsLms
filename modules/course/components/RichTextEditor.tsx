@@ -33,6 +33,139 @@ interface RichTextEditorProps {
   placeholder?: string;
 }
 
+function sanitizeHref(raw: string) {
+  const v = String(raw || '').trim();
+  if (!v) return null;
+  if (v.startsWith('/')) return v;
+  if (/^(https?:\/\/|mailto:|tel:)/i.test(v)) return v;
+  return null;
+}
+
+function sanitizeImageSrc(raw: string) {
+  const v = String(raw || '').trim();
+  if (!v) return null;
+  if (v.startsWith('/')) return v;
+  if (/^https?:\/\//i.test(v)) return v;
+  return null;
+}
+
+function sanitizePastedHtml(rawHtml: string) {
+  const html = String(rawHtml || '');
+  if (!html.trim()) return '';
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+
+  const removeNodes = doc.querySelectorAll(
+    'script,style,meta,link,title,noscript,iframe,object,embed,form,input,button,textarea,select,option,svg'
+  );
+  removeNodes.forEach((n) => n.remove());
+
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_COMMENT);
+  const comments: Comment[] = [];
+  while (walker.nextNode()) comments.push(walker.currentNode as Comment);
+  comments.forEach((c) => c.remove());
+
+  doc.querySelectorAll('o\\:p').forEach((n) => n.remove());
+
+  doc.querySelectorAll('p,div').forEach((n) => {
+    if (!(n instanceof HTMLElement)) return;
+    const cls = String(n.getAttribute('class') || '');
+    const style = String(n.getAttribute('style') || '');
+    const clsMatch = cls.match(/MsoHeading([1-6])/i);
+    const styleMatch = style.match(/mso-style-name\s*:\s*"?heading\s*([1-6])/i);
+    const level = clsMatch ? Number(clsMatch[1]) : styleMatch ? Number(styleMatch[1]) : null;
+    if (!level || level < 1 || level > 6) return;
+    const hx = doc.createElement(`h${level}` as any);
+    while (n.firstChild) hx.appendChild(n.firstChild);
+    n.replaceWith(hx);
+  });
+
+  doc.querySelectorAll('b').forEach((n) => {
+    const el = doc.createElement('strong');
+    while (n.firstChild) el.appendChild(n.firstChild);
+    n.replaceWith(el);
+  });
+
+  doc.querySelectorAll('i').forEach((n) => {
+    const el = doc.createElement('em');
+    while (n.firstChild) el.appendChild(n.firstChild);
+    n.replaceWith(el);
+  });
+
+  doc.querySelectorAll('span').forEach((n) => {
+    if (!(n instanceof HTMLElement)) return;
+    const style = String(n.getAttribute('style') || '').toLowerCase();
+    const isBold = /font-weight\s*:\s*(bold|[6-9]00)/.test(style);
+    const isItalic = /font-style\s*:\s*italic/.test(style);
+    const isUnderline = /text-decoration\s*:\s*underline/.test(style);
+
+    const frag = doc.createDocumentFragment();
+    while (n.firstChild) frag.appendChild(n.firstChild);
+
+    let wrapped: Node = frag;
+    if (isUnderline) {
+      const el = doc.createElement('u');
+      el.appendChild(wrapped);
+      wrapped = el;
+    }
+    if (isItalic) {
+      const el = doc.createElement('em');
+      el.appendChild(wrapped);
+      wrapped = el;
+    }
+    if (isBold) {
+      const el = doc.createElement('strong');
+      el.appendChild(wrapped);
+      wrapped = el;
+    }
+
+    n.replaceWith(wrapped);
+  });
+
+  doc.querySelectorAll('*').forEach((n) => {
+    if (!(n instanceof HTMLElement)) return;
+    const tag = n.tagName.toLowerCase();
+
+    if (tag === 'a') {
+      const href = sanitizeHref(n.getAttribute('href') || '');
+      n.getAttributeNames().forEach((attr) => n.removeAttribute(attr));
+      if (href) n.setAttribute('href', href);
+      return;
+    }
+
+    if (tag === 'img') {
+      const src = sanitizeImageSrc(n.getAttribute('src') || '');
+      const alt = String(n.getAttribute('alt') || '').trim();
+      n.getAttributeNames().forEach((attr) => n.removeAttribute(attr));
+      if (!src) {
+        n.remove();
+        return;
+      }
+      n.setAttribute('src', src);
+      if (alt) n.setAttribute('alt', alt);
+      return;
+    }
+
+    n.getAttributeNames().forEach((attr) => n.removeAttribute(attr));
+
+    if (!['p', 'br', 'ul', 'ol', 'li', 'strong', 'em', 'u', 'a', 'blockquote', 'pre', 'code', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'hr', 'img'].includes(tag)) {
+      if (tag === 'div') {
+        const p = doc.createElement('p');
+        while (n.firstChild) p.appendChild(n.firstChild);
+        n.replaceWith(p);
+        return;
+      }
+      const frag = doc.createDocumentFragment();
+      while (n.firstChild) frag.appendChild(n.firstChild);
+      n.replaceWith(frag);
+    }
+  });
+
+  const out = (doc.body.innerHTML || '').replace(/\u00a0/g, ' ').trim();
+  return out;
+}
+
 type ToolbarButtonProps = {
   onClick: () => void;
   isActive?: boolean;
@@ -127,7 +260,10 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
       attributes: {
         class: editorContentClass,
         'data-placeholder': placeholder || '',
+        spellcheck: 'false',
+        autocapitalize: 'off',
       },
+      transformPastedHTML: (html) => sanitizePastedHtml(html),
     },
     onUpdate: ({ editor }) => {
       // Return JSON string for storage
