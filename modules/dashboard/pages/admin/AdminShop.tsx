@@ -7,7 +7,7 @@ import EmptyState from '../../components/EmptyState';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plus, Search, Filter, Edit2, Trash2, Eye, ShoppingBag, Image as ImageIcon } from 'lucide-react';
+import { Plus, Search, Filter, Edit2, Trash2, Eye, ShoppingBag, Image as ImageIcon, ChevronDown } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 import { toast } from 'sonner';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -404,17 +404,21 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
       price: 0,
       stock: 0,
       category: 'OTHER',
-      categoryIds: categories[0]?.id ? [categories[0].id] : [],
+      categoryIds: [],
       vendorId: vendors[0]?.id || '',
       imageUrl: '',
       imageUrls: [],
     });
+    setCategoryPickerQuery('');
+    setCategoryPickerOpen(false);
     setEditorOpen(true);
   };
 
   const openEdit = (row: any) => {
     setEditorMode('EDIT');
     setEditorValue(normalizeProductForm(row));
+    setCategoryPickerQuery('');
+    setCategoryPickerOpen(false);
     setEditorOpen(true);
   };
 
@@ -737,11 +741,18 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
                     <button
                       type="button"
                       onClick={() => setCategoryPickerOpen((v) => !v)}
-                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-left"
+                      className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                     >
-                      {selectedCategoryNames.length > 0
-                        ? `${selectedCategoryNames[0]}${selectedCategoryNames.length > 1 ? ` +${selectedCategoryNames.length - 1}` : ''}`
-                        : 'Pilih kategori...'}
+                      <span className="flex items-center justify-between gap-3">
+                        <span className="truncate text-left">
+                          {selectedCategoryNames.length > 0
+                            ? `${selectedCategoryNames[0]}${selectedCategoryNames.length > 1 ? ` +${selectedCategoryNames.length - 1}` : ''}`
+                            : 'Pilih kategori...'}
+                        </span>
+                        <ChevronDown
+                          className={twMerge('w-4 h-4 text-slate-500 shrink-0 transition-transform', categoryPickerOpen ? 'rotate-180' : '')}
+                        />
+                      </span>
                     </button>
 
                     {categoryPickerOpen ? (
