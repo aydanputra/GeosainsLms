@@ -267,13 +267,13 @@ export default function SiteHeader() {
         ? '/dashboard/mentor/inbox'
         : '/dashboard/student/inbox';
 
-  const greetingName = useMemo(() => {
+  const greetingName = (() => {
     const fallback = user?.email ? user.email.split('@')[0] : '';
     const raw = (user?.name || fallback || '').trim();
     if (!raw) return '';
     const first = raw.split(/\s+/)[0];
     return first || raw;
-  }, [user?.name, user?.email]);
+  })();
 
   const submitSearch = () => {
     const q = searchQuery.trim();
