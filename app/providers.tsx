@@ -12,6 +12,8 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   const [routeLoading, setRouteLoading] = useState(false);
   const routeLoadingStartedAtRef = useRef<number | null>(null);
   const routeLoadingTimeoutRef = useRef<any>(null);
+  const ROUTE_LOADER_MIN_MS = 3000;
+  const ROUTE_LOADER_MAX_MS = 15000;
 
   const startRouteLoading = () => {
     if (routeLoadingTimeoutRef.current) clearTimeout(routeLoadingTimeoutRef.current);
@@ -21,7 +23,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       setRouteLoading(false);
       routeLoadingStartedAtRef.current = null;
       routeLoadingTimeoutRef.current = null;
-    }, 10000);
+    }, ROUTE_LOADER_MAX_MS);
   };
 
   const stopRouteLoading = () => {
@@ -33,7 +35,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       return;
     }
     const elapsed = Date.now() - startedAt;
-    const remaining = Math.max(0, 250 - elapsed);
+    const remaining = Math.max(0, ROUTE_LOADER_MIN_MS - elapsed);
     routeLoadingTimeoutRef.current = setTimeout(() => {
       setRouteLoading(false);
       routeLoadingStartedAtRef.current = null;
