@@ -12,7 +12,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
   const [routeLoading, setRouteLoading] = useState(false);
   const routeLoadingStartedAtRef = useRef<number | null>(null);
   const routeLoadingTimeoutRef = useRef<any>(null);
-  const ROUTE_LOADER_MIN_MS = 1300;
+  const ROUTE_LOADER_MIN_MS = 1000;
   const ROUTE_LOADER_MAX_MS = 15000;
 
   const startRouteLoading = () => {

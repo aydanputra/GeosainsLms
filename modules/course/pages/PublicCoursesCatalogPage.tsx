@@ -51,13 +51,14 @@ export default function PublicCoursesCatalogPage({ initialTagSlug }: { initialTa
   const searchParams = useSearchParams();
   const initialCategorySlug = searchParams.get('category') || '';
   const queryTagSlug = searchParams.get('tag') || '';
+  const queryQ = searchParams.get('q') || '';
   const effectiveTagSlug = initialTagSlug || queryTagSlug;
 
   const [isLoading, setIsLoading] = useState(true);
   const [courses, setCourses] = useState<PublicCourse[]>([]);
   const [categories, setCategories] = useState<CourseCategory[]>([]);
 
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(queryQ);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('ALL');
   const [selectedLevels, setSelectedLevels] = useState<Record<string, boolean>>({
     BEGINNER: false,
@@ -100,6 +101,10 @@ export default function PublicCoursesCatalogPage({ initialTagSlug }: { initialTa
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    setQ(queryQ);
+  }, [queryQ]);
 
   useEffect(() => {
     if (!initialCategorySlug) return;

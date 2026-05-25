@@ -101,11 +101,11 @@ export default function GeoservicesPage() {
                   Menampilkan <span className="font-bold text-slate-700">{filtered.length}</span> vendor
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="w-full lg:w-auto flex flex-col sm:flex-row sm:items-center gap-2">
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-64 max-w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-700"
+                  className="w-full sm:w-64 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-blue-600/20 focus:border-blue-700"
                   placeholder="Cari vendor..."
                 />
                 <select
@@ -114,7 +114,7 @@ export default function GeoservicesPage() {
                     const v = e.target.value;
                     if (v === 'TOP' || v === 'NEWEST' || v === 'NAME_ASC') setSort(v);
                   }}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700"
+                  className="w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700"
                 >
                   <option value="TOP">Teratas</option>
                   <option value="NEWEST">Terbaru</option>
