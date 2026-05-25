@@ -41,9 +41,10 @@ yarn-error.log*
 next-env.d.ts
 
 # uploads
-/public/uploads
 /storage
 
 # prisma
 /prisma/dev.db
 /prisma/generated
+
+*.dump
