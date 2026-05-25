@@ -7,6 +7,8 @@ import { verifyToken } from '@/modules/auth/utils/auth';
 import CourseCTA from './components/CourseCTA';
 import CourseInfoTabs from './components/CourseInfoTabs';
 import CourseHeroMedia from './components/CourseHeroMedia';
+import type { Metadata } from 'next';
+import { getAppUrl } from '@/modules/core/utils/appUrl';
 
 // Force dynamic rendering if needed, or use revalidate
 export const dynamic = 'force-dynamic';
@@ -34,6 +36,75 @@ const getVideoEmbedUrl = (url: string) => {
   if (vimeoMatch && vimeoMatch[1]) return `https://player.vimeo.com/video/${vimeoMatch[1]}`;
   return null;
 };
+
+function normalizePublicUrl(appUrl: string, value: string | null | undefined) {
+  if (!value) return null;
+  const v = value.trim();
+  if (!v) return null;
+  if (v.startsWith('http://') || v.startsWith('https://')) return v;
+  if (v.startsWith('/')) return `${appUrl}${v}`;
+  return null;
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const hdrs = await headers();
+  const appUrl = getAppUrl(hdrs);
+
+  try {
+    const [course, siteSettingsPage] = await Promise.all([
+      prisma.course.findUnique({
+        where: { slug },
+        select: { title: true, description: true, thumbnailUrl: true, updatedAt: true },
+      }),
+      prisma.page.findUnique({ where: { slug: '__site_settings__' }, select: { content: true, updatedAt: true } }),
+    ]);
+
+    if (!course) {
+      return {
+        alternates: { canonical: `${appUrl}/courses/${encodeURIComponent(slug)}` },
+      };
+    }
+
+    const parsed = safeParse(siteSettingsPage?.content);
+    const siteName = typeof parsed.siteName === 'string' && parsed.siteName.trim() ? parsed.siteName.trim() : 'GeoSains LMS';
+    const fallbackDescription =
+      typeof parsed.siteDescription === 'string' && parsed.siteDescription.trim() ? parsed.siteDescription.trim() : 'Platform pembelajaran geosains.';
+    const courseDescription = typeof course.description === 'string' && course.description.trim() ? course.description.trim() : fallbackDescription;
+    const canonical = `${appUrl}/courses/${encodeURIComponent(slug)}`;
+
+    const image =
+      normalizePublicUrl(appUrl, course.thumbnailUrl) ||
+      normalizePublicUrl(appUrl, typeof parsed.logoUrl === 'string' ? parsed.logoUrl : null) ||
+      null;
+
+    const images = image ? [{ url: image }] : [];
+
+    return {
+      title: `${course.title} | ${siteName}`,
+      description: courseDescription,
+      alternates: { canonical },
+      openGraph: {
+        type: 'website',
+        url: canonical,
+        title: `${course.title} | ${siteName}`,
+        description: courseDescription,
+        siteName,
+        images,
+      },
+      twitter: {
+        card: images.length > 0 ? 'summary_large_image' : 'summary',
+        title: `${course.title} | ${siteName}`,
+        description: courseDescription,
+        images: images.length > 0 ? images.map((i) => i.url) : undefined,
+      },
+    };
+  } catch {
+    return {
+      alternates: { canonical: `${appUrl}/courses/${encodeURIComponent(slug)}` },
+    };
+  }
+}
 
 async function getCourse(slug: string) {
   const course = await prisma.course.findUnique({
