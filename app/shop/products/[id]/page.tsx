@@ -5,8 +5,99 @@ import AddToCartButton from '@/modules/shop/components/AddToCartButton';
 import ProductInfoTabs from '@/modules/shop/components/ProductInfoTabs';
 import ProductImageGallery from '@/modules/shop/components/ProductImageGallery';
 import { BadgeCheck, Store, Tag } from 'lucide-react';
+import type { Metadata } from 'next';
+import { headers } from 'next/headers';
+import { getAppUrl } from '@/modules/core/utils/appUrl';
 
 export const dynamic = 'force-dynamic';
+
+function safeParse(content: string | null | undefined) {
+  if (!content) return {};
+  try {
+    const parsed = JSON.parse(content);
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function normalizePublicUrl(appUrl: string, value: string | null | undefined) {
+  if (!value) return null;
+  const v = value.trim();
+  if (!v) return null;
+  if (v.startsWith('blob:')) return null;
+  if (v.startsWith('http://') || v.startsWith('https://')) return v;
+  if (v.startsWith('/')) return `${appUrl}${v}`;
+  return null;
+}
+
+function pickProductShareImage(appUrl: string, product: { imageUrl: unknown; imageUrls: unknown }) {
+  const primary = normalizePublicUrl(appUrl, typeof product.imageUrl === 'string' ? product.imageUrl : null);
+  if (primary) return primary;
+
+  const list = Array.isArray(product.imageUrls) ? (product.imageUrls as unknown[]).map((v) => (typeof v === 'string' ? v : '')).filter(Boolean) : [];
+  for (const v of list) {
+    const normalized = normalizePublicUrl(appUrl, v);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id: idOrSlug } = await params;
+  const hdrs = await headers();
+  const appUrl = getAppUrl(hdrs);
+
+  try {
+    const [product, siteSettingsPage] = await Promise.all([
+      prisma.product.findFirst({
+        where: { OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
+        select: { id: true, slug: true, name: true, description: true, imageUrl: true, imageUrls: true, updatedAt: true },
+      }),
+      prisma.page.findUnique({ where: { slug: '__site_settings__' }, select: { content: true, updatedAt: true } }),
+    ]);
+
+    const canonicalId = product?.slug || product?.id || idOrSlug;
+    const canonical = `${appUrl}/shop/products/${encodeURIComponent(canonicalId)}`;
+
+    if (!product) {
+      return { alternates: { canonical } };
+    }
+
+    const parsed = safeParse(siteSettingsPage?.content);
+    const siteName = typeof parsed.siteName === 'string' && parsed.siteName.trim() ? parsed.siteName.trim() : 'GeoSains LMS';
+    const fallbackDescription =
+      typeof parsed.siteDescription === 'string' && parsed.siteDescription.trim() ? parsed.siteDescription.trim() : 'Belanja produk di Geoshop.';
+    const description = typeof product.description === 'string' && product.description.trim() ? product.description.trim() : fallbackDescription;
+
+    const imageCandidate = pickProductShareImage(appUrl, product) || normalizePublicUrl(appUrl, typeof parsed.logoUrl === 'string' ? parsed.logoUrl : null) || null;
+    const images = imageCandidate ? [{ url: imageCandidate }] : [];
+
+    const title = `${product.name} | ${siteName}`;
+    return {
+      title,
+      description,
+      alternates: { canonical },
+      openGraph: {
+        type: 'website',
+        url: canonical,
+        title,
+        description,
+        siteName,
+        images,
+      },
+      twitter: {
+        card: images.length > 0 ? 'summary_large_image' : 'summary',
+        title,
+        description,
+        images: images.length > 0 ? images.map((i) => i.url) : undefined,
+      },
+    };
+  } catch {
+    return { alternates: { canonical: `${appUrl}/shop/products/${encodeURIComponent(idOrSlug)}` } };
+  }
+}
 
 export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: idOrSlug } = await params;
