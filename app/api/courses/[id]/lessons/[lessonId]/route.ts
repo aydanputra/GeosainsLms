@@ -69,6 +69,7 @@ export async function GET(
         dripType: true,
         dripDays: true,
         validityDays: true,
+        subscriptionEligible: true,
         createdAt: true,
         publishedAt: true,
       },
@@ -117,7 +118,23 @@ export async function GET(
           })
         : null;
 
-    if (!enrollment && !canBypassEnrollment) {
+    const now = new Date();
+    const activeSubscription =
+      !canBypassEnrollment && course.subscriptionEligible
+        ? await prisma.subscription.findFirst({
+            where: {
+              userId: String(user.id),
+              startDate: { lte: now },
+              endDate: { gte: now },
+              status: 'ACTIVE',
+            },
+            select: { id: true, startDate: true, endDate: true },
+          })
+        : null;
+
+    const accessStartDate = enrollment?.createdAt || activeSubscription?.startDate || null;
+
+    if (!enrollment && !activeSubscription && !canBypassEnrollment) {
       if (!lessonMeta.isPreview) {
         return NextResponse.json({ error: 'Not enrolled' }, { status: 403 });
       }
@@ -131,7 +148,7 @@ export async function GET(
       }
     }
 
-    if (enrollment && !canBypassEnrollment && course.dripEnabled) {
+    if (accessStartDate && !canBypassEnrollment && course.dripEnabled) {
       const modules = await prisma.module.findMany({
         where: { courseId },
         orderBy: { order: 'asc' },
@@ -146,10 +163,9 @@ export async function GET(
       const globalLessons = modules.flatMap((m) => m.lessons.map((l) => ({ id: l.id, isPreview: l.isPreview })));
       const lessonIndexById = new Map(globalLessons.map((l, idx) => [l.id, idx]));
       const idx = lessonIndexById.get(lessonId) ?? 0;
-      const now = new Date();
 
       if (course.dripType === DripType.AFTER_ENROLLMENT && course.dripDays) {
-        const unlockDate = new Date(enrollment.createdAt);
+        const unlockDate = new Date(accessStartDate);
         unlockDate.setDate(unlockDate.getDate() + idx * course.dripDays);
         if (now < unlockDate) {
           return NextResponse.json({ error: 'Lesson is locked', unlockDate: unlockDate.toISOString() }, { status: 403 });

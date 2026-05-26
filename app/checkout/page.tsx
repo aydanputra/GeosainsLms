@@ -3,6 +3,7 @@ import CourseCheckoutPage from '@/modules/course/pages/CourseCheckoutPage';
 import { prisma } from '@/utils/prisma';
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/modules/auth/utils/auth';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
@@ -44,8 +45,34 @@ export default async function Page({ searchParams }: { searchParams?: Promise<Re
 
   const cookieStore = await cookies();
   const token = cookieStore.get('token')?.value || '';
-  const user = token ? await verifyToken(token).catch(() => null) : null;
-  const userName = user?.name || user?.email || '';
+  const redirectToCheckout = `/checkout?courseId=${encodeURIComponent(course.id)}`;
+  if (!token) redirect(`/login?redirect=${encodeURIComponent(redirectToCheckout)}`);
+
+  const user = await verifyToken(token).catch(() => null);
+  if (!user?.id) redirect(`/login?redirect=${encodeURIComponent(redirectToCheckout)}`);
+
+  const profile = await prisma.user.findUnique({
+    where: { id: String(user.id) },
+    select: { id: true, name: true, email: true, phone: true, city: true, address: true },
+  });
+
+  const isProfileComplete = (() => {
+    const name = String(profile?.name || '').trim();
+    const phone = String((profile as any)?.phone || '').trim();
+    const city = String((profile as any)?.city || '').trim();
+    const address = String((profile as any)?.address || '').trim();
+    if (name.length < 2) return false;
+    if (phone.length < 8) return false;
+    if (city.length < 2) return false;
+    if (address.length < 5) return false;
+    return true;
+  })();
+
+  if (!isProfileComplete) {
+    redirect(`/dashboard/settings?redirect=${encodeURIComponent(redirectToCheckout)}`);
+  }
+
+  const userName = profile?.name || profile?.email || '';
 
   const settingsPage = await prisma.page.findUnique({ where: { slug: '__site_settings__' }, select: { content: true } });
   const settings = safeParse(settingsPage?.content);

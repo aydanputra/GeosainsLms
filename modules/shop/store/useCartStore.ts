@@ -57,6 +57,7 @@ export const useCartStore = create<CartState>()(
     {
       name: 'cart-storage',
       version: 2,
+      skipHydration: true,
       migrate: (persisted: any) => {
         const persistedObj = persisted && typeof persisted === 'object' ? persisted : {};
         const state =

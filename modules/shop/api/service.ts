@@ -39,6 +39,7 @@ export const ProductSchema = z.object({
 export const OrderItemSchema = z.object({
   productId: z.string().optional(),
   courseId: z.string().optional(),
+  subscriptionPlan: z.enum(['MONTHLY', 'YEARLY']).optional(),
   quantity: z.number().int().min(1),
   meta: z.unknown().optional(),
 });
@@ -197,9 +198,31 @@ export const createOrder = async (
 
   const toString = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
 
+  const safeParseSettings = (content: string | null | undefined) => {
+    if (!content) return {};
+    try {
+      const parsed = JSON.parse(content);
+      if (!parsed || typeof parsed !== 'object') return {};
+      return parsed as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  };
+
+  const toMoney = (v: unknown) => {
+    const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN;
+    return Number.isFinite(n) ? Math.max(0, n) : null;
+  };
+
+  const siteSettingsPage = await prisma.page.findUnique({ where: { slug: '__site_settings__' }, select: { content: true } });
+  const settings = safeParseSettings(siteSettingsPage?.content);
+  const subscriptionMonthlyPrice = toMoney((settings as any).subscriptionMonthlyPrice) ?? 99000;
+  const subscriptionYearlyPrice = toMoney((settings as any).subscriptionYearlyPrice) ?? 990000;
+
   let subtotal = 0;
   let hasPhysical = false;
   let hasCourse = false;
+  let hasSubscription = false;
   const orderItemsData: Array<{
     productId?: string;
     courseId?: string;
@@ -354,7 +377,29 @@ export const createOrder = async (
       continue;
     }
 
-    throw new Error('Item must have productId or courseId');
+    if ((item as any).subscriptionPlan) {
+      const planRaw = String((item as any).subscriptionPlan || '').trim().toUpperCase();
+      const plan = planRaw === 'YEARLY' ? 'YEARLY' : 'MONTHLY';
+      if (item.quantity !== 1) throw new Error('Langganan hanya bisa dipesan dengan quantity 1 per item');
+      const durationDays = plan === 'YEARLY' ? 365 : 30;
+      unitPrice = plan === 'YEARLY' ? subscriptionYearlyPrice : subscriptionMonthlyPrice;
+      hasSubscription = true;
+      meta = { subscription: { plan, durationDays } };
+      orderItemsData.push({
+        quantity: item.quantity,
+        price: unitPrice,
+        meta,
+        discountAmount: 0,
+        discountStoreAmount: 0,
+        discountMarketplaceAmount: 0,
+        refundAmount: 0,
+      });
+      itemRefs.push({});
+      subtotal += unitPrice * item.quantity;
+      continue;
+    }
+
+    throw new Error('Item must have productId or courseId or subscriptionPlan');
   }
 
   const shipping = parsed.shipping || null;
@@ -369,6 +414,10 @@ export const createOrder = async (
   let discountMarketplaceShare = 0;
   let discountMarketplaceTotal = 0;
   let discountStoreTotal = 0;
+
+  if (hasSubscription && couponCode) {
+    throw new Error('Kupon tidak berlaku untuk pembelian langganan');
+  }
 
   if (couponCode) {
     const coupon = await prisma.coupon.findUnique({ where: { code: couponCode } });
@@ -518,12 +567,12 @@ export const createOrder = async (
   };
 
   const settingsPage = await prisma.page.findUnique({ where: { slug: '__course_settings__' }, select: { content: true } });
-  const settings = safeParse(settingsPage?.content);
-  const checkoutServiceFeeEnabled = settings['checkoutServiceFeeEnabled'] === true;
-  const checkoutServiceFeeAmountRaw = Number(settings['checkoutServiceFeeAmount']);
+  const courseSettings = safeParse(settingsPage?.content);
+  const checkoutServiceFeeEnabled = courseSettings['checkoutServiceFeeEnabled'] === true;
+  const checkoutServiceFeeAmountRaw = Number(courseSettings['checkoutServiceFeeAmount']);
   const checkoutServiceFeeAmount = Number.isFinite(checkoutServiceFeeAmountRaw) ? Math.max(0, Math.round(checkoutServiceFeeAmountRaw)) : 0;
-  const checkoutUniqueCodeEnabled = settings['checkoutUniqueCodeEnabled'] === true;
-  const uniqueDigitsRaw = Number(settings['checkoutUniqueCodeDigits']);
+  const checkoutUniqueCodeEnabled = courseSettings['checkoutUniqueCodeEnabled'] === true;
+  const uniqueDigitsRaw = Number(courseSettings['checkoutUniqueCodeDigits']);
   const checkoutUniqueCodeDigits = Number.isFinite(uniqueDigitsRaw) ? Math.min(3, Math.max(1, Math.floor(uniqueDigitsRaw))) : 3;
 
   const baseAmount = Math.max(0, Math.round(subtotal - normalizedDiscount));

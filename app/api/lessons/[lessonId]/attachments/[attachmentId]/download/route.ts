@@ -70,13 +70,22 @@ export async function GET(
         }
       });
 
-      // If not enrolled, only allow if lesson is a Preview
-      if (!enrollment) {
+      const now = new Date();
+      const activeSubscription =
+        !enrollment && course.subscriptionEligible
+          ? await prisma.subscription.findFirst({
+              where: { userId: String(user.id), startDate: { lte: now }, endDate: { gte: now }, status: 'ACTIVE' },
+              select: { startDate: true },
+            })
+          : null;
+
+      if (!enrollment && !activeSubscription) {
         if (!lesson.isPreview) {
           return NextResponse.json({ error: 'Enrollment required' }, { status: 403 });
         }
-        // If isPreview = true, allow access for logged-in user
-      } else {
+      }
+
+      if (enrollment) {
         const validityDays = course.validityDays;
         if (validityDays && validityDays > 0) {
           const expiresAt = new Date(enrollment.createdAt);
@@ -85,54 +94,54 @@ export async function GET(
             return NextResponse.json({ error: 'Enrollment expired' }, { status: 403 });
           }
         }
+      }
 
-        // User is enrolled, check Drip Content (Locking)
-        if (course.dripEnabled) {
-          const modules = await prisma.module.findMany({
-            where: { courseId: course.id },
-            orderBy: { order: 'asc' },
-            select: {
-              lessons: {
-                orderBy: { order: 'asc' },
-                select: { id: true, isPreview: true },
-              },
+      const accessStartDate = enrollment?.createdAt || activeSubscription?.startDate || null;
+
+      if (accessStartDate && course.dripEnabled) {
+        const modules = await prisma.module.findMany({
+          where: { courseId: course.id },
+          orderBy: { order: 'asc' },
+          select: {
+            lessons: {
+              orderBy: { order: 'asc' },
+              select: { id: true, isPreview: true },
             },
+          },
+        });
+
+        const globalLessons = modules.flatMap((m) => m.lessons.map((l) => ({ id: l.id, isPreview: l.isPreview })));
+        const lessonIndexById = new Map(globalLessons.map((l, idx) => [l.id, idx]));
+        const idx = lessonIndexById.get(lesson.id) ?? 0;
+
+        if (course.dripType === DripType.AFTER_ENROLLMENT && course.dripDays) {
+          const unlockDate = new Date(accessStartDate);
+          unlockDate.setDate(unlockDate.getDate() + idx * course.dripDays);
+          if (now < unlockDate) {
+            return NextResponse.json({ error: 'Lesson content is locked' }, { status: 403 });
+          }
+        }
+
+        if (course.dripType === DripType.SCHEDULE && course.dripDays) {
+          const base = course.publishedAt || course.createdAt;
+          const unlockDate = new Date(base);
+          unlockDate.setDate(unlockDate.getDate() + idx * course.dripDays);
+          if (now < unlockDate) {
+            return NextResponse.json({ error: 'Lesson content is locked' }, { status: 403 });
+          }
+        }
+
+        if (course.dripType === DripType.SEQUENTIAL) {
+          const completed = await prisma.userProgress.findMany({
+            where: { userId: user.id, lessonId: { in: globalLessons.map((l) => l.id) }, completed: true },
+            select: { lessonId: true },
           });
-
-          const globalLessons = modules.flatMap((m) => m.lessons.map((l) => ({ id: l.id, isPreview: l.isPreview })));
-          const lessonIndexById = new Map(globalLessons.map((l, idx) => [l.id, idx]));
-          const idx = lessonIndexById.get(lesson.id) ?? 0;
-          const now = new Date();
-
-          if (course.dripType === DripType.AFTER_ENROLLMENT && course.dripDays) {
-            const unlockDate = new Date(enrollment.createdAt);
-            unlockDate.setDate(unlockDate.getDate() + idx * course.dripDays);
-            if (now < unlockDate) {
+          const completedSet = new Set(completed.map((p) => p.lessonId));
+          for (let i = 0; i < idx; i++) {
+            const prev = globalLessons[i];
+            if (prev.isPreview) continue;
+            if (!completedSet.has(prev.id)) {
               return NextResponse.json({ error: 'Lesson content is locked' }, { status: 403 });
-            }
-          }
-
-          if (course.dripType === DripType.SCHEDULE && course.dripDays) {
-            const base = course.publishedAt || course.createdAt;
-            const unlockDate = new Date(base);
-            unlockDate.setDate(unlockDate.getDate() + idx * course.dripDays);
-            if (now < unlockDate) {
-              return NextResponse.json({ error: 'Lesson content is locked' }, { status: 403 });
-            }
-          }
-
-          if (course.dripType === DripType.SEQUENTIAL) {
-            const completed = await prisma.userProgress.findMany({
-              where: { userId: user.id, lessonId: { in: globalLessons.map((l) => l.id) }, completed: true },
-              select: { lessonId: true },
-            });
-            const completedSet = new Set(completed.map((p) => p.lessonId));
-            for (let i = 0; i < idx; i++) {
-              const prev = globalLessons[i];
-              if (prev.isPreview) continue;
-              if (!completedSet.has(prev.id)) {
-                return NextResponse.json({ error: 'Lesson content is locked' }, { status: 403 });
-              }
             }
           }
         }

@@ -167,6 +167,7 @@ export default function ProfilePage({
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
+  const didAutoRedirectRef = useRef(false);
   const [name, setName] = useState(initialUser.name || '');
   const [email, setEmail] = useState(initialUser.email || '');
   const [savingBasic, setSavingBasic] = useState(false);
@@ -273,6 +274,26 @@ export default function ProfilePage({
   };
 
   const compactUserAgent = (raw: string) => String(raw || '').replace(/\s+/g, ' ').trim();
+
+  const maybeRedirectAfterProfileComplete = () => {
+    if (didAutoRedirectRef.current) return;
+    const targetRaw = searchParams?.get('redirect');
+    const target = typeof targetRaw === 'string' ? targetRaw.trim() : '';
+    if (!target) return;
+
+    const nextName = name.trim();
+    const nextPhone = phone.trim();
+    const nextCity = city.trim();
+    const nextAddress = address.trim();
+    const complete = nextName.length >= 2 && nextPhone.length >= 8 && nextCity.length >= 2 && nextAddress.length >= 5;
+    if (!complete) return;
+
+    const safeTarget = target.startsWith('/') ? target : '';
+    if (!safeTarget) return;
+
+    didAutoRedirectRef.current = true;
+    router.push(safeTarget);
+  };
 
   const parseUserAgentInfo = (raw: string) => {
     const ua = compactUserAgent(raw).toLowerCase();
@@ -797,6 +818,7 @@ export default function ProfilePage({
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan profil');
       toast.success('Profil berhasil diperbarui');
       router.refresh();
+      maybeRedirectAfterProfileComplete();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Gagal menyimpan profil';
       toast.error(message);
@@ -1037,6 +1059,7 @@ export default function ProfilePage({
         toast.success('Informasi tambahan berhasil diperbarui');
         queryClient.invalidateQueries({ queryKey: ['me'] });
         router.refresh();
+        maybeRedirectAfterProfileComplete();
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Gagal menyimpan informasi tambahan';
         toast.error(message);

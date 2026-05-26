@@ -21,6 +21,32 @@ function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
+function isProfileComplete(user: { name?: string | null; phone?: string | null; city?: string | null; address?: string | null }) {
+  const name = String(user?.name || '').trim();
+  const phone = String(user?.phone || '').trim();
+  const city = String(user?.city || '').trim();
+  const address = String(user?.address || '').trim();
+  if (name.length < 2) return false;
+  if (phone.length < 8) return false;
+  if (city.length < 2) return false;
+  if (address.length < 5) return false;
+  return true;
+}
+
+async function hasActiveSubscription(userId: string) {
+  const now = new Date();
+  const active = await prisma.subscription.findFirst({
+    where: {
+      userId,
+      startDate: { lte: now },
+      endDate: { gte: now },
+      status: 'ACTIVE',
+    },
+    select: { id: true },
+  });
+  return Boolean(active);
+}
+
 async function computeCouponDiscountForCourse(opts: {
   userId: string;
   course: { id: string; categoryId: string | null; categoryIds?: unknown; price: number };
@@ -183,22 +209,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }
       }
 
-      if (course.subscriptionEligible) {
-        const now = new Date();
-        const activeSubscription = await prisma.subscription.findFirst({
-          where: {
-            userId: user.id,
-            startDate: { lte: now },
-            endDate: { gte: now },
-            status: 'ACTIVE',
-          },
-          select: { id: true },
-        });
-        if (!activeSubscription) {
-          return NextResponse.json({ error: 'Kursus ini membutuhkan langganan aktif' }, { status: 403 });
-        }
-      }
-
       const raw = Array.isArray(course.requirements) ? course.requirements : [];
       const requiredCourseIds = Array.from(new Set(raw.map((x) => (typeof x === 'string' ? x.trim() : '')).filter(Boolean)));
       if (requiredCourseIds.length) {
@@ -224,6 +234,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
 
+    if (!isOwner && course.subscriptionEligible) {
+      const ok = await hasActiveSubscription(String(user.id));
+      if (ok) {
+        return NextResponse.json({
+          message: 'Akses kursus melalui langganan aktif',
+          enrolled: true,
+          redirectUrl: `/courses/${course.slug}/learn`,
+        });
+      }
+    }
+
     if (Number(course.price || 0) <= 0) {
       await prisma.enrollment.create({ data: { userId: user.id, courseId: course.id } });
       return NextResponse.json({
@@ -231,6 +252,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         enrolled: true,
         redirectUrl: `/courses/${course.slug}/learn`,
       });
+    }
+
+    const profile = await prisma.user.findUnique({
+      where: { id: String(user.id) },
+      select: { id: true, name: true, phone: true, city: true, address: true },
+    });
+    if (!profile || !isProfileComplete(profile)) {
+      const redirectTo = `/checkout?courseId=${encodeURIComponent(course.id)}`;
+      const profileUrl = `/dashboard/settings?redirect=${encodeURIComponent(redirectTo)}`;
+      return NextResponse.json(
+        { error: 'Lengkapi profil terlebih dahulu sebelum melakukan pembelian.', requiresProfile: true, redirectUrl: profileUrl },
+        { status: 409 }
+      );
     }
 
     const order = await createOrder(

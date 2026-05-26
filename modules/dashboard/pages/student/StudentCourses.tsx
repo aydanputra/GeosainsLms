@@ -2,14 +2,18 @@
 
 import { Play, Award, Clock, BookOpen, User, Star, X, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface StudentCoursesProps {
   courses: any[];
 }
 
 export default function StudentCourses({ courses }: StudentCoursesProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const didAutoOpenReviewRef = useRef(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewCourse, setReviewCourse] = useState<any | null>(null);
   const [ratingAvg, setRatingAvg] = useState(0);
@@ -51,6 +55,11 @@ export default function StudentCourses({ courses }: StudentCoursesProps) {
     setMyComment('');
     setIsLoadingReview(false);
     setIsSavingReview(false);
+
+    const reviewCourseId = searchParams?.get('reviewCourseId');
+    if (typeof reviewCourseId === 'string' && reviewCourseId.trim()) {
+      router.replace('/dashboard/student/courses');
+    }
   };
 
   const canSaveReview = useMemo(() => {
@@ -75,13 +84,29 @@ export default function StudentCourses({ courses }: StudentCoursesProps) {
       setRatingAvg(typeof (data as any)?.ratingAvg === 'number' ? (data as any).ratingAvg : ratingAvg);
       setRatingCount(typeof (data as any)?.ratingCount === 'number' ? (data as any).ratingCount : ratingCount);
       toast.success('Ulasan berhasil disimpan');
+      const nextRaw = searchParams?.get('next');
+      const next = typeof nextRaw === 'string' ? nextRaw.trim() : '';
       closeReview();
+      if (next.startsWith('/')) {
+        router.push(next);
+      }
     } catch (e: any) {
       toast.error(e?.message || 'Gagal menyimpan ulasan');
     } finally {
       setIsSavingReview(false);
     }
   };
+
+  useEffect(() => {
+    if (didAutoOpenReviewRef.current) return;
+    const reviewCourseIdRaw = searchParams?.get('reviewCourseId');
+    const reviewCourseId = typeof reviewCourseIdRaw === 'string' ? reviewCourseIdRaw.trim() : '';
+    if (!reviewCourseId) return;
+    const course = Array.isArray(courses) ? courses.find((c) => String(c?.id) === reviewCourseId) : null;
+    if (!course) return;
+    didAutoOpenReviewRef.current = true;
+    openReview(course);
+  }, [courses, searchParams]);
 
   useEffect(() => {
     if (!reviewOpen) return;

@@ -29,7 +29,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const course = await prisma.course.findUnique({
       where: { id: courseId },
-      select: { id: true, deletedAt: true, validityDays: true },
+      select: { id: true, deletedAt: true, validityDays: true, subscriptionEligible: true },
     });
     if (!course || course.deletedAt) return NextResponse.json({ error: 'Course not found' }, { status: 404 });
 
@@ -37,14 +37,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       where: { userId_courseId: { userId: String(user.id), courseId } },
       select: { createdAt: true },
     });
-    if (!enrollment) return NextResponse.json({ error: 'User not enrolled in this course' }, { status: 403 });
+    const now = new Date();
+    const activeSubscription =
+      !enrollment && course.subscriptionEligible
+        ? await prisma.subscription.findFirst({
+            where: { userId: String(user.id), startDate: { lte: now }, endDate: { gte: now }, status: 'ACTIVE' },
+            select: { id: true },
+          })
+        : null;
+    if (!enrollment && !activeSubscription) return NextResponse.json({ error: 'User not enrolled in this course' }, { status: 403 });
 
-    const validityDays = course.validityDays;
-    if (validityDays && validityDays > 0) {
-      const expiresAt = new Date(enrollment.createdAt);
-      expiresAt.setDate(expiresAt.getDate() + validityDays);
-      if (new Date() > expiresAt) {
-        return NextResponse.json({ error: 'Enrollment expired' }, { status: 403 });
+    if (enrollment) {
+      const validityDays = course.validityDays;
+      if (validityDays && validityDays > 0) {
+        const expiresAt = new Date(enrollment.createdAt);
+        expiresAt.setDate(expiresAt.getDate() + validityDays);
+        if (new Date() > expiresAt) {
+          return NextResponse.json({ error: 'Enrollment expired' }, { status: 403 });
+        }
       }
     }
 

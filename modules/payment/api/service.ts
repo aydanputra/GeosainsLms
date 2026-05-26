@@ -392,6 +392,49 @@ async function finalizeOrderPaidTx(tx: typeof prisma, orderId: string) {
         });
       }
     }
+
+    const meta = (item as any)?.meta;
+    const subscriptionMeta = meta && typeof meta === 'object' ? (meta as any).subscription : null;
+    const planRaw = subscriptionMeta && typeof subscriptionMeta.plan === 'string' ? subscriptionMeta.plan.trim().toUpperCase() : '';
+    if (planRaw === 'MONTHLY' || planRaw === 'YEARLY') {
+      const durationRaw =
+        typeof subscriptionMeta.durationDays === 'number'
+          ? subscriptionMeta.durationDays
+          : typeof subscriptionMeta.durationDays === 'string'
+            ? Number(subscriptionMeta.durationDays)
+            : NaN;
+      const durationDays = Number.isFinite(durationRaw) && durationRaw > 0 ? Math.floor(durationRaw) : planRaw === 'YEARLY' ? 365 : 30;
+      const now = new Date();
+      const active = await tx.subscription.findFirst({
+        where: { userId: String(order.userId), status: 'ACTIVE', endDate: { gte: now } },
+        orderBy: { endDate: 'desc' },
+        select: { id: true, startDate: true, endDate: true },
+      });
+
+      const addDays = (d: Date, days: number) => {
+        const out = new Date(d);
+        out.setDate(out.getDate() + days);
+        return out;
+      };
+
+      if (active?.id) {
+        const nextEnd = addDays(active.endDate, durationDays);
+        await tx.subscription.update({
+          where: { id: active.id },
+          data: { endDate: nextEnd, plan: planRaw, status: 'ACTIVE' },
+        });
+      } else {
+        await tx.subscription.create({
+          data: {
+            userId: String(order.userId),
+            plan: planRaw,
+            status: 'ACTIVE',
+            startDate: now,
+            endDate: addDays(now, durationDays),
+          },
+        });
+      }
+    }
   }
 
   if (courseTitlesByMentor.size > 0) {
@@ -494,6 +537,38 @@ async function finalizeOrderPaidTx(tx: typeof prisma, orderId: string) {
         read: false,
       },
     });
+  }
+
+  const hasSubscriptionItem = orderItems.some((it) => {
+    const m: any = (it as any)?.meta;
+    const s = m && typeof m === 'object' ? m.subscription : null;
+    const plan = s && typeof s.plan === 'string' ? s.plan.trim().toUpperCase() : '';
+    return plan === 'MONTHLY' || plan === 'YEARLY';
+  });
+  if (hasSubscriptionItem) {
+    const now = new Date();
+    const sub = await tx.subscription.findFirst({
+      where: { userId: String(order.userId), status: 'ACTIVE', endDate: { gte: now } },
+      orderBy: { endDate: 'desc' },
+      select: { plan: true, startDate: true, endDate: true },
+    });
+    if (sub) {
+      const planLabel = String(sub.plan || '').toUpperCase() === 'YEARLY' ? 'Tahunan' : 'Bulanan';
+      const lines = [
+        `Paket: ${planLabel}`,
+        `Aktif sampai: ${new Date(sub.endDate).toLocaleDateString('id-ID')}`,
+        `Order: ${orderId}`,
+        'LINK:/subscribe',
+      ];
+      await tx.notification.create({
+        data: {
+          userId: String(order.userId),
+          title: 'Langganan Aktif',
+          message: lines.join('\n'),
+          read: false,
+        },
+      });
+    }
   }
 
   const adminUsers = await tx.user.findMany({

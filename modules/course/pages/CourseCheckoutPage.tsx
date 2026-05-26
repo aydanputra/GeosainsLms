@@ -162,7 +162,14 @@ export default function CourseCheckoutPage({
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Gagal membuat checkout');
+      if (!res.ok) {
+        const redirectUrl = typeof data?.redirectUrl === 'string' ? data.redirectUrl.trim() : '';
+        if (data?.requiresProfile === true && redirectUrl) {
+          router.push(redirectUrl);
+          return;
+        }
+        throw new Error(data?.error || 'Gagal membuat checkout');
+      }
 
       if (typeof data?.paymentUrl === 'string' && data.paymentUrl.trim()) {
         window.location.assign(data.paymentUrl.trim());
