@@ -13,6 +13,7 @@ async function enforceStudentCourseAccess(args: { userId: string; courseId: stri
       deletedAt: true,
       validityDays: true,
       enableQA: true,
+      subscriptionEligible: true,
     },
   });
   if (!course || course.deletedAt) return { status: 404 as const, error: 'Course not found' };
@@ -23,10 +24,21 @@ async function enforceStudentCourseAccess(args: { userId: string; courseId: stri
     where: { userId_courseId: { userId, courseId } },
     select: { createdAt: true },
   });
-  if (!enrollment) return { status: 403 as const, error: 'Enrollment required' };
+  if (!enrollment) {
+    if (course.subscriptionEligible) {
+      const now = new Date();
+      const activeSubscription = await prisma.subscription.findFirst({
+        where: { userId: String(userId), startDate: { lte: now }, endDate: { gte: now }, status: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (!activeSubscription) return { status: 403 as const, error: 'Enrollment required' };
+    } else {
+      return { status: 403 as const, error: 'Enrollment required' };
+    }
+  }
 
   const validityDays = course.validityDays;
-  if (validityDays && validityDays > 0) {
+  if (enrollment && validityDays && validityDays > 0) {
     const expiresAt = new Date(enrollment.createdAt);
     expiresAt.setDate(expiresAt.getDate() + validityDays);
     if (new Date() > expiresAt) return { status: 403 as const, error: 'Enrollment expired' };

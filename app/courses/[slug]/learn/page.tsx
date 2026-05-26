@@ -102,7 +102,7 @@ export default async function LearnCoursePage({
   const canBypassEnrollment = (isAdmin || isInstructor || isCoInstructor) && allowStaffView;
 
   if (!canBypassEnrollment) {
-    let enrollment = await prisma.enrollment.findUnique({
+    const enrollment = await prisma.enrollment.findUnique({
       where: {
         userId_courseId: {
           userId: user.id,
@@ -125,13 +125,7 @@ export default async function LearnCoursePage({
           select: { id: true },
         });
         if (activeSubscription) {
-          enrollment = await prisma.enrollment.create({
-            data: {
-              userId: String(user.id),
-              courseId: course.id,
-            },
-            select: { createdAt: true },
-          });
+          // allow access via subscription
         } else {
           redirect(`/courses/${slug}`);
         }
@@ -140,12 +134,14 @@ export default async function LearnCoursePage({
       }
     }
 
-    const validityDays = course.validityDays;
-    if (validityDays && validityDays > 0) {
-      const expiresAt = new Date(enrollment.createdAt);
-      expiresAt.setDate(expiresAt.getDate() + validityDays);
-      if (new Date() > expiresAt) {
-        redirect(`/courses/${slug}`);
+    if (enrollment) {
+      const validityDays = course.validityDays;
+      if (validityDays && validityDays > 0) {
+        const expiresAt = new Date(enrollment.createdAt);
+        expiresAt.setDate(expiresAt.getDate() + validityDays);
+        if (new Date() > expiresAt) {
+          redirect(`/courses/${slug}`);
+        }
       }
     }
   }

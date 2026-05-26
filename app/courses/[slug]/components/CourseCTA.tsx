@@ -368,6 +368,15 @@ export default function CourseCTA({ course, isEnrolled, isLoggedIn, totalLessons
               )}
             </button>
           )}
+
+          {!isEnrolled && course?.subscriptionEligible ? (
+            <Link
+              href="/subscribe"
+              className="w-full h-12 bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 font-extrabold rounded-xl transition-colors flex items-center justify-center"
+            >
+              Berlangganan untuk Akses
+            </Link>
+          ) : null}
           
           {!isEnrolled && (
             <button className="w-full h-12 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold rounded-xl transition-colors">

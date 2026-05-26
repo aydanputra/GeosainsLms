@@ -203,11 +203,27 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       });
 
       if (!enrollment) {
-        return NextResponse.json({ error: 'User not enrolled in this course' }, { status: 403 });
+        if (course.subscriptionEligible) {
+          const now = new Date();
+          const activeSubscription = await prisma.subscription.findFirst({
+            where: {
+              userId: String(user.id),
+              startDate: { lte: now },
+              endDate: { gte: now },
+              status: 'ACTIVE',
+            },
+            select: { id: true },
+          });
+          if (!activeSubscription) {
+            return NextResponse.json({ error: 'User not enrolled in this course' }, { status: 403 });
+          }
+        } else {
+          return NextResponse.json({ error: 'User not enrolled in this course' }, { status: 403 });
+        }
       }
 
       const validityDays = course.validityDays;
-      if (validityDays && validityDays > 0) {
+      if (enrollment && validityDays && validityDays > 0) {
         const expiresAt = new Date(enrollment.createdAt);
         expiresAt.setDate(expiresAt.getDate() + validityDays);
         if (new Date() > expiresAt) {

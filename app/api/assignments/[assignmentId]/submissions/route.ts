@@ -85,11 +85,12 @@ async function checkStudentAccess(args: {
   lessonId: string;
   isPreview: boolean;
   enrollmentCreatedAt: Date;
+  ignoreValidityDays?: boolean;
 }) {
-  const { course, lessonId, isPreview, enrollmentCreatedAt, userId } = args;
+  const { course, lessonId, isPreview, enrollmentCreatedAt, userId, ignoreValidityDays } = args;
 
   const validityDays = course.validityDays;
-  if (validityDays && validityDays > 0) {
+  if (!ignoreValidityDays && validityDays && validityDays > 0) {
     const expiresAt = new Date(enrollmentCreatedAt);
     expiresAt.setDate(expiresAt.getDate() + validityDays);
     if (new Date() > expiresAt) {
@@ -188,14 +189,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ assi
         where: { userId_courseId: { userId: user.id, courseId: assignment.lesson.module.courseId } },
         select: { id: true, createdAt: true },
       });
-      if (!enrollment) return NextResponse.json({ error: 'User not enrolled in this course' }, { status: 403 });
+      const now = new Date();
+      const activeSubscription =
+        !enrollment && assignment.lesson.module.course.subscriptionEligible
+          ? await prisma.subscription.findFirst({
+              where: { userId: String(user.id), startDate: { lte: now }, endDate: { gte: now }, status: 'ACTIVE' },
+              select: { startDate: true },
+            })
+          : null;
+      if (!enrollment && !activeSubscription) return NextResponse.json({ error: 'User not enrolled in this course' }, { status: 403 });
 
       const accessError = await checkStudentAccess({
         userId: user.id,
         course: assignment.lesson.module.course,
         lessonId: assignment.lessonId,
         isPreview: Boolean(assignment.lesson.isPreview),
-        enrollmentCreatedAt: enrollment.createdAt,
+        enrollmentCreatedAt: enrollment ? enrollment.createdAt : (activeSubscription as any).startDate,
+        ignoreValidityDays: !enrollment,
       });
       if (accessError) return NextResponse.json(accessError.body, { status: accessError.status });
 
@@ -335,14 +345,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ass
         where: { userId_courseId: { userId: user.id, courseId: assignment.lesson.module.courseId } },
         select: { id: true, createdAt: true },
       });
-      if (!enrollment) return NextResponse.json({ error: 'User not enrolled in this course' }, { status: 403 });
+      const now = new Date();
+      const activeSubscription =
+        !enrollment && assignment.lesson.module.course.subscriptionEligible
+          ? await prisma.subscription.findFirst({
+              where: { userId: String(user.id), startDate: { lte: now }, endDate: { gte: now }, status: 'ACTIVE' },
+              select: { startDate: true },
+            })
+          : null;
+      if (!enrollment && !activeSubscription) return NextResponse.json({ error: 'User not enrolled in this course' }, { status: 403 });
 
       const accessError = await checkStudentAccess({
         userId: user.id,
         course: assignment.lesson.module.course,
         lessonId: assignment.lessonId,
         isPreview: Boolean(assignment.lesson.isPreview),
-        enrollmentCreatedAt: enrollment.createdAt,
+        enrollmentCreatedAt: enrollment ? enrollment.createdAt : (activeSubscription as any).startDate,
+        ignoreValidityDays: !enrollment,
       });
       if (accessError) return NextResponse.json(accessError.body, { status: accessError.status });
     }

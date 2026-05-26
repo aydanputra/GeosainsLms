@@ -225,9 +225,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!isOwner && course.subscriptionEligible) {
       const ok = await hasActiveSubscription(String(user.id));
       if (ok) {
-        await prisma.enrollment.create({ data: { userId: user.id, courseId: course.id } });
         return NextResponse.json({
-          message: 'Berhasil mendaftar kursus melalui langganan',
+          message: 'Akses kursus melalui langganan aktif',
           enrolled: true,
           redirectUrl: `/courses/${course.slug}/learn`,
         });

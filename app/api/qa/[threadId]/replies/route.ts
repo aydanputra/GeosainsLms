@@ -16,6 +16,7 @@ async function enforceStudentThreadAccess(args: { userId: string; threadId: stri
           deletedAt: true,
           validityDays: true,
           enableQA: true,
+          subscriptionEligible: true,
         },
       },
     },
@@ -28,10 +29,21 @@ async function enforceStudentThreadAccess(args: { userId: string; threadId: stri
     where: { userId_courseId: { userId, courseId: thread.course.id } },
     select: { createdAt: true },
   });
-  if (!enrollment) return { status: 403 as const, error: 'Enrollment required' };
+  if (!enrollment) {
+    if (thread.course.subscriptionEligible) {
+      const now = new Date();
+      const activeSubscription = await prisma.subscription.findFirst({
+        where: { userId: String(userId), startDate: { lte: now }, endDate: { gte: now }, status: 'ACTIVE' },
+        select: { id: true },
+      });
+      if (!activeSubscription) return { status: 403 as const, error: 'Enrollment required' };
+    } else {
+      return { status: 403 as const, error: 'Enrollment required' };
+    }
+  }
 
   const validityDays = thread.course.validityDays;
-  if (validityDays && validityDays > 0) {
+  if (enrollment && validityDays && validityDays > 0) {
     const expiresAt = new Date(enrollment.createdAt);
     expiresAt.setDate(expiresAt.getDate() + validityDays);
     if (new Date() > expiresAt) return { status: 403 as const, error: 'Enrollment expired' };

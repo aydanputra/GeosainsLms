@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
+import { useCartStore } from '@/modules/shop/store/useCartStore';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
@@ -42,6 +43,10 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       routeLoadingTimeoutRef.current = null;
     }, remaining);
   };
+
+  useEffect(() => {
+    Promise.resolve(useCartStore.persist.rehydrate()).catch(() => {});
+  }, []);
 
   useEffect(() => {
     try {

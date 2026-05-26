@@ -311,7 +311,7 @@ export const getEnrolledCourses = async (userId: string) => {
     },
   });
   const now = new Date();
-  return enrollments
+  const purchasedCourses = enrollments
     .filter((e) => e.course.deletedAt === null)
     .filter((e) => {
       const validityDays = e.course.validityDays;
@@ -321,6 +321,28 @@ export const getEnrolledCourses = async (userId: string) => {
       return now <= expiresAt;
     })
     .map((e) => e.course);
+
+  const activeSubscription = await prisma.subscription.findFirst({
+    where: { userId, startDate: { lte: now }, endDate: { gte: now }, status: 'ACTIVE' },
+    select: { id: true },
+  });
+
+  if (!activeSubscription) return purchasedCourses;
+
+  const subscriptionCourses = await prisma.course.findMany({
+    where: { deletedAt: null, status: CourseStatus.PUBLISHED, subscriptionEligible: true },
+    include: {
+      instructor: { select: { name: true, email: true } },
+      category: { select: { name: true } },
+      modules: { include: { lessons: true } },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const byId = new Map<string, any>();
+  for (const c of purchasedCourses) byId.set(String((c as any).id), c);
+  for (const c of subscriptionCourses) byId.set(String((c as any).id), c);
+  return Array.from(byId.values());
 };
 
 export const getCourseById = async (id: string) => {
@@ -682,18 +704,32 @@ export const markLessonComplete = async (userId: string, lessonId: string) => {
     select: { createdAt: true },
   });
 
-  if (!enrollment) throw new Error('User not enrolled in this course');
+  const course = lesson.module.course;
+  const now = new Date();
+  const activeSubscription =
+    !enrollment && course.subscriptionEligible
+      ? await prisma.subscription.findFirst({
+          where: { userId: String(userId), startDate: { lte: now }, endDate: { gte: now }, status: 'ACTIVE' },
+          select: { startDate: true, endDate: true },
+        })
+      : null;
 
-  const validityDays = lesson.module.course.validityDays;
-  if (validityDays && validityDays > 0) {
-    const expiresAt = new Date(enrollment.createdAt);
-    expiresAt.setDate(expiresAt.getDate() + validityDays);
-    if (new Date() > expiresAt) {
-      throw new Error('ENROLLMENT_EXPIRED');
+  const accessStartDate = enrollment?.createdAt || activeSubscription?.startDate || null;
+  const accessMode = enrollment ? 'ENROLLMENT' : activeSubscription ? 'SUBSCRIPTION' : null;
+
+  if (!accessStartDate || !accessMode) throw new Error('User not enrolled in this course');
+
+  if (accessMode === 'ENROLLMENT') {
+    const validityDays = course.validityDays;
+    if (validityDays && validityDays > 0) {
+      const expiresAt = new Date(enrollment!.createdAt);
+      expiresAt.setDate(expiresAt.getDate() + validityDays);
+      if (new Date() > expiresAt) {
+        throw new Error('ENROLLMENT_EXPIRED');
+      }
     }
   }
 
-  const course = lesson.module.course;
   if (course.dripEnabled) {
     const modules = await prisma.module.findMany({
       where: { courseId: course.id },
@@ -708,11 +744,10 @@ export const markLessonComplete = async (userId: string, lessonId: string) => {
 
     const globalLessons = modules.flatMap((m) => m.lessons.map((l) => ({ id: l.id, isPreview: l.isPreview })));
     const idx = globalLessons.findIndex((l) => l.id === lessonId);
-    const now = new Date();
 
     if (idx >= 0 && !lesson.isPreview) {
       if (course.dripType === 'AFTER_ENROLLMENT' && course.dripDays) {
-        const unlockDate = new Date(enrollment.createdAt);
+        const unlockDate = new Date(accessStartDate);
         unlockDate.setDate(unlockDate.getDate() + idx * course.dripDays);
         if (now < unlockDate) {
           throw new Error('DRIP_LOCKED');

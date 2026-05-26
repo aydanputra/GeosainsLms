@@ -78,6 +78,7 @@ export async function GET(
         dripType: true,
         dripDays: true,
         validityDays: true,
+        subscriptionEligible: true,
         createdAt: true,
         publishedAt: true,
         instructorId: true,
@@ -122,6 +123,7 @@ export async function GET(
     let isAdmin = false;
     let isCoInstructor = false;
     let enrollmentExpired = false;
+    let activeSubscription: { id: string; startDate: Date; endDate: Date } | null = null;
 
     if (user) {
         isAdmin = user.role === 'ADMIN';
@@ -162,6 +164,19 @@ export async function GET(
             enrollmentExpired = true;
           }
         }
+
+        if (!enrollment && course.subscriptionEligible && !(isAdmin || isInstructor || isCoInstructor)) {
+          const now = new Date();
+          activeSubscription = await prisma.subscription.findFirst({
+            where: {
+              userId: String(user.id),
+              startDate: { lte: now },
+              endDate: { gte: now },
+              status: 'ACTIVE',
+            },
+            select: { id: true, startDate: true, endDate: true },
+          });
+        }
     }
 
     const globalLessons = course.modules
@@ -172,7 +187,7 @@ export async function GET(
     const lessonIndexById = new Map(globalLessons.map((l, idx) => [l.id, idx]));
 
     let completedSet = new Set<string>();
-    if (user && enrollment && course.dripEnabled && course.dripType === DripType.SEQUENTIAL) {
+    if (user && (enrollment || activeSubscription) && course.dripEnabled && course.dripType === DripType.SEQUENTIAL) {
       const completed = await prisma.userProgress.findMany({
         where: { userId: user.id, lessonId: { in: globalLessons.map((l) => l.id) }, completed: true },
         select: { lessonId: true },
@@ -211,7 +226,7 @@ export async function GET(
                 lockReason = 'OK';
             }
             // Rule 2: Not Enrolled -> Locked
-            else if (!enrollment) {
+            else if (!enrollment && !activeSubscription) {
                 isLocked = true;
                 lockReason = enrollmentExpired ? 'ENROLLMENT_EXPIRED' : 'NOT_ENROLLED';
             }
@@ -220,7 +235,8 @@ export async function GET(
               if (course.dripEnabled && course.dripType === DripType.AFTER_ENROLLMENT && course.dripDays) {
                 const idx = lessonIndexById.get(lesson.id) ?? 0;
                 const daysToUnlock = idx * course.dripDays;
-                const unlockAt = new Date(enrollment.createdAt);
+                const base = enrollment ? new Date(enrollment.createdAt) : activeSubscription ? new Date(activeSubscription.startDate) : new Date();
+                const unlockAt = new Date(base);
                 unlockAt.setDate(unlockAt.getDate() + daysToUnlock);
 
                 if (new Date() < unlockAt) {

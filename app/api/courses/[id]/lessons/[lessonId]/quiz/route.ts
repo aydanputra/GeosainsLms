@@ -60,20 +60,32 @@ export async function POST(
           select: { createdAt: true },
         });
 
-        if (!enrollment) {
+        const now = new Date();
+        const course = lesson.module.course;
+        const activeSubscription =
+          !enrollment && course.subscriptionEligible
+            ? await prisma.subscription.findFirst({
+                where: { userId: String(user.id), startDate: { lte: now }, endDate: { gte: now }, status: 'ACTIVE' },
+                select: { startDate: true },
+              })
+            : null;
+
+        if (!enrollment && !activeSubscription) {
           return NextResponse.json({ error: 'User not enrolled in this course' }, { status: 403 });
         }
 
-        const validityDays = lesson.module.course.validityDays;
-        if (validityDays && validityDays > 0) {
-          const expiresAt = new Date(enrollment.createdAt);
-          expiresAt.setDate(expiresAt.getDate() + validityDays);
-          if (new Date() > expiresAt) {
-            return NextResponse.json({ error: 'Enrollment expired' }, { status: 403 });
+        if (enrollment) {
+          const validityDays = course.validityDays;
+          if (validityDays && validityDays > 0) {
+            const expiresAt = new Date(enrollment.createdAt);
+            expiresAt.setDate(expiresAt.getDate() + validityDays);
+            if (new Date() > expiresAt) {
+              return NextResponse.json({ error: 'Enrollment expired' }, { status: 403 });
+            }
           }
         }
 
-        const course = lesson.module.course;
+        const accessStartDate = enrollment?.createdAt || activeSubscription?.startDate || null;
         if (course.dripEnabled) {
           const modules = await prisma.module.findMany({
             where: { courseId },
@@ -88,11 +100,10 @@ export async function POST(
 
           const globalLessons = modules.flatMap((m) => m.lessons.map((l) => ({ id: l.id, isPreview: l.isPreview })));
           const idx = globalLessons.findIndex((l) => l.id === lessonId);
-          const now = new Date();
 
           if (idx >= 0 && !lesson.isPreview) {
             if (course.dripType === 'AFTER_ENROLLMENT' && course.dripDays) {
-              const unlockDate = new Date(enrollment.createdAt);
+              const unlockDate = new Date(accessStartDate || now);
               unlockDate.setDate(unlockDate.getDate() + idx * course.dripDays);
               if (now < unlockDate) {
                 return NextResponse.json(
