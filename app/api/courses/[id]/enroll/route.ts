@@ -18,6 +18,18 @@ async function hasActiveSubscription(userId: string) {
   return Boolean(active);
 }
 
+function isProfileComplete(user: { name?: string | null; phone?: string | null; city?: string | null; address?: string | null }) {
+  const name = String(user?.name || '').trim();
+  const phone = String(user?.phone || '').trim();
+  const city = String(user?.city || '').trim();
+  const address = String(user?.address || '').trim();
+  if (name.length < 2) return false;
+  if (phone.length < 8) return false;
+  if (city.length < 2) return false;
+  if (address.length < 5) return false;
+  return true;
+}
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     if (!isSameOrigin(req)) {
@@ -192,6 +204,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         message: 'Berhasil mendaftar kursus gratis',
         redirectUrl: `/courses/${course.slug}/learn`,
         enrolled: true,
+      });
+    }
+
+    const profile = await prisma.user.findUnique({
+      where: { id: String(user.id) },
+      select: { id: true, name: true, phone: true, city: true, address: true },
+    });
+    if (!profile || !isProfileComplete(profile)) {
+      const redirectTo = `/checkout?courseId=${encodeURIComponent(course.id)}`;
+      const profileUrl = `/dashboard/settings?redirect=${encodeURIComponent(redirectTo)}`;
+      return NextResponse.json({
+        message: 'Lengkapi profil terlebih dahulu sebelum melakukan pembelian.',
+        enrolled: false,
+        requiresProfile: true,
+        redirectUrl: profileUrl,
       });
     }
 

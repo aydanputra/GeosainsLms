@@ -21,6 +21,18 @@ function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
+function isProfileComplete(user: { name?: string | null; phone?: string | null; city?: string | null; address?: string | null }) {
+  const name = String(user?.name || '').trim();
+  const phone = String(user?.phone || '').trim();
+  const city = String(user?.city || '').trim();
+  const address = String(user?.address || '').trim();
+  if (name.length < 2) return false;
+  if (phone.length < 8) return false;
+  if (city.length < 2) return false;
+  if (address.length < 5) return false;
+  return true;
+}
+
 async function hasActiveSubscription(userId: string) {
   const now = new Date();
   const active = await prisma.subscription.findFirst({
@@ -240,6 +252,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         enrolled: true,
         redirectUrl: `/courses/${course.slug}/learn`,
       });
+    }
+
+    const profile = await prisma.user.findUnique({
+      where: { id: String(user.id) },
+      select: { id: true, name: true, phone: true, city: true, address: true },
+    });
+    if (!profile || !isProfileComplete(profile)) {
+      const redirectTo = `/checkout?courseId=${encodeURIComponent(course.id)}`;
+      const profileUrl = `/dashboard/settings?redirect=${encodeURIComponent(redirectTo)}`;
+      return NextResponse.json(
+        { error: 'Lengkapi profil terlebih dahulu sebelum melakukan pembelian.', requiresProfile: true, redirectUrl: profileUrl },
+        { status: 409 }
+      );
     }
 
     const order = await createOrder(

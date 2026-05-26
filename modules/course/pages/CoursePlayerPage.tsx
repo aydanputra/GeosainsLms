@@ -110,6 +110,7 @@ export default function CoursePlayerPage({
   const [didAutoScroll, setDidAutoScroll] = useState(false);
   const [expandedModuleIds, setExpandedModuleIds] = useState<string[]>([]);
   const [didInitSidebar, setDidInitSidebar] = useState(false);
+  const didCompletionRedirectRef = useRef(false);
 
   // Fetch course details
   const { data: course, isLoading: courseLoading } = useQuery({
@@ -271,6 +272,36 @@ export default function CoursePlayerPage({
     return map;
   };
 
+  const redirectAfterCourseCompleted = async () => {
+    if (didCompletionRedirectRef.current) return;
+    didCompletionRedirectRef.current = true;
+
+    const certificatesHref = '/dashboard/student/certificates';
+    if (!id) {
+      router.push(certificatesHref);
+      return;
+    }
+
+    const reviewsEnabled = (course as any)?.reviewsEnabled !== false;
+    if (!reviewsEnabled) {
+      router.push(certificatesHref);
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/courses/${encodeURIComponent(String(id))}/rating`, { cache: 'no-store' as any });
+      const data = await res.json().catch(() => ({}));
+      const myRating = typeof (data as any)?.myRating === 'number' ? (data as any).myRating : null;
+      if (!myRating) {
+        const next = encodeURIComponent(certificatesHref);
+        router.push(`/dashboard/student/courses?reviewCourseId=${encodeURIComponent(String(id))}&next=${next}`);
+        return;
+      }
+    } catch {}
+
+    router.push(certificatesHref);
+  };
+
   const handleNext = (overrideLockMap?: Map<string, OutlineLessonStatus>) => {
     const lockMap = overrideLockMap || lockByLessonId;
     const idx = currentLessonIndex >= 0 ? currentLessonIndex : 0;
@@ -293,13 +324,12 @@ export default function CoursePlayerPage({
       toast.error('Semua materi berikutnya masih terkunci.');
       return;
     } else {
-      // Show Completion Modal/Page?
-      // For now redirect to certificate page if 100%
-      if (completedLessonsCount === allLessons.length) {
-           router.push('/dashboard/student/certificates');
-       } else {
-           toast.success('Pelajaran selesai! Lanjutkan ke materi berikutnya.');
-       }
+      const expectedCompleted = completedLessonsCount + (isCompleted ? 0 : 1);
+      if (expectedCompleted >= allLessons.length && allLessons.length > 0) {
+        redirectAfterCourseCompleted();
+        return;
+      }
+      toast.success('Pelajaran selesai! Lanjutkan ke materi berikutnya.');
     }
   };
 
@@ -316,6 +346,11 @@ export default function CoursePlayerPage({
       if (autoLoadNext) {
         handleNext(lockMap);
       } else {
+        const expectedCompleted = completedLessonsCount + (isCompleted ? 0 : 1);
+        if (expectedCompleted >= allLessons.length && allLessons.length > 0) {
+          redirectAfterCourseCompleted();
+          return;
+        }
         toast.success('Pelajaran selesai.');
       }
     } catch (error) {
@@ -336,6 +371,11 @@ export default function CoursePlayerPage({
       const lockMap = buildLockMapFromOutline(latest);
       if (autoLoadNext) {
         setTimeout(() => handleNext(lockMap), 300);
+      } else {
+        const expectedCompleted = completedLessonsCount + (isCompleted ? 0 : 1);
+        if (expectedCompleted >= allLessons.length && allLessons.length > 0) {
+          redirectAfterCourseCompleted();
+        }
       }
     }
   };
