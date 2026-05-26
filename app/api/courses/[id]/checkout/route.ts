@@ -21,6 +21,20 @@ function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
+async function hasActiveSubscription(userId: string) {
+  const now = new Date();
+  const active = await prisma.subscription.findFirst({
+    where: {
+      userId,
+      startDate: { lte: now },
+      endDate: { gte: now },
+      status: 'ACTIVE',
+    },
+    select: { id: true },
+  });
+  return Boolean(active);
+}
+
 async function computeCouponDiscountForCourse(opts: {
   userId: string;
   course: { id: string; categoryId: string | null; categoryIds?: unknown; price: number };
@@ -183,22 +197,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }
       }
 
-      if (course.subscriptionEligible) {
-        const now = new Date();
-        const activeSubscription = await prisma.subscription.findFirst({
-          where: {
-            userId: user.id,
-            startDate: { lte: now },
-            endDate: { gte: now },
-            status: 'ACTIVE',
-          },
-          select: { id: true },
-        });
-        if (!activeSubscription) {
-          return NextResponse.json({ error: 'Kursus ini membutuhkan langganan aktif' }, { status: 403 });
-        }
-      }
-
       const raw = Array.isArray(course.requirements) ? course.requirements : [];
       const requiredCourseIds = Array.from(new Set(raw.map((x) => (typeof x === 'string' ? x.trim() : '')).filter(Boolean)));
       if (requiredCourseIds.length) {
@@ -221,6 +219,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             );
           }
         }
+      }
+    }
+
+    if (!isOwner && course.subscriptionEligible) {
+      const ok = await hasActiveSubscription(String(user.id));
+      if (ok) {
+        await prisma.enrollment.create({ data: { userId: user.id, courseId: course.id } });
+        return NextResponse.json({
+          message: 'Berhasil mendaftar kursus melalui langganan',
+          enrolled: true,
+          redirectUrl: `/courses/${course.slug}/learn`,
+        });
       }
     }
 
