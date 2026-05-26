@@ -32,6 +32,18 @@ function normalizePublicUrl(appUrl: string, value: string | null | undefined) {
   return null;
 }
 
+function pickProductShareImage(appUrl: string, product: { imageUrl: unknown; imageUrls: unknown }) {
+  const primary = normalizePublicUrl(appUrl, typeof product.imageUrl === 'string' ? product.imageUrl : null);
+  if (primary) return primary;
+
+  const list = Array.isArray(product.imageUrls) ? (product.imageUrls as unknown[]).map((v) => (typeof v === 'string' ? v : '')).filter(Boolean) : [];
+  for (const v of list) {
+    const normalized = normalizePublicUrl(appUrl, v);
+    if (normalized) return normalized;
+  }
+  return null;
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id: idOrSlug } = await params;
   const hdrs = await headers();
@@ -59,11 +71,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
       typeof parsed.siteDescription === 'string' && parsed.siteDescription.trim() ? parsed.siteDescription.trim() : 'Belanja produk di Geoshop.';
     const description = typeof product.description === 'string' && product.description.trim() ? product.description.trim() : fallbackDescription;
 
-    const imageCandidate =
-      normalizePublicUrl(appUrl, product.imageUrl) ||
-      normalizePublicUrl(appUrl, Array.isArray(product.imageUrls) && product.imageUrls.length > 0 ? product.imageUrls[0] : null) ||
-      normalizePublicUrl(appUrl, typeof parsed.logoUrl === 'string' ? parsed.logoUrl : null) ||
-      null;
+    const imageCandidate = pickProductShareImage(appUrl, product) || normalizePublicUrl(appUrl, typeof parsed.logoUrl === 'string' ? parsed.logoUrl : null) || null;
     const images = imageCandidate ? [{ url: imageCandidate }] : [];
 
     const title = `${product.name} | ${siteName}`;
