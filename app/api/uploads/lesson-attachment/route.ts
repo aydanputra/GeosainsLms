@@ -6,6 +6,7 @@ import { readFileSync } from 'fs';
 import {
   assertLessonAttachmentStorageConfigured,
   isBlobStorageEnabled,
+  isCloudinaryStorageEnabled,
   saveLessonAttachmentFile,
 } from '@/utils/lessonAttachmentStorage';
 import path from 'path';
@@ -136,7 +137,7 @@ export async function POST(req: NextRequest) {
     });
     // #region debug-point C:path
     await debugReport('C', 'writing file to storage', {
-      storageMode: isBlobStorageEnabled() ? 'blob' : 'local',
+      storageMode: isCloudinaryStorageEnabled() ? 'cloudinary' : isBlobStorageEnabled() ? 'blob' : 'local',
       safeLessonId: savedFile.safeLessonId,
       filename: savedFile.filename,
       storagePath: savedFile.storagePath,
@@ -179,7 +180,12 @@ export async function POST(req: NextRequest) {
     // #endregion
     console.error('Upload error:', error);
     const message = error instanceof Error ? error.message : 'Internal Server Error';
-    if (message.includes('token Blob di Vercel') || message.includes('BLOB_READ_WRITE_TOKEN')) {
+    if (
+      message.includes('Penyimpanan lampiran belum dikonfigurasi') ||
+      message.includes('token Blob di Vercel') ||
+      message.includes('BLOB_READ_WRITE_TOKEN') ||
+      message.includes('CLOUDINARY_')
+    ) {
       return NextResponse.json({ error: message }, { status: 500 });
     }
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
