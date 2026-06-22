@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
+import { BlobNotFoundError } from '@vercel/blob';
+import { deleteLessonAttachmentFile } from '@/utils/lessonAttachmentStorage';
 import { unlink } from 'fs/promises';
 import path from 'path';
 
@@ -62,16 +64,11 @@ export async function DELETE(
     const storagePath = attachment.storagePath;
     
     if (storagePath) {
-        // Private storage deletion
-        const absolutePath = path.isAbsolute(storagePath) 
-            ? storagePath 
-            : path.join(process.cwd(), storagePath);
-            
         try {
-            await unlink(absolutePath);
+            await deleteLessonAttachmentFile(storagePath);
         } catch (err: any) {
             // Ignore if file not found
-            if (err.code !== 'ENOENT') {
+            if (err?.code !== 'ENOENT' && !(err instanceof BlobNotFoundError)) {
                 console.error('Failed to delete storage file:', err);
             }
         }

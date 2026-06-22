@@ -53,24 +53,26 @@ export default async function Page({ searchParams }: { searchParams?: Promise<Re
 
   const profile = await prisma.user.findUnique({
     where: { id: String(user.id) },
-    select: { id: true, name: true, email: true, phone: true, city: true, address: true },
+    select: { id: true, name: true, email: true, phone: true, gender: true, birthDate: true, city: true, address: true },
   });
 
   const isProfileComplete = (() => {
     const name = String(profile?.name || '').trim();
+    const email = String((profile as any)?.email || '').trim();
     const phone = String((profile as any)?.phone || '').trim();
+    const gender = String((profile as any)?.gender || '').trim().toUpperCase();
+    const birthDate = (profile as any)?.birthDate ? new Date((profile as any).birthDate) : null;
     const city = String((profile as any)?.city || '').trim();
     const address = String((profile as any)?.address || '').trim();
     if (name.length < 2) return false;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return false;
     if (phone.length < 8) return false;
+    if (gender !== 'MALE' && gender !== 'FEMALE') return false;
+    if (!birthDate || Number.isNaN(birthDate.getTime())) return false;
     if (city.length < 2) return false;
     if (address.length < 5) return false;
     return true;
   })();
-
-  if (!isProfileComplete) {
-    redirect(`/dashboard/settings?redirect=${encodeURIComponent(redirectToCheckout)}`);
-  }
 
   const userName = profile?.name || profile?.email || '';
 
@@ -100,6 +102,16 @@ export default async function Page({ searchParams }: { searchParams?: Promise<Re
       }}
       initialPaymentMethod={paymentMethod as any}
       userName={userName}
+      initialProfile={{
+        name: String(profile?.name || ''),
+        email: String(profile?.email || ''),
+        phone: String((profile as any)?.phone || ''),
+        gender: String((profile as any)?.gender || ''),
+        birthDate: (profile as any)?.birthDate ? new Date((profile as any).birthDate).toISOString().slice(0, 10) : '',
+        city: String((profile as any)?.city || ''),
+        address: String((profile as any)?.address || ''),
+      }}
+      initialProfileComplete={isProfileComplete}
       checkoutSettings={{
         checkoutServiceFeeEnabled,
         checkoutServiceFeeAmount,
