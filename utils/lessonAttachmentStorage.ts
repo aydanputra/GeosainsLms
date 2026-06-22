@@ -5,8 +5,43 @@ import { v4 as uuidv4 } from 'uuid';
 
 const BLOB_PREFIX = 'blob:';
 
+function getBlobTokenCandidates() {
+  const envKeys = Object.keys(process.env || {});
+  const candidates = [
+    'BLOB_READ_WRITE_TOKEN',
+    ...envKeys.filter((key) => {
+      const upperKey = key.toUpperCase();
+      return upperKey !== 'BLOB_READ_WRITE_TOKEN'
+        && upperKey.includes('BLOB')
+        && upperKey.endsWith('READ_WRITE_TOKEN');
+    }),
+  ];
+
+  return Array.from(new Set(candidates));
+}
+
+function getBlobTokenInfo() {
+  const candidates = getBlobTokenCandidates();
+  for (const key of candidates) {
+    const value = process.env[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return {
+        key,
+        value: value.trim(),
+        candidates,
+      };
+    }
+  }
+
+  return {
+    key: null,
+    value: null,
+    candidates,
+  };
+}
+
 export function isBlobStorageEnabled() {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  return Boolean(getBlobTokenInfo().value);
 }
 
 export function isVercelRuntime() {
@@ -16,7 +51,9 @@ export function isVercelRuntime() {
 export function assertLessonAttachmentStorageConfigured() {
   if (isBlobStorageEnabled()) return;
   if (isVercelRuntime()) {
-    throw new Error('Penyimpanan lampiran belum dikonfigurasi di server. Tambahkan BLOB_READ_WRITE_TOKEN di Vercel.');
+    const tokenInfo = getBlobTokenInfo();
+    const candidateInfo = tokenInfo.candidates.length > 0 ? tokenInfo.candidates.join(', ') : 'tidak ada kandidat env';
+    throw new Error(`Penyimpanan lampiran belum dikonfigurasi di server. Tambahkan token Blob di Vercel. Kandidat env yang dicek: ${candidateInfo}.`);
   }
 }
 
@@ -49,11 +86,13 @@ export async function saveLessonAttachmentFile(args: {
   const { filename } = buildSafeAttachmentName(args.originalName);
 
   if (isBlobStorageEnabled()) {
+    const tokenInfo = getBlobTokenInfo();
     const pathname = `lessons/${safeLessonId}/${filename}`;
     const blob = await put(pathname, args.buffer, {
       access: 'private',
       contentType: args.mimeType,
       addRandomSuffix: false,
+      token: tokenInfo.value || undefined,
     });
 
     return {
@@ -88,8 +127,12 @@ export async function saveLessonAttachmentFile(args: {
 
 export async function readLessonAttachmentFile(storagePath: string) {
   if (isBlobStoragePath(storagePath)) {
+    const tokenInfo = getBlobTokenInfo();
     const pathname = getBlobPathnameFromStoragePath(storagePath);
-    const blob = await get(pathname, { access: 'private' });
+    const blob = await get(pathname, {
+      access: 'private',
+      token: tokenInfo.value || undefined,
+    });
 
     if (!blob || blob.statusCode !== 200 || !blob.stream) {
       return null;
@@ -119,7 +162,10 @@ export async function deleteLessonAttachmentFile(storagePath?: string | null) {
   if (!storagePath) return;
 
   if (isBlobStoragePath(storagePath)) {
-    await del(getBlobPathnameFromStoragePath(storagePath));
+    const tokenInfo = getBlobTokenInfo();
+    await del(getBlobPathnameFromStoragePath(storagePath), {
+      token: tokenInfo.value || undefined,
+    });
     return;
   }
 

@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
     // #endregion
     console.error('Upload error:', error);
     const message = error instanceof Error ? error.message : 'Internal Server Error';
-    if (message.includes('BLOB_READ_WRITE_TOKEN')) {
+    if (message.includes('token Blob di Vercel') || message.includes('BLOB_READ_WRITE_TOKEN')) {
       return NextResponse.json({ error: message }, { status: 500 });
     }
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
