@@ -7,16 +7,29 @@ import { toast } from 'sonner';
 import { twMerge } from 'tailwind-merge';
 
 type PaymentMethod = 'XENDIT' | 'MIDTRANS' | 'MANUAL';
+type ProfileForm = {
+  name: string;
+  email: string;
+  phone: string;
+  gender: string;
+  birthDate: string;
+  city: string;
+  address: string;
+};
 
 export default function CourseCheckoutPage({
   course,
   initialPaymentMethod,
   userName,
+  initialProfile,
+  initialProfileComplete,
   checkoutSettings,
 }: {
   course: { id: string; slug: string; title: string; price: number; normalPrice: number | null; thumbnailUrl: string | null };
   initialPaymentMethod: PaymentMethod;
   userName?: string;
+  initialProfile: ProfileForm;
+  initialProfileComplete: boolean;
   checkoutSettings: {
     checkoutServiceFeeEnabled: boolean;
     checkoutServiceFeeAmount: number;
@@ -37,9 +50,31 @@ export default function CourseCheckoutPage({
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
   const [agree, setAgree] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [profileForm, setProfileForm] = useState<ProfileForm>(initialProfile);
+  const [isProfileComplete, setIsProfileComplete] = useState(initialProfileComplete);
+  const [showProfileForm, setShowProfileForm] = useState(!initialProfileComplete);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   const methodLabel = initialPaymentMethod === 'MANUAL' ? 'Manual' : 'Otomatis';
   const safeName = (userName || '').trim() || 'Akun Anda';
+  const canEditEmail = initialProfile.email.trim().length === 0;
+  const isProfileFormComplete = (value: ProfileForm) => {
+    if (value.name.trim().length < 2) return false;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.email.trim())) return false;
+    if (value.phone.trim().length < 8) return false;
+    const gender = value.gender.trim().toUpperCase();
+    if (gender !== 'MALE' && gender !== 'FEMALE') return false;
+    if (!value.birthDate.trim()) return false;
+    const birthDate = new Date(`${value.birthDate.trim()}T00:00:00.000Z`);
+    if (Number.isNaN(birthDate.getTime())) return false;
+    if (value.city.trim().length < 2) return false;
+    if (value.address.trim().length < 5) return false;
+    return true;
+  };
+
+  const updateProfileField = (key: keyof ProfileForm, value: string) => {
+    setProfileForm((prev) => ({ ...prev, [key]: value }));
+  };
 
   const subtotal = useMemo(() => {
     const price = Number.isFinite(course.price) ? course.price : 0;
@@ -149,8 +184,50 @@ export default function CourseCheckoutPage({
     }
   };
 
+  const saveProfile = async () => {
+    const payload = {
+      name: profileForm.name.trim(),
+      ...(canEditEmail ? { email: profileForm.email.trim().toLowerCase() } : {}),
+      phone: profileForm.phone.trim(),
+      gender: profileForm.gender.trim().toUpperCase(),
+      birthDate: profileForm.birthDate.trim(),
+      city: profileForm.city.trim(),
+      address: profileForm.address.trim(),
+    };
+
+    if (!isProfileFormComplete({ ...profileForm, ...payload, email: canEditEmail ? String((payload as any).email || '') : profileForm.email })) {
+      throw new Error('Lengkapi nama, email, nomor WhatsApp, gender, tanggal lahir, kota, dan alamat terlebih dahulu.');
+    }
+
+    setIsSavingProfile(true);
+    try {
+      const res = await fetch('/api/me', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || 'Gagal menyimpan profil');
+      setProfileForm((prev) => ({
+        ...prev,
+        ...payload,
+        email: canEditEmail ? String((payload as any).email || '') : prev.email,
+      }));
+      setIsProfileComplete(true);
+      setShowProfileForm(false);
+      toast.success('Profil berhasil dilengkapi. Anda bisa lanjut pembayaran.');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   const pay = async () => {
     if (!agree) return;
+    if (!isProfileComplete) {
+      setShowProfileForm(true);
+      toast.error('Lengkapi profil singkat terlebih dahulu sebelum lanjut pembayaran.');
+      return;
+    }
     setIsLoading(true);
     try {
       const res = await fetch(`/api/courses/${encodeURIComponent(course.id)}/checkout`, {
@@ -163,9 +240,10 @@ export default function CourseCheckoutPage({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const redirectUrl = typeof data?.redirectUrl === 'string' ? data.redirectUrl.trim() : '';
-        if (data?.requiresProfile === true && redirectUrl) {
-          router.push(redirectUrl);
+        if (data?.requiresProfile === true) {
+          setShowProfileForm(true);
+          setIsProfileComplete(false);
+          toast.error(data?.error || 'Lengkapi profil terlebih dahulu sebelum melakukan pembelian.');
           return;
         }
         throw new Error(data?.error || 'Gagal membuat checkout');
@@ -200,6 +278,118 @@ export default function CourseCheckoutPage({
                 {methodLabel}
               </div>
             </div>
+
+            {showProfileForm ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-4">
+                <div>
+                  <div className="text-sm font-extrabold text-slate-900">Lengkapi profil singkat</div>
+                  <div className="mt-1 text-xs text-slate-600">
+                    Isi data dasar di bawah ini agar pembelian bisa langsung diproses, tanpa perlu masuk ke halaman profil dashboard.
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Nama lengkap</label>
+                    <input
+                      value={profileForm.name}
+                      onChange={(e) => updateProfileField('name', e.target.value)}
+                      disabled={isSavingProfile || isLoading}
+                      placeholder="Masukkan nama lengkap"
+                      className="w-full h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:opacity-60"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Email</label>
+                    <input
+                      type="email"
+                      value={profileForm.email}
+                      onChange={(e) => updateProfileField('email', e.target.value)}
+                      disabled={!canEditEmail || isSavingProfile || isLoading}
+                      placeholder="nama@email.com"
+                      className="w-full h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:opacity-60"
+                    />
+                    {!canEditEmail ? <div className="mt-1 text-[11px] text-slate-500">Email akun sudah terdaftar dan digunakan sebagai identitas login.</div> : null}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Nomor WhatsApp</label>
+                    <input
+                      value={profileForm.phone}
+                      onChange={(e) => updateProfileField('phone', e.target.value)}
+                      disabled={isSavingProfile || isLoading}
+                      placeholder="08xxxxxxxxxx"
+                      className="w-full h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:opacity-60"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Gender</label>
+                    <select
+                      value={profileForm.gender}
+                      onChange={(e) => updateProfileField('gender', e.target.value)}
+                      disabled={isSavingProfile || isLoading}
+                      className="w-full h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:opacity-60"
+                    >
+                      <option value="">Pilih gender</option>
+                      <option value="MALE">Laki-laki</option>
+                      <option value="FEMALE">Perempuan</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Tanggal lahir</label>
+                    <input
+                      type="date"
+                      value={profileForm.birthDate}
+                      onChange={(e) => updateProfileField('birthDate', e.target.value)}
+                      disabled={isSavingProfile || isLoading}
+                      className="w-full h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:opacity-60"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Kota</label>
+                    <input
+                      value={profileForm.city}
+                      onChange={(e) => updateProfileField('city', e.target.value)}
+                      disabled={isSavingProfile || isLoading}
+                      placeholder="Contoh: Jakarta"
+                      className="w-full h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:opacity-60"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Alamat</label>
+                    <textarea
+                      value={profileForm.address}
+                      onChange={(e) => updateProfileField('address', e.target.value)}
+                      disabled={isSavingProfile || isLoading}
+                      placeholder="Masukkan alamat lengkap"
+                      rows={3}
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:opacity-60 resize-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-xs text-slate-500">Data ini hanya dipakai untuk melanjutkan pembelian kursus.</div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await saveProfile();
+                      } catch (e: unknown) {
+                        toast.error(e instanceof Error ? e.message : 'Gagal menyimpan profil');
+                      }
+                    }}
+                    disabled={isSavingProfile || isLoading}
+                    className={twMerge(
+                      'h-11 px-4 rounded-2xl text-sm font-extrabold inline-flex items-center justify-center gap-2',
+                      isSavingProfile || isLoading ? 'bg-indigo-300 text-white cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                    )}
+                  >
+                    {isSavingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    Simpan data
+                  </button>
+                </div>
+              </div>
+            ) : null}
 
             <div className="space-y-2">
               <div className="text-sm font-extrabold text-slate-900">Kode Promo</div>
@@ -338,14 +528,14 @@ export default function CourseCheckoutPage({
             <button
               type="button"
               onClick={pay}
-              disabled={!agree || isLoading}
+              disabled={!agree || isLoading || isSavingProfile}
               className={twMerge(
                 'w-full h-12 rounded-2xl font-extrabold text-sm transition-colors flex items-center justify-center gap-2',
-                !agree || isLoading ? 'bg-indigo-300 text-white cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                !agree || isLoading || isSavingProfile ? 'bg-indigo-300 text-white cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white'
               )}
             >
               {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ShieldCheck className="w-5 h-5" />}
-              Bayar & gabung kelas
+              {isProfileComplete ? 'Bayar & gabung kelas' : 'Lengkapi profil untuk lanjut bayar'}
             </button>
           </div>
         </div>

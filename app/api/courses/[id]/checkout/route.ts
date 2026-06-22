@@ -21,13 +21,27 @@ function round2(n: number) {
   return Math.round(n * 100) / 100;
 }
 
-function isProfileComplete(user: { name?: string | null; phone?: string | null; city?: string | null; address?: string | null }) {
+function isProfileComplete(user: {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  gender?: string | null;
+  birthDate?: Date | string | null;
+  city?: string | null;
+  address?: string | null;
+}) {
   const name = String(user?.name || '').trim();
+  const email = String(user?.email || '').trim();
   const phone = String(user?.phone || '').trim();
+  const gender = String(user?.gender || '').trim().toUpperCase();
+  const birthDate = user?.birthDate ? new Date(user.birthDate) : null;
   const city = String(user?.city || '').trim();
   const address = String(user?.address || '').trim();
   if (name.length < 2) return false;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return false;
   if (phone.length < 8) return false;
+  if (gender !== 'MALE' && gender !== 'FEMALE') return false;
+  if (!birthDate || Number.isNaN(birthDate.getTime())) return false;
   if (city.length < 2) return false;
   if (address.length < 5) return false;
   return true;
@@ -256,13 +270,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const profile = await prisma.user.findUnique({
       where: { id: String(user.id) },
-      select: { id: true, name: true, phone: true, city: true, address: true },
+      select: { id: true, name: true, email: true, phone: true, gender: true, birthDate: true, city: true, address: true },
     });
     if (!profile || !isProfileComplete(profile)) {
       const redirectTo = `/checkout?courseId=${encodeURIComponent(course.id)}`;
-      const profileUrl = `/dashboard/settings?redirect=${encodeURIComponent(redirectTo)}`;
       return NextResponse.json(
-        { error: 'Lengkapi profil terlebih dahulu sebelum melakukan pembelian.', requiresProfile: true, redirectUrl: profileUrl },
+        { error: 'Lengkapi profil terlebih dahulu sebelum melakukan pembelian.', requiresProfile: true, redirectUrl: redirectTo },
         { status: 409 }
       );
     }

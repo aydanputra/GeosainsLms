@@ -319,10 +319,11 @@ export async function PUT(req: NextRequest) {
       }
     }
 
+    const hasExistingEmail = typeof existing.email === 'string' && existing.email.trim().length > 0;
     const wantsEmailChange = typeof email === 'string' && email && email !== existing.email;
     const wantsPasswordChange = typeof newPassword === 'string' && newPassword.length > 0;
 
-    if (wantsEmailChange || wantsPasswordChange) {
+    if ((wantsEmailChange && hasExistingEmail) || wantsPasswordChange) {
       if (!currentPassword) return NextResponse.json({ error: 'Password saat ini wajib diisi' }, { status: 400 });
       const ok = await verifyPassword(currentPassword, existing.password);
       if (!ok) return NextResponse.json({ error: 'Password saat ini salah' }, { status: 400 });
