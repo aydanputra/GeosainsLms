@@ -287,42 +287,70 @@ export default function AdminCategories({ categories: initialCategories }: Admin
       )}
 
       {isEditing && (
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-4 animate-in fade-in slide-in-from-top-2 items-end">
-          <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1.5">Nama Kategori</label>
-              <input
-                type="text"
-                className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1.5">Slug (opsional)</label>
-              <input
-                type="text"
-                className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-mono"
-                value={editSlug}
-                onChange={(e) => setEditSlug(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={closeEdit}
-              disabled={isSavingEdit}
-              className="px-4 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 text-sm font-medium transition-colors disabled:opacity-60"
+        <div className="fixed inset-0 z-50">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => {
+              if (!isSavingEdit) closeEdit();
+            }}
+          />
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div
+              className="w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
             >
-              Batal
-            </button>
-            <button
-              onClick={handleSaveEdit}
-              disabled={isSavingEdit}
-              className="px-6 py-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-medium transition-all shadow-sm disabled:opacity-60"
-            >
-              Simpan Perubahan
-            </button>
+              <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+                <div className="text-sm font-extrabold text-slate-900">Edit Kategori</div>
+                <button
+                  type="button"
+                  onClick={closeEdit}
+                  disabled={isSavingEdit}
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs hover:bg-slate-50 disabled:opacity-60"
+                >
+                  Tutup
+                </button>
+              </div>
+
+              <div className="px-5 py-4 space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Nama Kategori</label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Slug (opsional)</label>
+                  <input
+                    type="text"
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-mono"
+                    value={editSlug}
+                    onChange={(e) => setEditSlug(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="bg-slate-50 px-5 py-4 flex items-center justify-end gap-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={closeEdit}
+                  disabled={isSavingEdit}
+                  className="px-4 py-2 rounded-xl text-sm font-bold text-slate-700 hover:bg-white border border-transparent hover:border-slate-200 disabled:opacity-60"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  disabled={isSavingEdit}
+                  className="px-5 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-extrabold disabled:opacity-60"
+                >
+                  Simpan
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
