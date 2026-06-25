@@ -313,19 +313,19 @@ export default function AdminCategories({ categories: initialCategories }: Admin
 
               <div className="px-5 py-4 space-y-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Nama Kategori</label>
+                  <label className="block text-xs font-semibold text-slate-900 mb-1.5">Nama Kategori</label>
                   <input
                     type="text"
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm"
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-medium text-slate-900 placeholder:text-slate-500"
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1.5">Slug (opsional)</label>
+                  <label className="block text-xs font-semibold text-slate-900 mb-1.5">Slug (opsional)</label>
                   <input
                     type="text"
-                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-mono"
+                    className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-mono font-medium text-slate-900 placeholder:text-slate-500"
                     value={editSlug}
                     onChange={(e) => setEditSlug(e.target.value)}
                   />

@@ -280,13 +280,8 @@ export default function CourseCheckoutPage({
             </div>
 
             {showProfileForm ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-4">
-                <div>
-                  <div className="text-sm font-extrabold text-slate-900">Lengkapi profil singkat</div>
-                  <div className="mt-1 text-xs text-slate-600">
-                    Isi data dasar di bawah ini agar pembelian bisa langsung diproses, tanpa perlu masuk ke halaman profil dashboard.
-                  </div>
-                </div>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5 space-y-4">
+                <div className="text-sm font-extrabold text-slate-900">Lengkapi profil singkat</div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="sm:col-span-2">
@@ -309,7 +304,6 @@ export default function CourseCheckoutPage({
                       placeholder="nama@email.com"
                       className="w-full h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-900 placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:opacity-60"
                     />
-                    {!canEditEmail ? <div className="mt-1 text-[11px] text-slate-500">Email akun sudah terdaftar dan digunakan sebagai identitas login.</div> : null}
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5">Nomor WhatsApp</label>
@@ -367,8 +361,7 @@ export default function CourseCheckoutPage({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-xs text-slate-500">Data ini hanya dipakai untuk melanjutkan pembelian kursus.</div>
+                <div className="flex items-center justify-end">
                   <button
                     type="button"
                     onClick={async () => {
@@ -385,7 +378,7 @@ export default function CourseCheckoutPage({
                     )}
                   >
                     {isSavingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                    Simpan data
+                    Simpan
                   </button>
                 </div>
               </div>
