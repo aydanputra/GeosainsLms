@@ -23,7 +23,12 @@ export default function AdminCategories({ categories: initialCategories }: Admin
   const [categories, setCategories] = useState(initialCategories);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [newCategory, setNewCategory] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editSlug, setEditSlug] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean, id: string | null }>({ isOpen: false, id: null });
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
@@ -126,20 +131,80 @@ export default function AdminCategories({ categories: initialCategories }: Admin
     }
   };
 
+  const openEdit = (cat: Category) => {
+    setIsAdding(false);
+    setNewCategory('');
+    setIsEditing(true);
+    setEditCategoryId(cat.id);
+    setEditName(cat.name);
+    setEditSlug(cat.slug);
+  };
+
+  const closeEdit = () => {
+    setIsEditing(false);
+    setEditCategoryId(null);
+    setEditName('');
+    setEditSlug('');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editCategoryId) return;
+    const name = editName.trim();
+    const slug = editSlug.trim();
+    if (!name) {
+      toast.error('Nama kategori wajib diisi');
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      const res = await fetch(`/api/categories/${editCategoryId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, slug }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || 'Gagal mengubah kategori');
+      }
+
+      setCategories((prev) =>
+        prev.map((c) => (c.id === editCategoryId ? { ...c, name: data.name, slug: data.slug } : c))
+      );
+      toast.success('Kategori berhasil diperbarui');
+      closeEdit();
+    } catch (error: any) {
+      toast.error(error?.message || 'Gagal mengubah kategori');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   const handleDelete = (id: string) => {
     setDeleteConfirm({ isOpen: true, id });
   };
 
-  const confirmDelete = () => {
-    if (deleteConfirm.id) {
-      setCategories(categories.filter(c => c.id !== deleteConfirm.id));
-      setSelectedIds((prev) => prev.filter((id) => id !== deleteConfirm.id));
-      toast.success('Kategori dihapus (simulasi)');
-    }
+  const confirmDelete = async () => {
+    const id = deleteConfirm.id;
     setDeleteConfirm({ isOpen: false, id: null });
+    if (!id) return;
+
+    try {
+      const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || 'Gagal menghapus kategori');
+      }
+      setCategories((prev) => prev.filter((c) => c.id !== id));
+      setSelectedIds((prev) => prev.filter((x) => x !== id));
+      toast.success('Kategori berhasil dihapus');
+    } catch (error: any) {
+      toast.error(error?.message || 'Gagal menghapus kategori');
+    }
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
     if (selectedIds.length === 0) {
       toast.info('Pilih minimal 1 kategori');
       return;
@@ -147,10 +212,31 @@ export default function AdminCategories({ categories: initialCategories }: Admin
     if (!confirm(`Hapus ${selectedIds.length} kategori terpilih?`)) return;
     setIsBulkDeleting(true);
     try {
-      const toDelete = new Set(selectedIds);
-      setCategories((prev) => prev.filter((c) => !toDelete.has(c.id)));
-      toast.success(`Kategori dihapus: ${selectedIds.length} (simulasi)`);
-      setSelectedIds([]);
+      const res = await fetch('/api/categories/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || 'Gagal menghapus kategori terpilih');
+      }
+
+      const deletedIds: string[] = Array.isArray(data?.deletedIds) ? data.deletedIds : [];
+      const blocked: Array<{ id: string; usageCount: number }> = Array.isArray(data?.blocked) ? data.blocked : [];
+
+      if (deletedIds.length > 0) {
+        const deletedSet = new Set(deletedIds);
+        setCategories((prev) => prev.filter((c) => !deletedSet.has(c.id)));
+        setSelectedIds((prev) => prev.filter((id) => !deletedSet.has(id)));
+        toast.success(`Kategori berhasil dihapus: ${deletedIds.length}`);
+      } else {
+        toast.info('Tidak ada kategori yang bisa dihapus');
+      }
+
+      if (blocked.length > 0) {
+        toast.error(`Tidak bisa menghapus ${blocked.length} kategori karena masih dipakai oleh kursus`);
+      }
     } finally {
       setIsBulkDeleting(false);
     }
@@ -200,6 +286,47 @@ export default function AdminCategories({ categories: initialCategories }: Admin
         </div>
       )}
 
+      {isEditing && (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-4 animate-in fade-in slide-in-from-top-2 items-end">
+          <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1.5">Nama Kategori</label>
+              <input
+                type="text"
+                className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-1.5">Slug (opsional)</label>
+              <input
+                type="text"
+                className="w-full px-4 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm font-mono"
+                value={editSlug}
+                onChange={(e) => setEditSlug(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={closeEdit}
+              disabled={isSavingEdit}
+              className="px-4 py-2.5 rounded-xl text-slate-600 hover:bg-slate-100 text-sm font-medium transition-colors disabled:opacity-60"
+            >
+              Batal
+            </button>
+            <button
+              onClick={handleSaveEdit}
+              disabled={isSavingEdit}
+              className="px-6 py-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-medium transition-all shadow-sm disabled:opacity-60"
+            >
+              Simpan Perubahan
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Floating Search Bar */}
       <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col sm:flex-row gap-4 justify-between items-center">
         <div className="relative w-full sm:w-72">
@@ -244,7 +371,11 @@ export default function AdminCategories({ categories: initialCategories }: Admin
             isLoading={false}
             actions={(row) => (
               <div className="flex items-center justify-end gap-2">
-                <button className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors" title="Edit">
+                <button
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                  onClick={() => openEdit(row)}
+                  title="Edit"
+                >
                   <Edit2 className="w-4 h-4" />
                 </button>
                 <button 
@@ -300,7 +431,12 @@ export default function AdminCategories({ categories: initialCategories }: Admin
               </div>
               
               <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100 mt-2">
-                <button className="text-xs font-medium text-indigo-600 hover:text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors">Edit</button>
+                <button
+                  onClick={() => openEdit(cat)}
+                  className="text-xs font-medium text-indigo-600 hover:text-indigo-700 px-3 py-1.5 rounded-lg hover:bg-indigo-50 transition-colors"
+                >
+                  Edit
+                </button>
                 <button 
                   onClick={() => handleDelete(cat.id)}
                   className="text-xs font-medium text-red-600 hover:text-red-700 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors"
