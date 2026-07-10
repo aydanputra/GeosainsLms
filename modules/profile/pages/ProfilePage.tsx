@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 import MediaPickerModal from '@/modules/media/components/MediaPickerModal';
 import { twMerge } from 'tailwind-merge';
-import { Award, BookOpen, Briefcase, FileText, GraduationCap, Mail, MapPin, MoreHorizontal, Settings2, ShoppingBag, User, X } from 'lucide-react';
+import { Award, BookOpen, Briefcase, Eye, EyeOff, FileText, GraduationCap, Mail, MapPin, MoreHorizontal, Settings2, ShoppingBag, User, X } from 'lucide-react';
 
 type MentorListItem = {
   id: string;
@@ -183,11 +183,15 @@ export default function ProfilePage({
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [savingSecurity, setSavingSecurity] = useState(false);
   const [isTotpModalOpen, setIsTotpModalOpen] = useState(false);
   const [totpMode, setTotpMode] = useState<'enable' | 'disable'>('enable');
   const [totpStep, setTotpStep] = useState<'password' | 'verify'>('password');
   const [totpPassword, setTotpPassword] = useState('');
+  const [showTotpPassword, setShowTotpPassword] = useState(false);
   const [totpCode, setTotpCode] = useState('');
   const [totpQrDataUrl, setTotpQrDataUrl] = useState('');
   const [totpSecret, setTotpSecret] = useState('');
@@ -888,6 +892,7 @@ export default function ProfilePage({
     if (savingTotp) return;
     setIsTotpModalOpen(false);
     setTotpPassword('');
+    setShowTotpPassword(false);
     setTotpCode('');
     setTotpQrDataUrl('');
     setTotpSecret('');
@@ -980,6 +985,46 @@ export default function ProfilePage({
   const inTab = context === 'tab';
   const inputControlClass =
     'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:bg-slate-100 disabled:text-slate-500 disabled:placeholder:text-slate-400 disabled:cursor-not-allowed';
+
+  const renderPasswordInput = ({
+    value,
+    onChange,
+    placeholder,
+    show,
+    onToggle,
+    disabled = false,
+    autoComplete = 'current-password',
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    placeholder?: string;
+    show: boolean;
+    onToggle: () => void;
+    disabled?: boolean;
+    autoComplete?: string;
+  }) => (
+    <div className="relative">
+      <input
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={twMerge(inputControlClass, 'pr-11')}
+        placeholder={placeholder}
+        disabled={disabled}
+        autoComplete={autoComplete}
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={disabled}
+        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+        aria-label={show ? 'Sembunyikan password' : 'Lihat password'}
+        title={show ? 'Sembunyikan password' : 'Lihat password'}
+      >
+        {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+      </button>
+    </div>
+  );
 
   const saveAll = async () => {
     if (savingBasic || savingSecurity || savingMentorProfile || savingAdditionalInfo) return;
@@ -1234,33 +1279,35 @@ export default function ProfilePage({
                       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                           <label className="text-xs font-bold text-slate-600">Password Saat Ini</label>
-                          <input
-                            type="password"
-                            value={currentPassword}
-                            onChange={(e) => setCurrentPassword(e.target.value)}
-                            className={inputControlClass}
-                            placeholder="••••••••"
-                          />
+                          {renderPasswordInput({
+                            value: currentPassword,
+                            onChange: setCurrentPassword,
+                            placeholder: '••••••••',
+                            show: showCurrentPassword,
+                            onToggle: () => setShowCurrentPassword((prev) => !prev),
+                          })}
                         </div>
                         <div className="space-y-1.5">
                           <label className="text-xs font-bold text-slate-600">Password Baru</label>
-                          <input
-                            type="password"
-                            value={newPassword}
-                            onChange={(e) => setNewPassword(e.target.value)}
-                            className={inputControlClass}
-                            placeholder={isSuperAdmin ? 'Minimal 12 karakter' : 'Minimal 8 karakter'}
-                          />
+                          {renderPasswordInput({
+                            value: newPassword,
+                            onChange: setNewPassword,
+                            placeholder: isSuperAdmin ? 'Minimal 12 karakter' : 'Minimal 8 karakter',
+                            show: showNewPassword,
+                            onToggle: () => setShowNewPassword((prev) => !prev),
+                            autoComplete: 'new-password',
+                          })}
                         </div>
                         <div className="space-y-1.5 sm:col-span-2">
                           <label className="text-xs font-bold text-slate-600">Konfirmasi Password Baru</label>
-                          <input
-                            type="password"
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            className={inputControlClass}
-                            placeholder="Ulangi password baru"
-                          />
+                          {renderPasswordInput({
+                            value: confirmPassword,
+                            onChange: setConfirmPassword,
+                            placeholder: 'Ulangi password baru',
+                            show: showConfirmPassword,
+                            onToggle: () => setShowConfirmPassword((prev) => !prev),
+                            autoComplete: 'new-password',
+                          })}
                         </div>
                       </div>
                     </div>
@@ -2194,14 +2241,14 @@ export default function ProfilePage({
                   <div className="space-y-4">
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-600">Password Saat Ini</label>
-                      <input
-                        type="password"
-                        value={totpPassword}
-                        onChange={(e) => setTotpPassword(e.target.value)}
-                        className={inputControlClass}
-                        placeholder="••••••••"
-                        disabled={savingTotp}
-                      />
+                      {renderPasswordInput({
+                        value: totpPassword,
+                        onChange: setTotpPassword,
+                        placeholder: '••••••••',
+                        show: showTotpPassword,
+                        onToggle: () => setShowTotpPassword((prev) => !prev),
+                        disabled: savingTotp,
+                      })}
                     </div>
 
                     {totpMode === 'disable' ? (
