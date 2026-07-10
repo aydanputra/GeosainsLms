@@ -1144,6 +1144,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
     const shapeStar = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><path d="M256 60l55 140 150 12-115 95 36 146-126-78-126 78 36-146-115-95 150-12z" fill="__C1__"/></svg>`;
     const shapePlus = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect x="210" y="90" width="92" height="332" rx="30" fill="__C1__"/><rect x="90" y="210" width="332" height="92" rx="30" fill="__C1__"/></svg>`;
     const shapeHex = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><path d="M256 62l160 92v204l-160 92-160-92V154z" fill="__C1__"/></svg>`;
+    const shapeLine = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="256"><path d="M72 128 H952" fill="none" stroke="__C1__" stroke-width="28" stroke-linecap="round"/></svg>`;
 
     const illuBadge1 = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect x="70" y="120" width="372" height="272" rx="52" fill="__C1__"/><rect x="95" y="145" width="322" height="222" rx="40" fill="rgba(255,255,255,0.18)"/><rect x="120" y="250" width="272" height="78" rx="22" fill="__C2__" opacity="0.95"/><text x="256" y="232" font-size="84" font-family="Inter, Arial, sans-serif" text-anchor="middle" fill="#fff" font-weight="900">MAKERS</text><text x="256" y="306" font-size="52" font-family="Inter, Arial, sans-serif" text-anchor="middle" fill="#fff" font-weight="900">GONNA</text></svg>`;
     const illuBadge2 = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><circle cx="256" cy="256" r="190" fill="__C1__"/><circle cx="256" cy="256" r="145" fill="#fff"/><path d="M160 270l56 56 136-160" fill="none" stroke="__C2__" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/><text x="256" y="430" font-size="46" font-family="Inter, Arial, sans-serif" text-anchor="middle" fill="__C1__" font-weight="900">CERTIFIED</text></svg>`;
@@ -1159,6 +1160,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
 
     return [
       mk({ id: 'shape-square', category: 'SHAPES', name: 'Square', svgTemplate: shapeSquare, defaultC1: '#4F46E5', mm: { w: 40, h: 40 }, px: { w: 512, h: 512 } }),
+      mk({ id: 'shape-line', category: 'SHAPES', name: 'Line', svgTemplate: shapeLine, defaultC1: '#334155', mm: { w: 90, h: 10 }, px: { w: 1024, h: 256 } }),
       mk({ id: 'shape-circle', category: 'SHAPES', name: 'Circle', svgTemplate: shapeCircle, defaultC1: '#10B981', mm: { w: 40, h: 40 }, px: { w: 512, h: 512 } }),
       mk({ id: 'shape-triangle', category: 'SHAPES', name: 'Triangle', svgTemplate: shapeTriangle, defaultC1: '#F59E0B', mm: { w: 40, h: 40 }, px: { w: 512, h: 512 } }),
       mk({ id: 'shape-star', category: 'SHAPES', name: 'Star', svgTemplate: shapeStar, defaultC1: '#EF4444', mm: { w: 40, h: 40 }, px: { w: 512, h: 512 } }),
@@ -3946,14 +3948,16 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
 
                           <div>
                             <label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em] block mb-4">Layers</label>
-                            <div className="flex items-center justify-between bg-black/20 p-2 rounded-2xl border border-white/5">
-                              <ToolbarButton icon={ArrowUp} onClick={() => moveZIndex(selectedElement.id, 'TOP')} label="Front" className="flex-1 py-3" />
-                              <ToolbarButton icon={ChevronUp} onClick={() => moveZIndex(selectedElement.id, 'UP')} label="Forward" className="flex-1 py-3" />
-                              <div className="w-14 text-center">
+                            <div className="bg-black/20 p-2 rounded-2xl border border-white/5">
+                              <div className="grid grid-cols-2 gap-2">
+                                <ToolbarButton icon={ArrowUp} onClick={() => moveZIndex(selectedElement.id, 'TOP')} label="Front" className="py-3" />
+                                <ToolbarButton icon={ChevronUp} onClick={() => moveZIndex(selectedElement.id, 'UP')} label="Forward" className="py-3" />
+                                <ToolbarButton icon={ChevronDown} onClick={() => moveZIndex(selectedElement.id, 'DOWN')} label="Backward" className="py-3" />
+                                <ToolbarButton icon={ArrowDown} onClick={() => moveZIndex(selectedElement.id, 'BOTTOM')} label="Back" className="py-3" />
+                              </div>
+                              <div className="mt-2 flex justify-center">
                                 <span className="text-[11px] font-black text-indigo-400 bg-indigo-400/10 px-3 py-1.5 rounded-lg border border-indigo-500/20">Z:{selectedElement.zIndex}</span>
                               </div>
-                              <ToolbarButton icon={ChevronDown} onClick={() => moveZIndex(selectedElement.id, 'DOWN')} label="Backward" className="flex-1 py-3" />
-                              <ToolbarButton icon={ArrowDown} onClick={() => moveZIndex(selectedElement.id, 'BOTTOM')} label="Back" className="flex-1 py-3" />
                             </div>
                           </div>
 
