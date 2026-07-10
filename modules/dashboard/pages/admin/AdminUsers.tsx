@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Table from '../../components/Tables';
 import Cards from '../../components/Cards';
 import EmptyState from '../../components/EmptyState';
-import { Plus, Search, Filter, Edit2, Trash2, KeyRound, User, ShieldAlert } from 'lucide-react';
+import { Plus, Search, Filter, Edit2, Trash2, KeyRound, User, ShieldAlert, Eye, EyeOff } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 import { toast } from 'sonner';
 import ConfirmDialog from '../../components/ConfirmDialog';
@@ -32,6 +32,7 @@ export default function AdminUsers({ users: initialUsers }: AdminUsersProps) {
   const [isForceDeleting, setIsForceDeleting] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [createValue, setCreateValue] = useState<{ name: string; email: string; password: string; role: 'STUDENT' | 'MENTOR' | 'ADMIN' | 'VENDOR'; isSuperAdmin: boolean }>({
     name: '',
     email: '',
@@ -50,6 +51,8 @@ export default function AdminUsers({ users: initialUsers }: AdminUsersProps) {
   });
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [isSettingPassword, setIsSettingPassword] = useState(false);
+  const [showPasswordValue, setShowPasswordValue] = useState(false);
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false);
   const [passwordTarget, setPasswordTarget] = useState<{ id: string; name: string; email: string; role?: string; isSuperAdmin?: boolean } | null>(null);
   const [passwordValue, setPasswordValue] = useState<{ password: string; confirm: string }>({ password: '', confirm: '' });
   const displayRole = (value: string) => {
@@ -131,6 +134,43 @@ export default function AdminUsers({ users: initialUsers }: AdminUsersProps) {
     setEditOpen(true);
   };
 
+  const renderPasswordInput = ({
+    value,
+    onChange,
+    placeholder,
+    show,
+    onToggle,
+    disabled = false,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    placeholder?: string;
+    show: boolean;
+    onToggle: () => void;
+    disabled?: boolean;
+  }) => (
+    <div className="relative">
+      <input
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 pr-11 text-sm font-medium text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 disabled:opacity-60"
+        placeholder={placeholder}
+        disabled={disabled}
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={disabled}
+        className="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-slate-400 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+        aria-label={show ? 'Sembunyikan password' : 'Lihat password'}
+        title={show ? 'Sembunyikan password' : 'Lihat password'}
+      >
+        {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+      </button>
+    </div>
+  );
+
   const updateUser = async () => {
     const id = editValue.id;
     const name = editValue.name.trim();
@@ -189,6 +229,8 @@ export default function AdminUsers({ users: initialUsers }: AdminUsersProps) {
     const isSuperAdmin = Boolean(row?.isSuperAdmin) && String(role).toUpperCase() === 'ADMIN';
     setPasswordTarget({ id, name, email, role, isSuperAdmin });
     setPasswordValue({ password: '', confirm: '' });
+    setShowPasswordValue(false);
+    setShowPasswordConfirm(false);
     setPasswordOpen(true);
   };
 
@@ -223,6 +265,8 @@ export default function AdminUsers({ users: initialUsers }: AdminUsersProps) {
       setPasswordOpen(false);
       setPasswordTarget(null);
       setPasswordValue({ password: '', confirm: '' });
+      setShowPasswordValue(false);
+      setShowPasswordConfirm(false);
     } catch (e: any) {
       toast.error(e?.message || 'Gagal mengganti password');
     } finally {
@@ -376,6 +420,7 @@ export default function AdminUsers({ users: initialUsers }: AdminUsersProps) {
 
   const openCreate = () => {
     setCreateValue({ name: '', email: '', password: '', role: 'STUDENT', isSuperAdmin: false });
+    setShowCreatePassword(false);
     setCreateOpen(true);
   };
 
@@ -426,6 +471,7 @@ export default function AdminUsers({ users: initialUsers }: AdminUsersProps) {
       ]);
       toast.success('User berhasil ditambahkan');
       setCreateOpen(false);
+      setShowCreatePassword(false);
     } catch (e: any) {
       toast.error(e?.message || 'Gagal membuat user');
     } finally {
@@ -739,25 +785,25 @@ export default function AdminUsers({ users: initialUsers }: AdminUsersProps) {
             <div className="p-5 space-y-4">
               <div className="space-y-1.5">
                 <div className="text-xs font-extrabold text-slate-700">Password Baru</div>
-                <input
-                  type="password"
-                  value={passwordValue.password}
-                  onChange={(e) => setPasswordValue((p) => ({ ...p, password: e.target.value }))}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-800 text-sm font-medium"
-                  placeholder={passwordTarget?.isSuperAdmin ? 'Minimal 12 karakter' : 'Minimal 8 karakter'}
-                  disabled={isSettingPassword}
-                />
+                {renderPasswordInput({
+                  value: passwordValue.password,
+                  onChange: (value) => setPasswordValue((p) => ({ ...p, password: value })),
+                  placeholder: passwordTarget?.isSuperAdmin ? 'Minimal 12 karakter' : 'Minimal 8 karakter',
+                  show: showPasswordValue,
+                  onToggle: () => setShowPasswordValue((prev) => !prev),
+                  disabled: isSettingPassword,
+                })}
               </div>
               <div className="space-y-1.5">
                 <div className="text-xs font-extrabold text-slate-700">Konfirmasi Password</div>
-                <input
-                  type="password"
-                  value={passwordValue.confirm}
-                  onChange={(e) => setPasswordValue((p) => ({ ...p, confirm: e.target.value }))}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-300 bg-white text-slate-800 text-sm font-medium"
-                  placeholder="Ulangi password"
-                  disabled={isSettingPassword}
-                />
+                {renderPasswordInput({
+                  value: passwordValue.confirm,
+                  onChange: (value) => setPasswordValue((p) => ({ ...p, confirm: value })),
+                  placeholder: 'Ulangi password',
+                  show: showPasswordConfirm,
+                  onToggle: () => setShowPasswordConfirm((prev) => !prev),
+                  disabled: isSettingPassword,
+                })}
               </div>
             </div>
             <div className="p-5 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2">
@@ -957,13 +1003,14 @@ export default function AdminUsers({ users: initialUsers }: AdminUsersProps) {
               ) : null}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-600">Password</label>
-                <input
-                  type="password"
-                  value={createValue.password}
-                  onChange={(e) => setCreateValue((p) => ({ ...p, password: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                  placeholder={createValue.role === 'ADMIN' && createValue.isSuperAdmin ? 'Minimal 12 karakter' : 'Minimal 8 karakter'}
-                />
+                {renderPasswordInput({
+                  value: createValue.password,
+                  onChange: (value) => setCreateValue((p) => ({ ...p, password: value })),
+                  placeholder: createValue.role === 'ADMIN' && createValue.isSuperAdmin ? 'Minimal 12 karakter' : 'Minimal 8 karakter',
+                  show: showCreatePassword,
+                  onToggle: () => setShowCreatePassword((prev) => !prev),
+                  disabled: isCreating,
+                })}
               </div>
             </div>
             <div className="px-5 py-4 border-t border-slate-200 flex items-center justify-end gap-2">
