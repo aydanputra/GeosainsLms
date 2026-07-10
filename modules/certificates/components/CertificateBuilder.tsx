@@ -96,6 +96,7 @@ interface CanvasElement {
   libraryC2?: string;
   libraryPxW?: number;
   libraryPxH?: number;
+  lineStrokeWidth?: number;
   qrColor?: string;
   qrBgColor?: string;
   qrBgRadius?: number;
@@ -964,7 +965,10 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
   const applyLibrarySvgColors = (svgTemplate: string, c1: string, c2?: string) => {
     const primary = (c1 || '#4F46E5').trim();
     const secondary = (c2 || '#F59E0B').trim();
-    return svgTemplate.replaceAll('__C1__', primary).replaceAll('__C2__', secondary);
+    return svgTemplate
+      .replaceAll('__C1__', primary)
+      .replaceAll('__C2__', secondary)
+      .replaceAll('__LW__', '28');
   };
 
   const applyLibrarySlots = (svgTemplate: string, slots: string[]) => {
@@ -977,6 +981,15 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
       out = out.replaceAll('__C2__', (slots[1] || '#F59E0B').trim());
     }
     return out;
+  };
+
+  const applyLibraryLineWidth = (svgTemplate: string, lineStrokeWidth?: number) => {
+    const nextWidth = Math.max(4, Math.min(120, Math.round(Number(lineStrokeWidth) || 28)));
+    return svgTemplate.replaceAll('__LW__', String(nextWidth));
+  };
+
+  const renderLibraryElementSvg = (svgTemplate: string, slots: string[], lineStrokeWidth?: number) => {
+    return applyLibraryLineWidth(applyLibrarySlots(svgTemplate, slots), lineStrokeWidth);
   };
 
   const parseLibraryCategory = (alt: unknown): 'SHAPES' | 'ILLUSTRATIONS' | 'EDGES' | 'BORDERS' => {
@@ -1134,8 +1147,12 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
   };
 
   const LIBRARY_ITEMS = useMemo(() => {
-    const mk = (args: { id: string; category: 'SHAPES' | 'ILLUSTRATIONS' | 'EDGES' | 'BORDERS'; name: string; svgTemplate: string; defaultC1: string; defaultC2?: string; mm: { w: number; h: number }; px: { w: number; h: number } }) => {
-      return { ...args, kind: 'BUILTIN' as const, svg: applyLibrarySvgColors(args.svgTemplate, args.defaultC1, args.defaultC2) };
+    const mk = (args: { id: string; category: 'SHAPES' | 'ILLUSTRATIONS' | 'EDGES' | 'BORDERS'; name: string; svgTemplate: string; defaultC1: string; defaultC2?: string; defaultLineWidth?: number; mm: { w: number; h: number }; px: { w: number; h: number } }) => {
+      return {
+        ...args,
+        kind: 'BUILTIN' as const,
+        svg: applyLibraryLineWidth(applyLibrarySvgColors(args.svgTemplate, args.defaultC1, args.defaultC2), args.defaultLineWidth),
+      };
     };
 
     const shapeSquare = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect x="64" y="64" width="384" height="384" rx="40" fill="__C1__"/></svg>`;
@@ -1144,7 +1161,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
     const shapeStar = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><path d="M256 60l55 140 150 12-115 95 36 146-126-78-126 78 36-146-115-95 150-12z" fill="__C1__"/></svg>`;
     const shapePlus = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect x="210" y="90" width="92" height="332" rx="30" fill="__C1__"/><rect x="90" y="210" width="332" height="92" rx="30" fill="__C1__"/></svg>`;
     const shapeHex = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><path d="M256 62l160 92v204l-160 92-160-92V154z" fill="__C1__"/></svg>`;
-    const shapeLine = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="256"><path d="M72 128 H952" fill="none" stroke="__C1__" stroke-width="28" stroke-linecap="round"/></svg>`;
+    const shapeLine = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="256"><path d="M72 128 H952" fill="none" stroke="__C1__" stroke-width="__LW__" stroke-linecap="round"/></svg>`;
 
     const illuBadge1 = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><rect x="70" y="120" width="372" height="272" rx="52" fill="__C1__"/><rect x="95" y="145" width="322" height="222" rx="40" fill="rgba(255,255,255,0.18)"/><rect x="120" y="250" width="272" height="78" rx="22" fill="__C2__" opacity="0.95"/><text x="256" y="232" font-size="84" font-family="Inter, Arial, sans-serif" text-anchor="middle" fill="#fff" font-weight="900">MAKERS</text><text x="256" y="306" font-size="52" font-family="Inter, Arial, sans-serif" text-anchor="middle" fill="#fff" font-weight="900">GONNA</text></svg>`;
     const illuBadge2 = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><circle cx="256" cy="256" r="190" fill="__C1__"/><circle cx="256" cy="256" r="145" fill="#fff"/><path d="M160 270l56 56 136-160" fill="none" stroke="__C2__" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/><text x="256" y="430" font-size="46" font-family="Inter, Arial, sans-serif" text-anchor="middle" fill="__C1__" font-weight="900">CERTIFIED</text></svg>`;
@@ -1160,7 +1177,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
 
     return [
       mk({ id: 'shape-square', category: 'SHAPES', name: 'Square', svgTemplate: shapeSquare, defaultC1: '#4F46E5', mm: { w: 40, h: 40 }, px: { w: 512, h: 512 } }),
-      mk({ id: 'shape-line', category: 'SHAPES', name: 'Line', svgTemplate: shapeLine, defaultC1: '#334155', mm: { w: 90, h: 10 }, px: { w: 1024, h: 256 } }),
+      mk({ id: 'shape-line', category: 'SHAPES', name: 'Line', svgTemplate: shapeLine, defaultC1: '#334155', defaultLineWidth: 28, mm: { w: 90, h: 10 }, px: { w: 1024, h: 256 } }),
       mk({ id: 'shape-circle', category: 'SHAPES', name: 'Circle', svgTemplate: shapeCircle, defaultC1: '#10B981', mm: { w: 40, h: 40 }, px: { w: 512, h: 512 } }),
       mk({ id: 'shape-triangle', category: 'SHAPES', name: 'Triangle', svgTemplate: shapeTriangle, defaultC1: '#F59E0B', mm: { w: 40, h: 40 }, px: { w: 512, h: 512 } }),
       mk({ id: 'shape-star', category: 'SHAPES', name: 'Star', svgTemplate: shapeStar, defaultC1: '#EF4444', mm: { w: 40, h: 40 }, px: { w: 512, h: 512 } }),
@@ -1219,7 +1236,8 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
         const res = await fetch(it.url, { cache: 'no-store' });
         const txt = await res.text();
         const normalized = normalizeSvgToPalette(txt, 8);
-        const svg = applyLibrarySlots(normalized.svgTemplate, normalized.slots);
+        const initialLineStrokeWidth = normalized.svgTemplate.includes('__LW__') ? 28 : undefined;
+        const svg = renderLibraryElementSvg(normalized.svgTemplate, normalized.slots, initialLineStrokeWidth);
         const png = await svgToPngDataUrl(svg, { w: normalized.pxW, h: normalized.pxH });
 
         const ratio = normalized.pxH / normalized.pxW;
@@ -1248,6 +1266,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
           libraryC2: normalized.slots[1],
           libraryPxW: normalized.pxW,
           libraryPxH: normalized.pxH,
+          lineStrokeWidth: initialLineStrokeWidth,
         };
         const nextElements = [...canvasElements, newElement];
         setCanvasElements(nextElements);
@@ -1257,11 +1276,13 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
         return;
       }
 
-      const png = await svgToPngDataUrl(it.svg, it.px);
       const id = Math.random().toString(36).substr(2, 9);
       const maxZ = canvasElements.length > 0 ? Math.max(...canvasElements.map(e => e.zIndex)) : 0;
       const template = String(it.svgTemplate || '').replaceAll('__C1__', '__L0__').replaceAll('__C2__', '__L1__');
       const slots = [String(it.defaultC1 || '#4F46E5'), it.defaultC2 ? String(it.defaultC2) : null].filter(Boolean) as string[];
+      const initialLineStrokeWidth = typeof it.defaultLineWidth === 'number' ? it.defaultLineWidth : undefined;
+      const svg = renderLibraryElementSvg(template, slots, initialLineStrokeWidth);
+      const png = await svgToPngDataUrl(svg, it.px);
       const newElement: CanvasElement = {
         id,
         type: 'IMAGE',
@@ -1279,6 +1300,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
         libraryC2: slots[1],
         libraryPxW: it.px?.w,
         libraryPxH: it.px?.h,
+        lineStrokeWidth: initialLineStrokeWidth,
       };
       const nextElements = [...canvasElements, newElement];
       setCanvasElements(nextElements);
@@ -1303,7 +1325,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
           : [el.libraryC1 || '#4F46E5', el.libraryC2 || '#F59E0B'].filter(Boolean);
       const idx = Math.max(0, Math.min(baseSlots.length - 1, Number(updates.index) || 0));
       baseSlots[idx] = (updates.color || '#000000').trim();
-      const svg = applyLibrarySlots(el.librarySvg, baseSlots);
+      const svg = renderLibraryElementSvg(el.librarySvg, baseSlots, el.lineStrokeWidth);
       const png = await svgToPngDataUrl(svg, { w: el.libraryPxW || 512, h: el.libraryPxH || 512 });
       const nextElements = canvasElements.map((x) =>
         x.id === id
@@ -1321,6 +1343,29 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
 
   const updateElement = (id: string, updates: Partial<CanvasElement>) => {
     setCanvasElements(prev => prev.map(el => el.id === id ? { ...el, ...updates } : el));
+  };
+
+  const updateLibraryLineThickness = async (id: string, nextStrokeWidth: number) => {
+    const el = canvasElements.find((x) => x.id === id);
+    if (!el?.librarySvg || !el.librarySvg.includes('__LW__')) return;
+
+    const safeStrokeWidth = Math.max(4, Math.min(120, Math.round(Number(nextStrokeWidth) || 28)));
+    const baseSlots =
+      Array.isArray(el.librarySlots) && el.librarySlots.length > 0
+        ? [...el.librarySlots]
+        : [el.libraryC1 || '#4F46E5', el.libraryC2 || '#F59E0B'].filter(Boolean);
+
+    try {
+      const svg = renderLibraryElementSvg(el.librarySvg, baseSlots, safeStrokeWidth);
+      const png = await svgToPngDataUrl(svg, { w: el.libraryPxW || 512, h: el.libraryPxH || 512 });
+      const nextElements = canvasElements.map((x) =>
+        x.id === id ? { ...x, src: png, lineStrokeWidth: safeStrokeWidth } : x
+      );
+      setCanvasElements(nextElements);
+      saveToHistory(nextElements);
+    } catch (e: any) {
+      toast.error(e?.message || 'Gagal mengubah ketebalan garis');
+    }
   };
 
   const deleteElement = (id: string) => {
@@ -3891,6 +3936,39 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                         </div>
 
                         <div className="space-y-8">
+                          {selectedElement.librarySvg?.includes('__LW__') && (
+                            <div>
+                              <label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em] block mb-4">Line Thickness</label>
+                              <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                  <div className="text-[10px] font-black text-white/50 uppercase tracking-widest">Stroke Width</div>
+                                  <span className="text-[11px] font-black text-indigo-400 bg-indigo-600/10 px-3 py-1 rounded-xl border border-indigo-500/20">
+                                    {Math.max(4, Math.min(120, Math.round(Number(selectedElement.lineStrokeWidth) || 28)))}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <input
+                                    type="range"
+                                    min="4"
+                                    max="120"
+                                    value={Math.max(4, Math.min(120, Math.round(Number(selectedElement.lineStrokeWidth) || 28)))}
+                                    onChange={(e) => updateLibraryLineThickness(selectedElement.id, Number(e.target.value))}
+                                    className="w-full accent-indigo-500 h-2 bg-white/10 rounded-full appearance-none cursor-pointer"
+                                  />
+                                  <input
+                                    type="number"
+                                    min="4"
+                                    max="120"
+                                    step="1"
+                                    value={Math.max(4, Math.min(120, Math.round(Number(selectedElement.lineStrokeWidth) || 28)))}
+                                    onChange={(e) => updateLibraryLineThickness(selectedElement.id, Number(e.target.value))}
+                                    className="w-16 rounded-lg border border-white/10 bg-[#141422] px-2 py-1.5 text-right text-xs font-bold text-white outline-none focus:border-indigo-500"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
                           {selectedElement.type === 'QR' && (
                             <div>
                               <label className="text-[10px] font-black text-white/60 uppercase tracking-[0.2em] block mb-4">QR Background</label>
