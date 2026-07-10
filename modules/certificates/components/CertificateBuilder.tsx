@@ -3790,6 +3790,40 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                         onPointerDown={(e) => e.stopPropagation()}
                       >
                         <label className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] block mb-4">Select Font</label>
+                        <div className="mb-4 rounded-xl border border-white/10 bg-white/5 p-3">
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/60">Font Size</span>
+                            <span className="text-xs font-bold text-white">{Math.max(8, Math.min(160, Number(selectedElement.fontSize || 16)))} pt</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="range"
+                              min={8}
+                              max={160}
+                              step={1}
+                              value={Math.max(8, Math.min(160, Number(selectedElement.fontSize || 16)))}
+                              onChange={(e) =>
+                                updateElement(selectedElement.id, {
+                                  fontSize: Math.max(8, Math.min(160, Number(e.target.value) || 16)),
+                                })
+                              }
+                              className="h-2 w-full cursor-pointer accent-indigo-500"
+                            />
+                            <input
+                              type="number"
+                              min={8}
+                              max={160}
+                              step={1}
+                              value={Math.max(8, Math.min(160, Number(selectedElement.fontSize || 16)))}
+                              onChange={(e) =>
+                                updateElement(selectedElement.id, {
+                                  fontSize: Math.max(8, Math.min(160, Number(e.target.value) || 16)),
+                                })
+                              }
+                              className="w-16 rounded-lg border border-white/10 bg-[#141422] px-2 py-1.5 text-right text-xs font-bold text-white outline-none focus:border-indigo-500"
+                            />
+                          </div>
+                        </div>
                         <div className="flex flex-col gap-1 max-h-[180px] overflow-y-auto pr-2 custom-scrollbar">
                           {COMMON_FONTS.map((font) => (
                             <button
