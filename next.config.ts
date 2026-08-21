@@ -8,8 +8,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   devIndicators: false,
   images: {
-    formats: ['image/avif', 'image/webp'],
-    qualities: [50, 60, 65, 70, 75],
+    unoptimized: true,
     remotePatterns: [
       { protocol: 'https', hostname: 'res.cloudinary.com' },
       { protocol: 'https', hostname: 'geosains.id' },
@@ -17,7 +16,6 @@ const nextConfig: NextConfig = {
       { protocol: 'http', hostname: 'localhost' },
       { protocol: 'http', hostname: '127.0.0.1' },
     ],
-    minimumCacheTTL: 60 * 60 * 24 * 7,
   },
   async headers() {
     return [

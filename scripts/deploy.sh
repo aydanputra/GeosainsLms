@@ -21,19 +21,22 @@ git fetch --tags origin
 # Checkout the tag
 git checkout "$TAG"
 
+# Ensure libwebp-dev for Sharp webp support
+apt-get install -y libwebp-dev 2>/dev/null || true
+
 # Install dependencies (only if package.json changed)
 npm install --prefer-offline
+
+# Rebuild Sharp with webp support (prevents 400 error on webp images)
+npm rebuild sharp
 
 # Preserve .env.production (in case checkout overwrote it)
 if [ -f /tmp/.env.production.backup ]; then
   cp /tmp/.env.production.backup .env.production
 fi
 
-# Ensure symlink exists
-if [ ! -L public/uploads ]; then
-  rm -rf public/uploads
-  ln -s /srv/geosains/storage/uploads public/uploads
-fi
+# Remove symlink before build (Turbopack can't handle symlinks outside root)
+rm -f public/uploads
 
 # Build
 if [ -f scripts/qc_remote_build.sh ]; then
@@ -41,6 +44,9 @@ if [ -f scripts/qc_remote_build.sh ]; then
 else
   npm run build
 fi
+
+# Recreate symlink after build
+ln -sf /srv/geosains/storage/uploads public/uploads
 
 # Restart PM2
 pm2 restart "$PM2_APP"
