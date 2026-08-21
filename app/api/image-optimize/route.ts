@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
   const quality = parseInt(searchParams.get('q') || '75', 10);
 
   if (!url) {
-    return new NextResponse('Missing url parameter', { status: 400 });
+    return new Response('Missing url parameter', { status: 400 });
   }
 
   const safeWidth = Math.min(Math.max(width || 0, 16), 3840);
@@ -44,25 +44,25 @@ export async function GET(req: NextRequest) {
       // Remote image
       const parsed = parseUrl(url);
       if (!parsed || !ALLOWED_SOURCES.includes(parsed.hostname)) {
-        return new NextResponse('Source not allowed', { status: 403 });
+        return new Response('Source not allowed', { status: 403 });
       }
       const fetchRes = await fetch(url, {
         headers: { 'User-Agent': 'GeosainsLMS/1.0', 'Accept': 'image/*' },
       });
       if (!fetchRes.ok) {
-        return new NextResponse('Failed to fetch image', { status: 502 });
+        return new Response('Failed to fetch image', { status: 502 });
       }
       imageBuffer = Buffer.from(await fetchRes.arrayBuffer());
     } else {
       // Local image (from public/ directory)
       const filePath = path.join(process.cwd(), 'public', url.replace(/^\//, ''));
       if (!existsSync(filePath)) {
-        return new NextResponse('Image not found', { status: 404 });
+        return new Response('Image not found', { status: 404 });
       }
       imageBuffer = await readFile(filePath);
     }
   } catch (err: any) {
-    return new NextResponse(`Error: ${err.message}`, { status: 500 });
+    return new Response(`Error: ${err.message}`, { status: 500 });
   }
 
   try {
@@ -88,8 +88,8 @@ export async function GET(req: NextRequest) {
     headers.set('X-Original-Size', String(imageBuffer.length));
     headers.set('X-Optimized-Size', String(optimized.length));
 
-    return new Response(optimized, { headers });
+    return new Response(new Uint8Array(optimized), { headers });
   } catch (err: any) {
-    return new NextResponse(`Optimization error: ${err.message}`, { status: 500 });
+    return new Response(`Optimization error: ${err.message}`, { status: 500 });
   }
 }
