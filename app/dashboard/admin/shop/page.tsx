@@ -9,13 +9,23 @@ function getStoreDiscountAmount(it: any) {
 }
 
 export default async function Page() {
-  const products = await prisma.product.findMany({
-    orderBy: { createdAt: 'desc' },
-    include: {
-      categoryRef: true,
-      vendor: true,
-    },
-  });
+  const [products, vendors, categories] = await Promise.all([
+    prisma.product.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        categoryRef: true,
+        vendor: true,
+      },
+    }),
+    prisma.shopVendor.findMany({
+      select: { id: true, name: true },
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.productCategoryModel.findMany({
+      select: { id: true, name: true },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ]);
 
   const productIds = products.map((p) => p.id);
   const soldAgg =
@@ -62,6 +72,8 @@ export default async function Page() {
         stock: p.stock ?? 0,
         imageUrl: typeof p.imageUrl === 'string' && p.imageUrl.startsWith('blob:') ? null : p.imageUrl,
       }))}
+      initialCategories={categories.map((c) => ({ id: String(c.id), name: String(c.name || '') }))}
+      initialVendors={vendors.map((v) => ({ id: String(v.id), name: String(v.name || '') }))}
     />
   );
 }

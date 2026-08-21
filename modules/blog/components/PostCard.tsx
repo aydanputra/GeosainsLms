@@ -3,13 +3,14 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useMemo, useState } from 'react';
+import { normalizeImageUrl } from '@/modules/core/utils/image';
 
 interface PostCardProps {
   post: {
     id: string;
     title: string;
     slug: string;
-    content: string;
+    content?: string | null;
     excerpt?: string | null;
     publishedAt: string | null;
     featuredImageUrl?: string | null;
@@ -68,8 +69,9 @@ export default function PostCard({ post }: PostCardProps) {
   const imageUrlRawCandidate =
     (typeof post.featuredImageUrl === 'string' && post.featuredImageUrl.trim() ? post.featuredImageUrl : '') ||
     (typeof post.thumbnailUrl === 'string' && post.thumbnailUrl.trim() ? post.thumbnailUrl : '');
-  const imageUrlRaw = imageUrlRawCandidate && !imageUrlRawCandidate.startsWith('blob:') ? imageUrlRawCandidate : '';
+  const imageUrlRaw = normalizeImageUrl(imageUrlRawCandidate, { fallback: '' }) || '';
   const imageSrc = !imageBroken && imageUrlRaw ? imageUrlRaw : placeholderDataUri;
+  const isLocalWebp = imageUrlRaw.startsWith('/uploads/media/') && imageUrlRaw.endsWith('.webp');
 
   return (
     <article className="group bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
@@ -79,7 +81,9 @@ export default function PostCard({ post }: PostCardProps) {
             src={imageSrc}
             alt={post.title}
             fill
-            unoptimized
+            unoptimized={isLocalWebp}
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            quality={65}
             className="object-cover"
             onError={() => setImageBroken(true)}
           />

@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { normalizeImageUrl } from '@/modules/core/utils/image';
 
 interface PostDetailProps {
   post: {
@@ -70,15 +71,26 @@ export default function PostDetail({ post }: PostDetailProps) {
   const imageUrlRawCandidate =
     (typeof post.featuredImageUrl === 'string' && post.featuredImageUrl.trim() ? post.featuredImageUrl : '') ||
     (typeof post.thumbnailUrl === 'string' && post.thumbnailUrl.trim() ? post.thumbnailUrl : '');
-  const imageUrlRaw = imageUrlRawCandidate && !imageUrlRawCandidate.startsWith('blob:') ? imageUrlRawCandidate : '';
+  const imageUrlRaw = normalizeImageUrl(imageUrlRawCandidate, { fallback: '' }) || '';
   const imageSrc = !imageBroken && imageUrlRaw ? imageUrlRaw : placeholderDataUri;
+  const isLocalWebp = imageUrlRaw.startsWith('/uploads/media/') && imageUrlRaw.endsWith('.webp');
 
   return (
     <div className="min-h-screen bg-slate-50">
       <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
         <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
           <div className="aspect-video bg-slate-100 relative">
-            <Image src={imageSrc} alt={post.title} fill unoptimized className="object-cover" onError={() => setImageBroken(true)} />
+            <Image
+              src={imageSrc}
+              alt={post.title}
+              fill
+              priority
+              unoptimized={isLocalWebp}
+              sizes="(max-width: 1024px) 100vw, 1024px"
+              quality={70}
+              className="object-cover"
+              onError={() => setImageBroken(true)}
+            />
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-black/0 to-black/0" />
           </div>
 
