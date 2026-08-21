@@ -52,7 +52,11 @@ function normalizeProductForm(value: any): ProductForm {
   const rawUrls = Array.isArray(value?.imageUrls) ? value.imageUrls : [];
   const normalizedUrls = rawUrls.map(normalizeImageUrl).filter(Boolean).slice(0, 4);
   const fallbackUrl = normalizeImageUrl(value?.imageUrl);
-  const imageUrls = normalizedUrls.length > 0 ? normalizedUrls : (fallbackUrl ? [fallbackUrl] : []);
+  const isService = value?.type === 'SERVICE';
+  // Untuk SERVICE, imageUrl adalah icon — jangan fallback ke imageUrl untuk imageUrls
+  const imageUrls = normalizedUrls.length > 0
+    ? normalizedUrls
+    : (!isService && fallbackUrl ? [fallbackUrl] : []);
   const categoryIds = Array.isArray(value?.categoryIds)
     ? value.categoryIds.map((v: any) => String(v || '').trim()).filter(Boolean)
     : typeof value?.categoryId === 'string' && value.categoryId
@@ -237,13 +241,16 @@ export default function AdminShop({
       cell: (val: string, row: any) => (
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden relative shrink-0">
-            {row.imageUrl ? (
-              <Image src={row.imageUrl} alt={row.name} fill unoptimized className="object-cover" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-slate-300">
-                <ImageIcon className="w-5 h-5" />
-              </div>
-            )}
+            {(() => {
+              const thumbUrl = row.type === 'SERVICE' && Array.isArray(row.imageUrls) && row.imageUrls.length > 0 ? row.imageUrls[0] : row.imageUrl;
+              return thumbUrl ? (
+                <Image src={thumbUrl} alt={row.name} fill unoptimized className="object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-slate-300">
+                  <ImageIcon className="w-5 h-5" />
+                </div>
+              );
+            })()}
           </div>
           <div className="min-w-0">
             <div className="font-bold text-slate-900 truncate">{val}</div>
@@ -614,13 +621,16 @@ export default function AdminShop({
                   <div className="flex justify-between items-start gap-3">
                     <div className="flex items-start gap-3 min-w-0">
                   <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 overflow-hidden relative shrink-0">
-                    {product.imageUrl ? (
-                      <Image src={product.imageUrl} alt={product.name} fill unoptimized className="object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-300">
-                        <ImageIcon className="w-5 h-5" />
-                      </div>
-                    )}
+                    {(() => {
+                      const thumbUrl = product.type === 'SERVICE' && Array.isArray(product.imageUrls) && product.imageUrls.length > 0 ? product.imageUrls[0] : product.imageUrl;
+                      return thumbUrl ? (
+                        <Image src={thumbUrl} alt={product.name} fill unoptimized className="object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-slate-300">
+                          <ImageIcon className="w-5 h-5" />
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="min-w-0">
                     <h3 className="font-semibold text-slate-900 line-clamp-2">{product.name}</h3>

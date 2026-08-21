@@ -34,6 +34,10 @@ export default function ProductCard({ product, addToCartVariant = 'icon', adminW
 
   const imageUrl = useMemo(() => {
     const gallery = Array.isArray(product.imageUrls) ? product.imageUrls : [];
+    // Untuk SERVICE, imageUrl adalah icon — gunakan imageUrls[0] sebagai thumbnail
+    if (product.type === 'SERVICE') {
+      return pickImageUrl([...gallery, product.imageUrl], { fallback: null });
+    }
     return pickImageUrl([product.imageUrl, ...gallery], { fallback: null });
   }, [product.imageUrl, product.imageUrls]);
   const normalizedImageUrl = normalizeImageUrl(imageUrl);

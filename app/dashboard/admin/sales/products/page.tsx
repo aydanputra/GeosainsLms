@@ -77,7 +77,7 @@ export default async function Page() {
     }),
     prisma.product.findMany({
       orderBy: { createdAt: 'desc' },
-      select: { id: true, name: true, type: true, stock: true, price: true, vendorId: true, imageUrl: true, slug: true },
+      select: { id: true, name: true, type: true, stock: true, price: true, vendorId: true, imageUrl: true, imageUrls: true, slug: true },
     }),
     prisma.orderItem.findMany({
       where: { productId: { not: null }, order: { is: { status: 'PAID' } } },
@@ -242,7 +242,7 @@ export default async function Page() {
       status,
       stock: p.type === 'PHYSICAL' ? Number(p.stock ?? 0) : null,
       price: Number(p.price || 0),
-      imageUrl: p.imageUrl,
+      imageUrl: p.type === 'SERVICE' && Array.isArray(p.imageUrls) && p.imageUrls.length > 0 ? p.imageUrls[0] : p.imageUrl,
       slug: p.slug,
       sold,
       gross,

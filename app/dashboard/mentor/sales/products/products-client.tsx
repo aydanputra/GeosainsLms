@@ -177,7 +177,9 @@ export default function ProductsClient({
       const inStock = true;
       const outOfStock = false;
       const slug = typeof (p as any).slug === 'string' ? String((p as any).slug) : null;
-      const imageUrl = typeof (p as any).imageUrl === 'string' ? String((p as any).imageUrl) : null;
+      const rawImageUrl = typeof (p as any).imageUrl === 'string' ? String((p as any).imageUrl) : null;
+      const rawImageUrls = Array.isArray((p as any).imageUrls) ? (p as any).imageUrls as string[] : [];
+      const imageUrl = type === 'SERVICE' && rawImageUrls.length > 0 ? rawImageUrls[0] : rawImageUrl;
       const label = type === 'SERVICE' ? 'Jasa' : type === 'RENTAL' ? 'Sewa' : 'Fisik';
       list.push({
         id: p.id,

@@ -123,7 +123,7 @@ export default async function Page() {
       ? await prisma.product.findMany({
           where: role === 'ADMIN' ? undefined : { vendorId: { in: approvedVendorIds } },
           orderBy: { createdAt: 'desc' },
-          select: { id: true, name: true, type: true, stock: true, price: true, vendorId: true, imageUrl: true, slug: true },
+          select: { id: true, name: true, type: true, stock: true, price: true, vendorId: true, imageUrl: true, imageUrls: true, slug: true },
         })
       : [];
 
@@ -149,7 +149,7 @@ export default async function Page() {
       status,
       stock: p.type === 'PHYSICAL' ? Number(p.stock ?? 0) : null,
       price: Number(p.price || 0),
-      imageUrl: p.imageUrl,
+      imageUrl: p.type === 'SERVICE' && Array.isArray(p.imageUrls) && p.imageUrls.length > 0 ? p.imageUrls[0] : p.imageUrl,
       slug: p.slug,
       sold,
       gross,

@@ -143,14 +143,17 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       ? String((product.vendor as any).contactPhone)
       : '';
 
-  const imageUrl =
+  const productType = (product as any)?.type === 'SERVICE' || (product as any)?.type === 'RENTAL' ? (product as any).type : 'PHYSICAL';
+  const rawImageUrl =
     typeof product.imageUrl === 'string' && product.imageUrl.trim() && !product.imageUrl.startsWith('blob:') ? product.imageUrl : null;
+  const rawImageUrls: string[] = Array.isArray(product.imageUrls) ? (product.imageUrls as unknown[]).filter((v): v is string => typeof v === 'string' && v.trim().length > 0) : [];
+  // Untuk SERVICE, imageUrl adalah icon — gunakan imageUrls[0] sebagai gambar utama
+  const imageUrl = productType === 'SERVICE' && rawImageUrls.length > 0 ? rawImageUrls[0] : rawImageUrl;
   const categoryName =
     product.categoryRef?.name || (product.category === 'BOOKS' ? 'Buku' : product.category === 'MERCH' ? 'Merchandise' : 'Lainnya');
   const vendorName = product.vendor?.name || '';
   const vendorSlug = product.vendor?.slug || '';
   const vendorLocation = [product.vendor?.city, product.vendor?.province, product.vendor?.country].filter(Boolean).join(', ');
-  const productType = (product as any)?.type === 'SERVICE' || (product as any)?.type === 'RENTAL' ? (product as any).type : 'PHYSICAL';
   const isInStock = productType === 'SERVICE' || productType === 'PHYSICAL' ? true : Number(product.stock || 0) > 0;
   const isChatOnly = Number(product.price || 0) <= 0;
 
