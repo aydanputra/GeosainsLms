@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { revalidateTag } from 'next/cache';
+import { revalidateTag, revalidatePath } from 'next/cache';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { CourseStatus } from '@prisma/client';
@@ -306,6 +306,8 @@ export async function POST(req: NextRequest) {
     revalidateTag('public-course-tag-slugs', { expire: 0 });
     revalidateTag('public-page-courses', { expire: 0 });
     revalidateTag('homepage-courses', { expire: 0 });
+    revalidatePath('/courses');
+    revalidatePath('/');
     return NextResponse.json(course, { status: 201 });
   } catch (error: any) {
     console.error("Create Course Error:", error);

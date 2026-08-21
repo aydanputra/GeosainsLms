@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { revalidateTag } from 'next/cache';
+import { revalidateTag, revalidatePath } from 'next/cache';
 import { createPost, getPosts, PostSchema } from '@/modules/blog/api/service';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { writeAuditLog } from '@/utils/audit';
@@ -65,6 +65,8 @@ export async function POST(req: NextRequest) {
     revalidateTag('public-blog-slugs', { expire: 0 });
     revalidateTag('public-blog-category-slugs', { expire: 0 });
     revalidateTag('public-blog-tag-slugs', { expire: 0 });
+    revalidatePath('/blog');
+    revalidatePath('/');
     return NextResponse.json(created, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });

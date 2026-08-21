@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { revalidateTag } from 'next/cache';
+import { revalidateTag, revalidatePath } from 'next/cache';
 import { getCourseById, updateCourse, deleteCourse } from '@/modules/course/api/service';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
@@ -341,6 +341,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     revalidateTag('public-course-tag-slugs', { expire: 0 });
     revalidateTag('public-page-courses', { expire: 0 });
     revalidateTag('homepage-courses', { expire: 0 });
+    revalidatePath('/courses');
+    revalidatePath('/');
     
     // Fetch updated course with full relations (modules, lessons, etc.)
     // This is crucial for CourseWizard state consistency, especially for Review step validation
@@ -395,6 +397,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     revalidateTag('public-course-tag-slugs', { expire: 0 });
     revalidateTag('public-page-courses', { expire: 0 });
     revalidateTag('homepage-courses', { expire: 0 });
+    revalidatePath('/courses');
+    revalidatePath('/');
 
     return NextResponse.json({ message: 'Course deleted' });
   } catch (error: any) {

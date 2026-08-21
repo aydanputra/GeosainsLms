@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { revalidateTag } from 'next/cache';
+import { revalidateTag, revalidatePath } from 'next/cache';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { getProductById, updateProduct, deleteProduct, ProductSchema } from '@/modules/shop/api/service';
 import { prisma } from '@/utils/prisma';
@@ -147,7 +147,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     revalidateTag('public-product-route-ids', { expire: 0 });
     revalidateTag('public-page-vendors', { expire: 0 });
     revalidateTag('homepage-vendors', { expire: 0 });
-    return NextResponse.json(updated);
+    revalidatePath('/shop');
+    revalidatePath('/');
+    return NextResponse.json({ product: updated, message: 'Produk diperbarui' });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Gagal memperbarui produk' }, { status: 500 });
   }
@@ -190,6 +192,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     revalidateTag('public-shop-products-page', { expire: 0 });
     revalidateTag('public-shop-categories', { expire: 0 });
     revalidateTag('public-product-route-ids', { expire: 0 });
+    revalidatePath('/shop');
+    revalidatePath('/');
     return NextResponse.json({ message: 'Produk dihapus' });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Gagal menghapus produk' }, { status: 500 });

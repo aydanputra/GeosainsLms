@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { revalidateTag } from 'next/cache';
+import { revalidateTag, revalidatePath } from 'next/cache';
 import { createProduct, ProductSchema } from '@/modules/shop/api/service';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
@@ -226,6 +226,8 @@ export async function POST(req: NextRequest) {
       revalidateTag('public-product-route-ids', { expire: 0 });
       revalidateTag('public-page-vendors', { expire: 0 });
       revalidateTag('homepage-vendors', { expire: 0 });
+      revalidatePath('/shop');
+      revalidatePath('/');
       return NextResponse.json(created, { status: 201 });
     }
 
@@ -252,6 +254,8 @@ export async function POST(req: NextRequest) {
     revalidateTag('public-product-route-ids', { expire: 0 });
     revalidateTag('public-page-vendors', { expire: 0 });
     revalidateTag('homepage-vendors', { expire: 0 });
+    revalidatePath('/shop');
+    revalidatePath('/');
     return NextResponse.json(product, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });
