@@ -477,8 +477,7 @@ const getCachedPublicGeoservicesVendors = unstable_cache(
           },
         },
         products: {
-          where: { categoryRef: { slug: categorySlug } },
-          select: { id: true },
+          select: { id: true, type: true },
         },
       },
     });
@@ -487,8 +486,8 @@ const getCachedPublicGeoservicesVendors = unstable_cache(
       ...vendor,
       logoUrl: normalizePublicMediaUrl(vendor.logoUrl),
       coverUrl: normalizePublicMediaUrl(vendor.coverUrl),
-      serviceCount: Array.isArray(vendor.products) ? vendor.products.length : 0,
-      productCount: vendor._count?.products ?? 0,
+      serviceCount: Array.isArray(vendor.products) ? vendor.products.filter((p) => p.type === 'SERVICE').length : 0,
+      productCount: Array.isArray(vendor.products) ? vendor.products.filter((p) => p.type !== 'SERVICE').length : 0,
     }));
   },
   ['public-geoservices-vendors'],

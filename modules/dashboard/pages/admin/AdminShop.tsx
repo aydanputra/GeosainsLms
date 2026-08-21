@@ -77,7 +77,7 @@ function normalizeProductForm(value: any): ProductForm {
     category: value?.category === 'BOOKS' || value?.category === 'MERCH' || value?.category === 'OTHER' ? value.category : 'OTHER',
     categoryIds,
     vendorId: typeof value?.vendorId === 'string' ? value.vendorId : (typeof value?.vendor?.id === 'string' ? value.vendor.id : ''),
-    imageUrl: imageUrls[0] || '',
+    imageUrl: fallbackUrl || '',
     imageUrls,
   };
 }
@@ -113,7 +113,7 @@ export default function AdminShop({
   });
   const [isSaving, setIsSaving] = useState(false);
   const [isMediaOpen, setIsMediaOpen] = useState(false);
-  const [mediaTargetIndex, setMediaTargetIndex] = useState<number | null>(null);
+  const [mediaTargetIndex, setMediaTargetIndex] = useState<number | 'icon' | null>(null);
   const [categories] = useState<Array<{ id: string; name: string }>>(initialCategories);
   const [vendors] = useState<Array<{ id: string; name: string }>>(initialVendors);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
@@ -454,7 +454,7 @@ export default function AdminShop({
         categoryId: categoryIds[0] || null,
         categoryIds,
         vendorId,
-        imageUrl: imageUrls[0] || null,
+        imageUrl: editorValue.imageUrl?.trim() || null,
         imageUrls,
       };
 
@@ -842,71 +842,123 @@ export default function AdminShop({
               </div>
               </div>
 
+              {editorValue.type === 'SERVICE' ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="text-sm font-extrabold text-slate-900">Icon Layanan</div>
+                      <div className="mt-1 text-xs font-semibold text-slate-500">Icon bulat untuk card layanan (tampil di pojok kiri bawah)</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4">
+                    <div className="relative w-32 aspect-square rounded-2xl overflow-hidden border border-slate-200 bg-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMediaTargetIndex('icon');
+                          setIsMediaOpen(true);
+                        }}
+                        className="absolute inset-0 w-full h-full"
+                        aria-label="Icon Layanan"
+                      >
+                        {editorValue.imageUrl ? (
+                          <Image src={editorValue.imageUrl} alt={editorValue.name || 'Icon'} fill unoptimized className="object-cover" />
+                        ) : (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-400">
+                            <ImageIcon className="w-6 h-6" />
+                            <div className="text-xs font-bold">Pilih Icon</div>
+                          </div>
+                        )}
+                      </button>
+
+                      {editorValue.imageUrl ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditorValue((prev) => ({ ...prev, imageUrl: '' }));
+                          }}
+                          className="absolute right-2 top-2 p-2 rounded-xl bg-white/90 border border-slate-200 text-slate-700 hover:bg-white"
+                          aria-label="Hapus icon"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
               <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className="text-sm font-extrabold text-slate-900">Foto Produk</div>
-                    <div className="mt-1 text-xs font-semibold text-slate-500">Klik thumbnail untuk pilih/ganti foto. Maksimal 4 foto.</div>
+                    <div className="mt-1 text-xs font-semibold text-slate-500">
+                      {editorValue.type === 'SERVICE' 
+                        ? 'Foto sampul layanan. Foto 1 = Sampul utama'
+                        : 'Klik thumbnail untuk pilih/ganti foto. Maksimal 4 foto.'}
+                    </div>
                   </div>
                   <div className="text-xs font-bold text-slate-500">Foto 1 = Utama</div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {[0, 1, 2, 3].map((idx) => {
-                    const url = editorValue.imageUrls?.[idx] || '';
-                    const label = `Foto ${idx + 1}`;
-                    return (
-                      <div key={idx} className="min-w-0">
-                        <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-200 bg-slate-100">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMediaTargetIndex(idx);
-                              setIsMediaOpen(true);
-                            }}
-                            className="absolute inset-0 w-full h-full"
-                            aria-label={label}
-                          >
-                            {url ? (
-                              <Image src={url} alt={editorValue.name || 'Produk'} fill unoptimized className="object-cover" />
-                            ) : (
-                              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-400">
-                                <ImageIcon className="w-6 h-6" />
-                                <div className="text-xs font-bold">Pilih Foto</div>
-                              </div>
-                            )}
-                          </button>
-
-                          {idx === 0 ? (
-                            <div className="absolute left-2 top-2 px-2 py-1 rounded-lg text-[11px] font-extrabold bg-white/90 text-slate-900 border border-slate-200">
-                              Utama
-                            </div>
-                          ) : null}
-
-                          {url ? (
+                  <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {[0, 1, 2, 3].map((idx) => {
+                      const url = editorValue.imageUrls?.[idx] || '';
+                      const label = `Foto ${idx + 1}`;
+                      return (
+                        <div key={idx} className="min-w-0">
+                          <div className="relative aspect-video rounded-2xl overflow-hidden border border-slate-200 bg-slate-100">
                             <button
                               type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditorValue((prev) => {
-                                  const next = Array.isArray(prev.imageUrls) ? prev.imageUrls.slice() : [];
-                                  next[idx] = '';
-                                  return { ...prev, imageUrls: next, imageUrl: (next[0] || '').trim() };
-                                });
+                              onClick={() => {
+                                setMediaTargetIndex(idx);
+                                setIsMediaOpen(true);
                               }}
-                              className="absolute right-2 top-2 p-2 rounded-xl bg-white/90 border border-slate-200 text-slate-700 hover:bg-white"
-                              aria-label="Hapus foto"
+                              className="absolute inset-0 w-full h-full"
+                              aria-label={label}
                             >
-                              <Trash2 className="w-4 h-4" />
+                              {url ? (
+                                <Image src={url} alt={editorValue.name || 'Produk'} fill unoptimized className="object-cover" />
+                              ) : (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-400">
+                                  <ImageIcon className="w-6 h-6" />
+                                  <div className="text-xs font-bold">Pilih Foto</div>
+                                </div>
+                              )}
                             </button>
-                          ) : null}
+
+                            {idx === 0 ? (
+                              <div className="absolute left-2 top-2 px-2 py-1 rounded-lg text-[11px] font-extrabold bg-white/90 text-slate-900 border border-slate-200">
+                                Utama
+                              </div>
+                            ) : null}
+
+                            {url ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditorValue((prev) => {
+                                    const next = Array.isArray(prev.imageUrls) ? prev.imageUrls.slice() : [];
+                                    next[idx] = '';
+                                    return { ...prev, imageUrls: next, imageUrl: (next[0] || '').trim() };
+                                  });
+                                }}
+                                className="absolute right-2 top-2 p-2 rounded-xl bg-white/90 border border-slate-200 text-slate-700 hover:bg-white"
+                                aria-label="Hapus foto"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className="mt-2 text-xs font-bold text-slate-600">{label}</div>
                         </div>
-                        <div className="mt-2 text-xs font-bold text-slate-600">{label}</div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
 
               <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
                 <div className="text-sm font-extrabold text-slate-900">Deskripsi Produk</div>
@@ -947,13 +999,19 @@ export default function AdminShop({
               setMediaTargetIndex(null);
             }}
             onSelect={(item) => {
-              const idx = typeof mediaTargetIndex === 'number' ? mediaTargetIndex : 0;
-              setEditorValue((prev) => {
-                const next = Array.isArray(prev.imageUrls) ? prev.imageUrls.slice() : [];
-                while (next.length < 4) next.push('');
-                next[idx] = item.url;
-                return { ...prev, imageUrls: next, imageUrl: next[0] || '' };
-              });
+              if (mediaTargetIndex === 'icon') {
+                // Upload icon layanan (SERVICE only) -> imageUrl
+                setEditorValue((prev) => ({ ...prev, imageUrl: item.url }));
+              } else {
+                // Upload foto produk -> imageUrls[idx]
+                const idx = typeof mediaTargetIndex === 'number' ? mediaTargetIndex : 0;
+                setEditorValue((prev) => {
+                  const next = Array.isArray(prev.imageUrls) ? prev.imageUrls.slice() : [];
+                  while (next.length < 4) next.push('');
+                  next[idx] = item.url;
+                  return { ...prev, imageUrls: next };
+                });
+              }
               setIsMediaOpen(false);
               setMediaTargetIndex(null);
             }}

@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import ProductCard from '../components/ProductCard';
+import ServiceCard from '../components/ServiceCard';
 import { CheckCircle2, Mail, MapPin, Phone, Plus, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { normalizeImageUrl } from '@/modules/core/utils/image';
@@ -82,7 +83,7 @@ export default function VendorShopPage({
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
 
-    let list = products.slice();
+    let list = products.slice().filter((p) => p.type !== 'SERVICE');
 
     if (q) list = list.filter((p) => p.name.toLowerCase().includes(q));
     if (category !== 'ALL') list = list.filter((p) => String(p.categoryRef?.id || p.categoryId || '') === category);
@@ -97,6 +98,10 @@ export default function VendorShopPage({
 
     return list;
   }, [products, search, category, onlyInStock, sort]);
+
+  const serviceProducts = useMemo(() => {
+    return products.filter((p) => p.type === 'SERVICE');
+  }, [products]);
 
   if (!vendor) {
     return (
@@ -251,12 +256,28 @@ export default function VendorShopPage({
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        {isApproved && serviceProducts.length > 0 ? (
+          <div className="mb-10">
+            <div className="mb-6">
+              <div className="text-2xl sm:text-3xl font-extrabold text-slate-900">Layanan Kami</div>
+              <div className="text-sm text-slate-600 mt-1">
+                Solusi profesional untuk kebutuhan geospasial, lingkungan, dan digital Anda
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {serviceProducts.map((service) => (
+                <ServiceCard key={service.id} service={service} />
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
           <div>
             <div className="text-xl sm:text-2xl font-extrabold text-slate-900">Produk Toko</div>
             <div className="text-sm text-slate-500 mt-1">
               Menampilkan <span className="font-bold text-slate-700">{filteredProducts.length}</span> dari{' '}
-              <span className="font-bold text-slate-700">{products.length}</span> produk
+              <span className="font-bold text-slate-700">{products.filter((p) => p.type !== 'SERVICE').length}</span> produk
             </div>
           </div>
           <div className="flex items-center justify-between sm:justify-end gap-3">

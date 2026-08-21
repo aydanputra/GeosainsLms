@@ -57,7 +57,8 @@ function normalizeProductPayload(body: Record<string, unknown>) {
   }
   if (normalized.vendorId === '') normalized.vendorId = null;
 
-  if (Array.isArray(normalized.imageUrls) && normalized.imageUrls.length > 0) {
+  // Hanya set imageUrl dari imageUrls untuk produk non-SERVICE (icon layanan terpisah)
+  if (normalized.type !== 'SERVICE' && Array.isArray(normalized.imageUrls) && normalized.imageUrls.length > 0) {
     normalized.imageUrl = normalized.imageUrls[0];
   }
 
