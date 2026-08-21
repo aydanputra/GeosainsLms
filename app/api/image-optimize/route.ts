@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
     headers.set('X-Original-Size', String(imageBuffer.length));
     headers.set('X-Optimized-Size', String(optimized.length));
 
-    return new NextResponse(optimized, { headers });
+    return new Response(optimized, { headers });
   } catch (err: any) {
     return new NextResponse(`Optimization error: ${err.message}`, { status: 500 });
   }
