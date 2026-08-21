@@ -16,12 +16,12 @@ export default function AddToCartButton({
   adminWhatsAppNumber?: string | null;
 }) {
   const addItem = useCartStore((state) => state.addItem);
-  const isRentalChatOnly = (product.type || 'PHYSICAL') === 'RENTAL' && Number(product.price || 0) <= 0;
-  const chatHref = isRentalChatOnly
-    ? buildWhatsAppUrl(adminWhatsAppNumber, `Halo Admin, saya ingin bertanya tentang sewa alat "${product.name}".`)
+  const isChatOnly = Number(product.price || 0) <= 0;
+  const chatHref = isChatOnly
+    ? buildWhatsAppUrl(adminWhatsAppNumber, `Halo Admin, saya ingin bertanya tentang produk "${product.name}".`)
     : '';
 
-  if (isRentalChatOnly) {
+  if (isChatOnly) {
     return (
       chatHref ? (
         <a

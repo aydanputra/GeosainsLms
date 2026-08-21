@@ -44,7 +44,7 @@ function normalizeImageUrl(value: unknown) {
 
 function formatProductPriceLabel(product: { type?: string; price?: number | null }) {
   const price = Number(product?.price || 0);
-  if (product?.type === 'RENTAL' && price <= 0) return 'Chat Admin';
+  if (price <= 0) return 'Chat Admin';
   return `IDR ${price.toLocaleString('id-ID')}`;
 }
 
@@ -69,7 +69,7 @@ function normalizeProductForm(value: any): ProductForm {
     type: value?.type === 'SERVICE' || value?.type === 'RENTAL' || value?.type === 'PHYSICAL' ? value.type : 'PHYSICAL',
     price:
       typeof value?.price === 'number' && Number.isFinite(value.price)
-        ? value.type === 'RENTAL' && value.price <= 0
+        ? value.price <= 0
           ? ''
           : String(value.price)
         : '',
@@ -288,13 +288,13 @@ export default function AdminShop({
       cell: (val: number, row: any) => (
         <span className={twMerge(
           "px-2.5 py-0.5 rounded-full text-xs font-medium border",
-          row?.type === 'SERVICE'
+          row?.type === 'SERVICE' || row?.type === 'PHYSICAL'
             ? 'bg-slate-50 text-slate-600 border-slate-200'
             : val < 10
               ? 'bg-red-50 text-red-700 border-red-200'
               : 'bg-green-50 text-green-700 border-green-200'
         )}>
-          {row?.type === 'SERVICE' ? '-' : `${val} Unit`}
+          {row?.type === 'SERVICE' || row?.type === 'PHYSICAL' ? '-' : `${val} Unit`}
         </span>
       )
       },
@@ -425,11 +425,7 @@ export default function AdminShop({
     }
     const priceRaw = editorValue.price.trim();
     const parsedPrice = priceRaw === '' ? 0 : Number(priceRaw);
-    if (editorValue.type !== 'RENTAL' && priceRaw === '') {
-      toast.error('Harga wajib diisi');
-      return;
-    }
-    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+    if (priceRaw !== '' && (!Number.isFinite(parsedPrice) || parsedPrice < 0)) {
       toast.error('Harga tidak valid');
       return;
     }
@@ -729,14 +725,12 @@ export default function AdminShop({
                     value={editorValue.price}
                     onChange={(e) => setEditorValue((prev) => ({ ...prev, price: e.target.value }))}
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-                    placeholder={editorValue.type === 'RENTAL' ? 'Kosongkan untuk Chat Admin' : '0'}
+                    placeholder="Kosongkan untuk Chat Admin"
                   />
-                  {editorValue.type === 'RENTAL' ? (
-                    <div className="text-xs text-slate-500">Jika dikosongkan, tombol publik akan berubah menjadi Chat Admin.</div>
-                  ) : null}
+                  <div className="text-xs text-slate-500">Jika dikosongkan, tombol publik akan berubah menjadi Chat Admin.</div>
                 </div>
                   <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-600">{editorValue.type === 'SERVICE' ? 'Kapasitas (opsional)' : 'Stok'}</label>
+                  <label className="text-xs font-bold text-slate-600">{editorValue.type === 'RENTAL' ? 'Stok' : 'Stok (opsional)'}</label>
                   <input
                     type="number"
                     min={0}

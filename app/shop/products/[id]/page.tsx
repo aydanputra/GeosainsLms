@@ -151,8 +151,8 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const vendorSlug = product.vendor?.slug || '';
   const vendorLocation = [product.vendor?.city, product.vendor?.province, product.vendor?.country].filter(Boolean).join(', ');
   const productType = (product as any)?.type === 'SERVICE' || (product as any)?.type === 'RENTAL' ? (product as any).type : 'PHYSICAL';
-  const isInStock = productType === 'SERVICE' ? true : Number(product.stock || 0) > 0;
-  const isRentalChatOnly = productType === 'RENTAL' && Number(product.price || 0) <= 0;
+  const isInStock = productType === 'SERVICE' || productType === 'PHYSICAL' ? true : Number(product.stock || 0) > 0;
+  const isChatOnly = Number(product.price || 0) <= 0;
 
   const moreWhere: any = { id: { not: product.id } };
   if (product.vendorId) moreWhere.vendorId = product.vendorId;
@@ -223,7 +223,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
             </div>
 
             <div className="mt-5 text-3xl font-extrabold text-indigo-700">
-              {isRentalChatOnly ? 'Hubungi Admin' : `IDR ${Number(product.price).toLocaleString('id-ID')}`}
+              {isChatOnly ? 'Hubungi Admin' : `IDR ${Number(product.price).toLocaleString('id-ID')}`}
             </div>
 
             {product.description ? (

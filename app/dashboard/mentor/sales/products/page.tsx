@@ -140,8 +140,7 @@ export default async function Page() {
     const affiliateFee = Math.max(0, Number(agg?.affiliateFee || 0));
     const net = Math.max(0, netBeforeAffiliate - affiliateFee);
 
-    const status =
-      p.type === 'PHYSICAL' && Number(p.stock ?? 0) <= 0 ? 'HABIS' : 'AKTIF';
+    const status = 'AKTIF';
 
     return {
       id: p.id,

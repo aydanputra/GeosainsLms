@@ -27,9 +27,9 @@ export default function ProductCard({ product, addToCartVariant = 'icon', adminW
   const addItem = useCartStore((state) => state.addItem);
   const [imageBroken, setImageBroken] = useState(false);
   const href = `/shop/products/${product.slug || product.id}`;
-  const isRentalChatOnly = (product.type || 'PHYSICAL') === 'RENTAL' && Number(product.price || 0) <= 0;
-  const chatHref = isRentalChatOnly
-    ? buildWhatsAppUrl(adminWhatsAppNumber, `Halo Admin, saya ingin bertanya tentang sewa alat "${product.name}".`)
+  const isChatOnly = Number(product.price || 0) <= 0;
+  const chatHref = isChatOnly
+    ? buildWhatsAppUrl(adminWhatsAppNumber, `Halo Admin, saya ingin bertanya tentang produk "${product.name}".`)
     : '';
 
   const imageUrl = useMemo(() => {
@@ -49,7 +49,7 @@ export default function ProductCard({ product, addToCartVariant = 'icon', adminW
     });
   };
 
-  const priceLabel = isRentalChatOnly ? 'Hubungi Admin' : `IDR ${product.price.toLocaleString('id-ID')}`;
+  const priceLabel = isChatOnly ? 'Hubungi Admin' : `IDR ${product.price.toLocaleString('id-ID')}`;
   const canShowImage = Boolean(normalizedImageUrl && !imageBroken);
 
   return (
@@ -78,7 +78,7 @@ export default function ProductCard({ product, addToCartVariant = 'icon', adminW
         <p className="text-sm text-slate-500 mb-4 line-clamp-2 min-h-[40px]">{product.description || ' '}</p>
         <div className="mt-auto flex items-center justify-between gap-3 min-w-0">
           <span className="text-blue-700 font-extrabold">{priceLabel}</span>
-          {isRentalChatOnly ? (
+          {isChatOnly ? (
             chatHref ? (
               <a
                 href={chatHref}

@@ -256,7 +256,7 @@ export const createOrder = async (
       const productType = product.type;
       if (productType === 'PHYSICAL') {
         hasPhysical = true;
-        if (product.stock < item.quantity) throw new Error(`Insufficient stock for product ${product.name}`);
+        if (product.stock > 0 && product.stock < item.quantity) throw new Error(`Insufficient stock for product ${product.name}`);
         unitPrice = product.price;
       } else if (productType === 'SERVICE') {
         if (item.quantity !== 1) throw new Error('Jasa hanya bisa dipesan dengan quantity 1 per item');

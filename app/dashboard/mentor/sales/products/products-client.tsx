@@ -174,8 +174,8 @@ export default function ProductsClient({
       const type = String(p.type || '').toUpperCase();
       const isPhysical = type === 'PHYSICAL';
       const stock = p.stock === null ? null : Number(p.stock || 0);
-      const inStock = !isPhysical || (stock !== null && stock > 0);
-      const outOfStock = isPhysical && (stock === null || stock <= 0);
+      const inStock = true;
+      const outOfStock = false;
       const slug = typeof (p as any).slug === 'string' ? String((p as any).slug) : null;
       const imageUrl = typeof (p as any).imageUrl === 'string' ? String((p as any).imageUrl) : null;
       const label = type === 'SERVICE' ? 'Jasa' : type === 'RENTAL' ? 'Sewa' : 'Fisik';
