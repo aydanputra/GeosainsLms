@@ -301,11 +301,11 @@ export async function POST(req: NextRequest) {
     // Use service layer for creation (handles slug generation)
     const course = await createCourse(parsedCourse.data);
     
-    revalidateTag('public-course-catalog-data-shared');
-    revalidateTag('public-course-slugs');
-    revalidateTag('public-course-tag-slugs');
-    revalidateTag('public-page-courses');
-    revalidateTag('homepage-courses');
+    revalidateTag('public-course-catalog-data-shared', { expire: 0 });
+    revalidateTag('public-course-slugs', { expire: 0 });
+    revalidateTag('public-course-tag-slugs', { expire: 0 });
+    revalidateTag('public-page-courses', { expire: 0 });
+    revalidateTag('homepage-courses', { expire: 0 });
     return NextResponse.json(course, { status: 201 });
   } catch (error: any) {
     console.error("Create Course Error:", error);

@@ -61,10 +61,10 @@ export async function POST(req: NextRequest) {
         published: (created as any)?.published,
       },
     });
-    revalidateTag('public-blog-post-previews');
-    revalidateTag('public-blog-slugs');
-    revalidateTag('public-blog-category-slugs');
-    revalidateTag('public-blog-tag-slugs');
+    revalidateTag('public-blog-post-previews', { expire: 0 });
+    revalidateTag('public-blog-slugs', { expire: 0 });
+    revalidateTag('public-blog-category-slugs', { expire: 0 });
+    revalidateTag('public-blog-tag-slugs', { expire: 0 });
     return NextResponse.json(created, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });

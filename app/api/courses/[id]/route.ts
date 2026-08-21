@@ -334,13 +334,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     await updateCourse(id, body);
     
-    revalidateTag('public-course-detail-base');
-    revalidateTag('course-page-site-settings');
-    revalidateTag('public-course-catalog-data-shared');
-    revalidateTag('public-course-slugs');
-    revalidateTag('public-course-tag-slugs');
-    revalidateTag('public-page-courses');
-    revalidateTag('homepage-courses');
+    revalidateTag('public-course-detail-base', { expire: 0 });
+    revalidateTag('course-page-site-settings', { expire: 0 });
+    revalidateTag('public-course-catalog-data-shared', { expire: 0 });
+    revalidateTag('public-course-slugs', { expire: 0 });
+    revalidateTag('public-course-tag-slugs', { expire: 0 });
+    revalidateTag('public-page-courses', { expire: 0 });
+    revalidateTag('homepage-courses', { expire: 0 });
     
     // Fetch updated course with full relations (modules, lessons, etc.)
     // This is crucial for CourseWizard state consistency, especially for Review step validation
@@ -388,13 +388,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       entityId: id,
     });
 
-    revalidateTag('public-course-detail-base');
-    revalidateTag('course-page-site-settings');
-    revalidateTag('public-course-catalog-data-shared');
-    revalidateTag('public-course-slugs');
-    revalidateTag('public-course-tag-slugs');
-    revalidateTag('public-page-courses');
-    revalidateTag('homepage-courses');
+    revalidateTag('public-course-detail-base', { expire: 0 });
+    revalidateTag('course-page-site-settings', { expire: 0 });
+    revalidateTag('public-course-catalog-data-shared', { expire: 0 });
+    revalidateTag('public-course-slugs', { expire: 0 });
+    revalidateTag('public-course-tag-slugs', { expire: 0 });
+    revalidateTag('public-page-courses', { expire: 0 });
+    revalidateTag('homepage-courses', { expire: 0 });
 
     return NextResponse.json({ message: 'Course deleted' });
   } catch (error: any) {

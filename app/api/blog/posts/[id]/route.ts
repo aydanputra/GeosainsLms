@@ -57,11 +57,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       entityId: String(id),
       metadata: { changes: body },
     });
-    revalidateTag('blog-post-public-detail');
-    revalidateTag('public-blog-post-previews');
-    revalidateTag('public-blog-slugs');
-    revalidateTag('public-blog-category-slugs');
-    revalidateTag('public-blog-tag-slugs');
+    revalidateTag('blog-post-public-detail', { expire: 0 });
+    revalidateTag('public-blog-post-previews', { expire: 0 });
+    revalidateTag('public-blog-slugs', { expire: 0 });
+    revalidateTag('public-blog-category-slugs', { expire: 0 });
+    revalidateTag('public-blog-tag-slugs', { expire: 0 });
     return NextResponse.json(updated);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });
@@ -92,11 +92,11 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       entityType: 'Post',
       entityId: String(id),
     });
-    revalidateTag('blog-post-public-detail');
-    revalidateTag('public-blog-post-previews');
-    revalidateTag('public-blog-slugs');
-    revalidateTag('public-blog-category-slugs');
-    revalidateTag('public-blog-tag-slugs');
+    revalidateTag('blog-post-public-detail', { expire: 0 });
+    revalidateTag('public-blog-post-previews', { expire: 0 });
+    revalidateTag('public-blog-slugs', { expire: 0 });
+    revalidateTag('public-blog-category-slugs', { expire: 0 });
+    revalidateTag('public-blog-tag-slugs', { expire: 0 });
     return NextResponse.json({ message: 'Post deleted' });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

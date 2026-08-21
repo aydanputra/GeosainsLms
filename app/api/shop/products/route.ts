@@ -221,11 +221,11 @@ export async function POST(req: NextRequest) {
           vendorId,
         },
       });
-      revalidateTag('public-shop-products-page');
-      revalidateTag('public-shop-categories');
-      revalidateTag('public-product-route-ids');
-      revalidateTag('public-page-vendors');
-      revalidateTag('homepage-vendors');
+      revalidateTag('public-shop-products-page', { expire: 0 });
+      revalidateTag('public-shop-categories', { expire: 0 });
+      revalidateTag('public-product-route-ids', { expire: 0 });
+      revalidateTag('public-page-vendors', { expire: 0 });
+      revalidateTag('homepage-vendors', { expire: 0 });
       return NextResponse.json(created, { status: 201 });
     }
 
@@ -247,11 +247,11 @@ export async function POST(req: NextRequest) {
 
     const slug = parsed.data.slug ? await generateUniqueSlug(parsed.data.slug) : await generateUniqueSlug(parsed.data.name);
     const product = await createProduct({ ...parsed.data, slug });
-    revalidateTag('public-shop-products-page');
-    revalidateTag('public-shop-categories');
-    revalidateTag('public-product-route-ids');
-    revalidateTag('public-page-vendors');
-    revalidateTag('homepage-vendors');
+    revalidateTag('public-shop-products-page', { expire: 0 });
+    revalidateTag('public-shop-categories', { expire: 0 });
+    revalidateTag('public-product-route-ids', { expire: 0 });
+    revalidateTag('public-page-vendors', { expire: 0 });
+    revalidateTag('homepage-vendors', { expire: 0 });
     return NextResponse.json(product, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });
