@@ -2,8 +2,8 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { CheckCircle, XCircle, Download, FileText, Calendar, User, Copy, Link as LinkIcon, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { CheckCircle, XCircle, Download, FileText, Calendar, User, Link as LinkIcon, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
@@ -12,7 +12,6 @@ export default function CertificateVerifyPage({ params }: { params: Promise<{ se
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [serial, setSerial] = useState<string>('');
-  const [currentUser, setCurrentUser] = useState<any>(null); // Ideally use a hook like useUser()
   const router = useRouter();
 
   useEffect(() => {
@@ -58,7 +57,7 @@ export default function CertificateVerifyPage({ params }: { params: Promise<{ se
           
           // If OK, trigger real download
           window.open(`/api/certificates/${serial}/download`, '_blank');
-      } catch (e) {
+      } catch {
           toast.error('Gagal mengunduh sertifikat.');
       }
   };

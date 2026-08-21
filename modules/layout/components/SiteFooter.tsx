@@ -2,12 +2,24 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Mail, MapPin, Phone } from 'lucide-react';
 
-export default function SiteFooter() {
+type SiteSettings = {
+  siteName?: string;
+  siteDescription?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+};
+
+type SiteFooterProps = {
+  initialSiteSettings?: SiteSettings;
+};
+
+export default function SiteFooter({ initialSiteSettings = {} }: SiteFooterProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(initialSiteSettings);
   const hidden = useMemo(() => {
     if (!pathname) return false;
     if (pathname.startsWith('/dashboard')) return true;
@@ -15,7 +27,36 @@ export default function SiteFooter() {
     return false;
   }, [pathname, searchParams]);
 
+  useEffect(() => {
+    if (hidden) return;
+    if (Object.keys(initialSiteSettings).length > 0) return;
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/site-settings', { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!active) return;
+        setSiteSettings(typeof data === 'object' && data ? (data as SiteSettings) : {});
+      } catch {
+        if (!active) return;
+        setSiteSettings({});
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [hidden, initialSiteSettings]);
+
   if (hidden) return null;
+
+  const siteName = typeof siteSettings.siteName === 'string' && siteSettings.siteName.trim() ? siteSettings.siteName.trim() : 'GeoSains';
+  const siteDescription =
+    typeof siteSettings.siteDescription === 'string' && siteSettings.siteDescription.trim()
+      ? siteSettings.siteDescription.trim()
+      : 'Platform pembelajaran geosains dengan kursus terstruktur, kuis, tugas, sertifikat, dan layanan pendukung.';
+  const contactEmail = typeof siteSettings.contactEmail === 'string' && siteSettings.contactEmail.trim() ? siteSettings.contactEmail.trim() : 'info@geosains.id';
+  const contactPhone = typeof siteSettings.contactPhone === 'string' && siteSettings.contactPhone.trim() ? siteSettings.contactPhone.trim() : '';
+  const telHref = contactPhone ? `tel:${contactPhone.replace(/[^\d+]/g, '')}` : '';
 
   return (
     <footer className="mt-14 bg-slate-950 text-slate-200">
@@ -25,11 +66,11 @@ export default function SiteFooter() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-10">
           <div className="space-y-4">
             <Link href="/" className="inline-flex items-center gap-2">
-              <span className="text-lg font-extrabold text-white">GeoSains</span>
+              <span className="text-lg font-extrabold text-white">{siteName}</span>
               <span className="text-xs font-extrabold px-2 py-0.5 rounded-full bg-white/10 border border-white/10">LMS</span>
             </Link>
             <p className="text-sm text-slate-400 leading-relaxed">
-              Platform pembelajaran geosains dengan kursus terstruktur, kuis, tugas, sertifikat, dan layanan pendukung.
+              {siteDescription}
             </p>
           </div>
 
@@ -75,16 +116,18 @@ export default function SiteFooter() {
               </div>
               <div className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-blue-300 shrink-0" />
-                <a className="hover:text-white transition-colors" href="mailto:info@geosains.id">
-                  info@geosains.id
+                <a className="hover:text-white transition-colors" href={`mailto:${contactEmail}`}>
+                  {contactEmail}
                 </a>
               </div>
-              <div className="flex items-center gap-2">
-                <Phone className="w-4 h-4 text-blue-300 shrink-0" />
-                <a className="hover:text-white transition-colors" href="tel:+620000000000">
-                  +62 000 0000 0000
-                </a>
-              </div>
+              {contactPhone ? (
+                <div className="flex items-center gap-2">
+                  <Phone className="w-4 h-4 text-blue-300 shrink-0" />
+                  <a className="hover:text-white transition-colors" href={telHref}>
+                    {contactPhone}
+                  </a>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

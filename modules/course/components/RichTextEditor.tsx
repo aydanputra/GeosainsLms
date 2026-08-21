@@ -4,7 +4,6 @@ import { ComponentType, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Link from '@tiptap/extension-link';
 import Underline from '@tiptap/extension-underline';
 import Image from '@tiptap/extension-image';
 import MediaPickerModal from '@/modules/media/components/MediaPickerModal';
@@ -297,30 +296,28 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        // Disable extensions that might conflict or are added manually
-        // history: false, // history is included in StarterKit
+        link: {
+          openOnClick: false,
+          linkOnPaste: true,
+          autolink: true,
+          HTMLAttributes: {
+            rel: 'noopener noreferrer nofollow',
+            target: '_blank',
+            class: 'text-indigo-600 font-semibold underline underline-offset-2 hover:text-indigo-700',
+          },
+          validate: (href) => {
+            const v = String(href || '').trim();
+            if (!v) return false;
+            if (v.startsWith('/')) return true;
+            return /^https?:\/\/|^mailto:|^tel:/i.test(v);
+          },
+        },
       }),
       Underline,
       Image.configure({
         HTMLAttributes: {
           class: 'rounded-xl border border-slate-200 w-full',
           loading: 'lazy',
-        },
-      }),
-      Link.configure({
-        openOnClick: false,
-        linkOnPaste: true,
-        autolink: true,
-        HTMLAttributes: {
-          rel: 'noopener noreferrer nofollow',
-          target: '_blank',
-          class: 'text-indigo-600 font-semibold underline underline-offset-2 hover:text-indigo-700',
-        },
-        validate: (href) => {
-          const v = String(href || '').trim();
-          if (!v) return false;
-          if (v.startsWith('/')) return true;
-          return /^https?:\/\/|^mailto:|^tel:/i.test(v);
         },
       }),
     ],

@@ -1,7 +1,7 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
-import { CheckCircle, AlertCircle, FileText, Video, User, Tag, DollarSign, Image as ImageIcon, ArrowRight, Check, XCircle, Eye } from 'lucide-react';
-import { twMerge } from 'tailwind-merge';
+import { CheckCircle, AlertCircle, FileText, Video, User, Tag, DollarSign, Image as ImageIcon, Check, XCircle, Eye } from 'lucide-react';
 
 interface CourseStepReviewProps {
   courseData: any;

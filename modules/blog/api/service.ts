@@ -1,5 +1,6 @@
 import { prisma } from '@/utils/prisma';
 import { z } from 'zod';
+import { sanitizeRichHtml } from '@/modules/core/utils/sanitizeHtml';
 
 function slugify(text: string): string {
   return text
@@ -70,6 +71,11 @@ export const createPost = async (authorId: string, data: z.infer<typeof PostSche
     )
   );
 
+  const sanitizedContent = sanitizeRichHtml(data.content);
+  if (!sanitizedContent) {
+    throw new Error('Konten artikel tidak valid');
+  }
+
   return prisma.post.create({
     data: {
       title: data.title,
@@ -77,7 +83,7 @@ export const createPost = async (authorId: string, data: z.infer<typeof PostSche
       author: { connect: { id: authorId } },
       publishedAt: data.published ? new Date() : null,
       published: data.published,
-      content: data.content,
+      content: sanitizedContent,
       excerpt,
       featuredImageUrl,
       ...(categoryId
@@ -117,7 +123,10 @@ export const createPost = async (authorId: string, data: z.infer<typeof PostSche
 
 export const updatePost = async (id: string, data: Partial<z.infer<typeof PostSchema>>) => {
   const title = typeof data.title === 'string' ? data.title.trim() : undefined;
-  const content = typeof data.content === 'string' ? data.content.trim() : undefined;
+  const content = typeof data.content === 'string' ? sanitizeRichHtml(data.content) : undefined;
+  if (typeof data.content === 'string' && !content) {
+    throw new Error('Konten artikel tidak valid');
+  }
   const excerpt = typeof data.excerpt === 'string' ? (data.excerpt.trim() ? data.excerpt.trim() : null) : undefined;
   const featuredImageUrl =
     typeof data.featuredImageUrl === 'string' ? (data.featuredImageUrl.trim() ? data.featuredImageUrl.trim() : null) : undefined;

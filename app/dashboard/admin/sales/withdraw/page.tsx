@@ -1,8 +1,14 @@
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
+import type { Role } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
+
+type AdminActor = {
+  id: string;
+  role: Role;
+};
 
 function formatIdr(value: number) {
   const n = Number.isFinite(value) ? value : 0;
@@ -13,6 +19,197 @@ function formatDate(iso: string) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '-';
   return d.toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+export async function syncMentorWithdrawalByAdmin(actor: AdminActor, id: string) {
+  const safeId = String(id || '').trim();
+  if (!safeId) return { updated: false, notified: false };
+
+  const withdrawal = await prisma.mentorWithdrawal.findUnique({
+    where: { id: safeId },
+    select: { id: true, userId: true, amount: true, status: true, provider: true, disbursementId: true, externalId: true },
+  });
+  if (!withdrawal) return { updated: false, notified: false };
+
+  const provider = String(withdrawal.provider || '').toUpperCase();
+  const status = String(withdrawal.status || '').toUpperCase();
+  if (provider !== 'XENDIT') return { updated: false, notified: false };
+  if (status === 'SUCCESS' || status === 'FAILED') return { updated: false, notified: false };
+
+  const disbursementId = String(withdrawal.disbursementId || '').trim();
+  if (!disbursementId) return { updated: false, notified: false };
+
+  const secretKey = String(process.env.XENDIT_SECRET_KEY || process.env.XENDIT_API_KEY || '').trim();
+  if (!secretKey) return { updated: false, notified: false };
+
+  const auth = Buffer.from(`${secretKey}:`, 'utf8').toString('base64');
+  const res = await fetch(`https://api.xendit.co/disbursements/${encodeURIComponent(disbursementId)}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Basic ${auth}`,
+      Accept: 'application/json',
+    },
+    cache: 'no-store',
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) return { updated: false, notified: false };
+
+  const raw = typeof (data as any)?.status === 'string' ? String((data as any).status).toUpperCase() : '';
+  const responseDisbursementId = typeof (data as any)?.id === 'string' ? String((data as any).id).trim() : '';
+  const responseExternalId = typeof (data as any)?.external_id === 'string' ? String((data as any).external_id).trim() : '';
+  const responseAmount =
+    typeof (data as any)?.amount === 'number'
+      ? Number((data as any).amount)
+      : typeof (data as any)?.amount === 'string'
+        ? Number((data as any).amount)
+        : NaN;
+  if (responseDisbursementId && responseDisbursementId !== disbursementId) return { updated: false, notified: false };
+  if (withdrawal.externalId && responseExternalId && responseExternalId !== String(withdrawal.externalId)) {
+    return { updated: false, notified: false };
+  }
+  if (!Number.isFinite(responseAmount) || Math.abs(Number(withdrawal.amount || 0) - Number(responseAmount)) > 0.01) {
+    return { updated: false, notified: false };
+  }
+  const nextStatus = raw === 'COMPLETED' ? 'SUCCESS' : raw === 'FAILED' ? 'FAILED' : 'PROCESSING';
+
+  const result = await prisma.$transaction(async (tx) => {
+    const current = await tx.mentorWithdrawal.findUnique({
+      where: { id: safeId },
+      select: { id: true, userId: true, amount: true, status: true, externalId: true },
+    });
+    if (!current) return { updated: false, notified: false, userId: '', amount: 0 };
+
+    const currentStatus = String(current.status || '').toUpperCase();
+    if (currentStatus === 'SUCCESS' || currentStatus === 'FAILED') {
+      return { updated: false, notified: false, userId: String(current.userId || ''), amount: Number(current.amount || 0) };
+    }
+
+    const updated = await tx.mentorWithdrawal.updateMany({
+      where: { id: safeId, status: { notIn: ['SUCCESS', 'FAILED'] } },
+      data: {
+        status: nextStatus,
+        metadata: data as any,
+      },
+    });
+    if (updated.count === 0) {
+      return { updated: false, notified: false, userId: String(current.userId || ''), amount: Number(current.amount || 0) };
+    }
+
+    await tx.auditLog.create({
+      data: {
+        actorId: actor.id,
+        actorRole: actor.role,
+        action: 'MENTOR_WITHDRAW_SYNC',
+        entityType: 'MentorWithdrawal',
+        entityId: safeId,
+        metadata: {
+          previousStatus: currentStatus,
+          provider: 'XENDIT',
+          disbursementId,
+          externalId: current.externalId || withdrawal.externalId || null,
+          amount: Number(responseAmount),
+          status: raw || null,
+          normalized: nextStatus,
+        } as any,
+      },
+    });
+
+    return {
+      updated: true,
+      notified: nextStatus !== currentStatus && (nextStatus === 'SUCCESS' || nextStatus === 'FAILED'),
+      userId: String(current.userId || ''),
+      amount: Number(current.amount || 0),
+    };
+  });
+
+  if (result.updated && result.notified && result.userId) {
+    await prisma.notification.create({
+      data: {
+        userId: result.userId,
+        title: nextStatus === 'SUCCESS' ? 'Withdraw Selesai' : 'Withdraw Gagal',
+        message: [`Jumlah: ${formatIdr(result.amount)}`, `Status: ${nextStatus}`, 'LINK:/dashboard/mentor/sales/withdraw'].join('\n'),
+        read: false,
+      },
+    });
+  }
+
+  return result;
+}
+
+export async function markAffiliateWithdrawalByAdmin(actor: AdminActor, id: string, nextStatus: string) {
+  const safeId = String(id || '').trim();
+  const safeStatus = String(nextStatus || '').toUpperCase();
+  if (!safeId) return { updated: false, notified: false };
+  if (safeStatus !== 'SUCCESS' && safeStatus !== 'FAILED') return { updated: false, notified: false };
+
+  const result = await prisma.$transaction(async (tx) => {
+    const existing = await tx.withdrawal.findUnique({
+      where: { id: safeId },
+      select: { id: true, amount: true, status: true, affiliateId: true, affiliate: { select: { userId: true } } },
+    });
+    if (!existing) return { updated: false, notified: false, targetUserId: '', amount: 0 };
+
+    const prevStatus = String(existing.status || '').toUpperCase();
+    if (prevStatus === 'SUCCESS' || prevStatus === 'FAILED') {
+      return {
+        updated: false,
+        notified: false,
+        targetUserId: existing.affiliate?.userId ? String(existing.affiliate.userId) : '',
+        amount: Number(existing.amount || 0),
+      };
+    }
+
+    const updated = await tx.withdrawal.updateMany({
+      where: { id: safeId, status: { notIn: ['SUCCESS', 'FAILED'] } },
+      data: { status: safeStatus },
+    });
+    if (updated.count === 0) {
+      return {
+        updated: false,
+        notified: false,
+        targetUserId: existing.affiliate?.userId ? String(existing.affiliate.userId) : '',
+        amount: Number(existing.amount || 0),
+      };
+    }
+
+    if (safeStatus === 'FAILED') {
+      await tx.affiliateProfile.update({
+        where: { id: existing.affiliateId },
+        data: { balance: { increment: Number(existing.amount || 0) } },
+      });
+    }
+
+    await tx.auditLog.create({
+      data: {
+        actorId: actor.id,
+        actorRole: actor.role,
+        action: 'AFFILIATE_WITHDRAW_MARK',
+        entityType: 'Withdrawal',
+        entityId: safeId,
+        metadata: { previousStatus: prevStatus, status: safeStatus, amount: Number(existing.amount || 0) } as any,
+      },
+    });
+
+    return {
+      updated: true,
+      notified: Boolean(existing.affiliate?.userId),
+      targetUserId: existing.affiliate?.userId ? String(existing.affiliate.userId) : '',
+      amount: Number(existing.amount || 0),
+    };
+  });
+
+  if (result.updated && result.notified && result.targetUserId) {
+    await prisma.notification.create({
+      data: {
+        userId: result.targetUserId,
+        title: safeStatus === 'SUCCESS' ? 'Withdraw Affiliate Selesai' : 'Withdraw Affiliate Gagal',
+        message: [`Jumlah: ${formatIdr(result.amount)}`, `Status: ${safeStatus}`, 'LINK:/dashboard/student/affiliate'].join('\n'),
+        read: false,
+      },
+    });
+  }
+
+  return result;
 }
 
 export default async function Page() {
@@ -33,73 +230,9 @@ export default async function Page() {
     if (!token) return;
     const payload = await verifyToken(token);
     if (!payload?.id || payload.role !== 'ADMIN') return;
-    const actorId = String(payload.id);
-
     const id = String(formData.get('id') || '');
     if (!id) return;
-
-    const withdrawal = await prisma.mentorWithdrawal.findUnique({
-      where: { id },
-      select: { id: true, userId: true, amount: true, status: true, provider: true, disbursementId: true, externalId: true },
-    });
-    if (!withdrawal) return;
-
-    const provider = String(withdrawal.provider || '').toUpperCase();
-    const status = String(withdrawal.status || '').toUpperCase();
-    if (provider !== 'XENDIT') return;
-    if (status === 'SUCCESS' || status === 'FAILED') return;
-
-    const disbursementId = String(withdrawal.disbursementId || '').trim();
-    if (!disbursementId) return;
-
-    const secretKey = String(process.env.XENDIT_SECRET_KEY || process.env.XENDIT_API_KEY || '').trim();
-    if (!secretKey) return;
-
-    const auth = Buffer.from(`${secretKey}:`, 'utf8').toString('base64');
-    const res = await fetch(`https://api.xendit.co/disbursements/${encodeURIComponent(disbursementId)}`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Basic ${auth}`,
-        Accept: 'application/json',
-      },
-      cache: 'no-store',
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) return;
-
-    const raw = typeof (data as any)?.status === 'string' ? String((data as any).status).toUpperCase() : '';
-    const nextStatus = raw === 'COMPLETED' ? 'SUCCESS' : raw === 'FAILED' ? 'FAILED' : 'PROCESSING';
-
-    const changed = nextStatus !== status;
-    await prisma.mentorWithdrawal.update({
-      where: { id },
-      data: {
-        status: nextStatus,
-        metadata: data as any,
-      },
-    });
-
-    await prisma.auditLog.create({
-      data: {
-        actorId: String(payload.id),
-        actorRole: payload.role,
-        action: 'MENTOR_WITHDRAW_SYNC',
-        entityType: 'MentorWithdrawal',
-        entityId: id,
-        metadata: { provider: 'XENDIT', disbursementId, externalId: withdrawal.externalId || null, status: raw || null, normalized: nextStatus } as any,
-      },
-    });
-
-    if (changed && (nextStatus === 'SUCCESS' || nextStatus === 'FAILED')) {
-      await prisma.notification.create({
-        data: {
-          userId: withdrawal.userId,
-          title: nextStatus === 'SUCCESS' ? 'Withdraw Selesai' : 'Withdraw Gagal',
-          message: [`Jumlah: ${formatIdr(Number(withdrawal.amount || 0))}`, `Status: ${nextStatus}`, 'LINK:/dashboard/mentor/sales/withdraw'].join('\n'),
-          read: false,
-        },
-      });
-    }
+    await syncMentorWithdrawalByAdmin({ id: String(payload.id), role: payload.role }, id);
   };
 
   const markMentorWithdrawal = async (formData: FormData) => {
@@ -109,8 +242,6 @@ export default async function Page() {
     if (!token) return;
     const payload = await verifyToken(token);
     if (!payload?.id || payload.role !== 'ADMIN') return;
-    const actorId = String(payload.id);
-
     const id = String(formData.get('id') || '');
     const nextStatus = String(formData.get('status') || '').toUpperCase();
     if (!id) return;
@@ -118,11 +249,14 @@ export default async function Page() {
 
     const existing = await prisma.mentorWithdrawal.findUnique({ where: { id }, select: { id: true, userId: true, amount: true, status: true } });
     if (!existing) return;
+    const prevStatus = String(existing.status || '').toUpperCase();
+    if (prevStatus === 'SUCCESS' || prevStatus === 'FAILED') return;
 
-    await prisma.mentorWithdrawal.update({
-      where: { id },
+    const updated = await prisma.mentorWithdrawal.updateMany({
+      where: { id, status: { notIn: ['SUCCESS', 'FAILED'] } },
       data: { status: nextStatus },
     });
+    if (updated.count === 0) return;
 
     await prisma.notification.create({
       data: {
@@ -130,6 +264,17 @@ export default async function Page() {
         title: nextStatus === 'SUCCESS' ? 'Withdraw Selesai' : 'Withdraw Gagal',
         message: [`Jumlah: IDR ${Math.round(Number(existing.amount || 0)).toLocaleString('id-ID')}`, `Status: ${nextStatus}`, 'LINK:/dashboard/mentor/sales/withdraw'].join('\n'),
         read: false,
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        actorId: String(payload.id),
+        actorRole: payload.role,
+        action: 'MENTOR_WITHDRAW_MARK',
+        entityType: 'MentorWithdrawal',
+        entityId: id,
+        metadata: { previousStatus: prevStatus, status: nextStatus, amount: Number(existing.amount || 0) } as any,
       },
     });
   };
@@ -147,48 +292,7 @@ export default async function Page() {
     const nextStatus = String(formData.get('status') || '').toUpperCase();
     if (!id) return;
     if (nextStatus !== 'SUCCESS' && nextStatus !== 'FAILED') return;
-
-    const existing = await prisma.withdrawal.findUnique({
-      where: { id },
-      select: { id: true, amount: true, status: true, affiliateId: true, affiliate: { select: { userId: true } } },
-    });
-    if (!existing) return;
-    const prevStatus = String(existing.status || '').toUpperCase();
-    if (prevStatus === 'SUCCESS' || prevStatus === 'FAILED') return;
-
-    await prisma.$transaction(async (tx) => {
-      await tx.withdrawal.update({ where: { id }, data: { status: nextStatus } });
-
-      if (nextStatus === 'FAILED') {
-        await tx.affiliateProfile.update({
-          where: { id: existing.affiliateId },
-          data: { balance: { increment: Number(existing.amount || 0) } },
-        });
-      }
-
-      await tx.auditLog.create({
-        data: {
-          actorId,
-          actorRole: payload.role,
-          action: 'AFFILIATE_WITHDRAW_MARK',
-          entityType: 'Withdrawal',
-          entityId: id,
-          metadata: { status: nextStatus, amount: Number(existing.amount || 0) } as any,
-        },
-      });
-    });
-
-    const targetUserId = existing.affiliate?.userId ? String(existing.affiliate.userId) : '';
-    if (targetUserId) {
-      await prisma.notification.create({
-        data: {
-          userId: targetUserId,
-          title: nextStatus === 'SUCCESS' ? 'Withdraw Affiliate Selesai' : 'Withdraw Affiliate Gagal',
-          message: [`Jumlah: ${formatIdr(Number(existing.amount || 0))}`, `Status: ${nextStatus}`, 'LINK:/dashboard/student/affiliate'].join('\n'),
-          read: false,
-        },
-      });
-    }
+    await markAffiliateWithdrawalByAdmin({ id: actorId, role: payload.role }, id, nextStatus);
   };
 
   const [withdrawals, mentorWithdrawNotifications, mentorWithdrawals] = await Promise.all([

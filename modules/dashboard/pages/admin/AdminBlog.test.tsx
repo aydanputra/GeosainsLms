@@ -8,25 +8,25 @@ vi.mock('next/link', () => ({
 
 describe('AdminBlog Component', () => {
   const mockPosts = [
-    { id: '1', title: 'Belajar Geologi', authorName: 'Dr. Budi', published: true },
-    { id: '2', title: 'Tips GIS', authorName: 'Siti MSc', published: false },
+    { id: '1', title: 'Belajar Geologi', authorName: 'Dr. Budi', published: true, slug: 'belajar-geologi' },
+    { id: '2', title: 'Tips GIS', authorName: 'Siti MSc', published: false, slug: 'tips-gis' },
   ];
 
   it('renders blog list correctly', () => {
-    render(<AdminBlog posts={mockPosts} />);
-    expect(screen.getByText('Belajar Geologi')).toBeDefined();
-    expect(screen.getByText('Tips GIS')).toBeDefined();
-    expect(screen.getByText('Terbit')).toBeDefined();
-    expect(screen.getByText('Draft')).toBeDefined();
+    render(<AdminBlog posts={mockPosts} categories={[]} tags={[]} />);
+    expect(screen.getAllByText('Belajar Geologi').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Tips GIS').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Terbit').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Draft').length).toBeGreaterThan(0);
   });
 
   it('filters posts by search', () => {
-    render(<AdminBlog posts={mockPosts} />);
+    render(<AdminBlog posts={mockPosts} categories={[]} tags={[]} />);
     const searchInput = screen.getByPlaceholderText('Cari artikel...');
     
     fireEvent.change(searchInput, { target: { value: 'Tips' } });
-    expect(screen.getByText('Tips GIS')).toBeDefined();
-    expect(screen.queryByText('Belajar Geologi')).toBeNull();
+    expect(screen.getAllByText('Tips GIS').length).toBeGreaterThan(0);
+    expect(screen.queryAllByText('Belajar Geologi')).toHaveLength(0);
   });
 
   it('handles delete action', async () => {
@@ -36,17 +36,17 @@ describe('AdminBlog Component', () => {
     });
     (globalThis as any).fetch = fetchMock;
 
-    render(<AdminBlog posts={mockPosts} />);
-    const deleteButtons = screen.getAllByText('Hapus');
+    render(<AdminBlog posts={mockPosts} categories={[]} tags={[]} />);
+    const deleteButtons = screen.getAllByTitle('Hapus');
     fireEvent.click(deleteButtons[0]);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Hapus' }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Hapus' }).at(-1)!);
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/blog/posts/1', { method: 'DELETE' });
     });
     await waitFor(() => {
-      expect(screen.queryByText('Belajar Geologi')).toBeNull();
+      expect(screen.queryAllByText('Belajar Geologi')).toHaveLength(0);
     });
   });
 });

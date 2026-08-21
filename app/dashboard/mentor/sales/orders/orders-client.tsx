@@ -1,8 +1,9 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import Table from '@/modules/dashboard/components/Tables';
 import { Filter, MoreVertical, Search } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { twMerge } from 'tailwind-merge';
 import { toast } from 'sonner';
 import ConfirmDialog from '@/modules/dashboard/components/ConfirmDialog';
@@ -58,11 +59,19 @@ function getDiscountMeta(it: any) {
   return { totalDiscount: Math.max(0, total), storeDiscount: Math.max(0, storeOnly) };
 }
 
-export default function OrdersClient({ rows, variant }: { rows: Row[]; variant?: 'MENTOR' | 'ADMIN' }) {
+export default function OrdersClient({
+  rows,
+  variant,
+  defaultRangeLabel = 'Hari ini',
+}: {
+  rows: Row[];
+  variant?: 'MENTOR' | 'ADMIN';
+  defaultRangeLabel?: string;
+}) {
   const view = variant === 'ADMIN' ? 'ADMIN' : 'MENTOR';
-  const safeRows = Array.isArray(rows) ? rows : [];
+  const safeRows = useMemo(() => (Array.isArray(rows) ? rows : []), [rows]);
   const [dataRows, setDataRows] = useState<Row[]>(safeRows);
-  useEffect(() => setDataRows(safeRows), [rows]);
+  useEffect(() => setDataRows(safeRows), [safeRows]);
 
   const [activeTab, setActiveTab] = useState<
     'ALL' | 'PENDING_PAYMENT' | 'PROCESSING' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED' | 'REFUNDED' | 'FAILED'
@@ -266,7 +275,7 @@ export default function OrdersClient({ rows, variant }: { rows: Row[]; variant?:
   const visibleIds = filtered.map((r) => r.orderId);
   const isAllSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
 
-  const toggleAll = () => {
+  const toggleAll = useCallback(() => {
     setSelectedIds((prev) => {
       const prevSet = new Set(prev);
       const allSelected = visibleIds.length > 0 && visibleIds.every((id) => prevSet.has(id));
@@ -274,11 +283,11 @@ export default function OrdersClient({ rows, variant }: { rows: Row[]; variant?:
       for (const id of visibleIds) prevSet.add(id);
       return Array.from(prevSet);
     });
-  };
+  }, [visibleIds]);
 
-  const toggleOne = (id: string) => {
+  const toggleOne = useCallback((id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
+  }, []);
 
   const tabs: Array<{ key: typeof activeTab; label: string }> = [
     { key: 'ALL', label: 'All' },
@@ -353,13 +362,14 @@ export default function OrdersClient({ rows, variant }: { rows: Row[]; variant?:
         cell: (val: string) => <span className="font-semibold text-slate-900">{String(val || '-')}</span>,
       },
     ];
-  }, [isAllSelected, selectedIds, toggleAll, toggleOne]);
+  }, [isAllSelected, selectedIds, toggleAll, toggleOne, view]);
 
   return (
     <div className="space-y-8 pb-12">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Order Penjualan</h1>
         <p className="text-slate-500 text-sm mt-1">{view === 'ADMIN' ? 'Daftar order penjualan secara global.' : 'Daftar order yang berisi kursus/produk Anda.'}</p>
+        <p className="text-slate-400 text-xs mt-1">Perhitungan default: {defaultRangeLabel}</p>
       </div>
       <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
         <div className="flex flex-col lg:flex-row gap-4 justify-between items-start lg:items-center">
@@ -474,15 +484,16 @@ export default function OrdersClient({ rows, variant }: { rows: Row[]; variant?:
                       <div className="mt-2">
                         {(() => {
                           const raw = String(detail?.status || '').toUpperCase();
-                          const manual = String(detail?.manualPaymentStatus || '').toUpperCase();
-                          const payment = String(detail?.payment?.status || '').toUpperCase();
-                          const refunded = Number(detail?.refundTotal || 0) > 0 || Boolean(detail?.refundedAt);
+                          const refunded =
+                            view === 'MENTOR'
+                              ? Number(detail?.pricing?.order?.refundTotal || 0) > 0
+                              : Number(detail?.refundTotal || 0) > 0 || Boolean(detail?.refundedAt);
                           let ui: Row['status'] = 'PENDING_PAYMENT';
-                          if (payment === 'FAILED') ui = 'FAILED';
+                          if (view !== 'MENTOR' && String(detail?.payment?.status || '').toUpperCase() === 'FAILED') ui = 'FAILED';
                           else if (refunded) ui = 'REFUNDED';
                           else if (raw === 'CANCELLED') ui = 'CANCELLED';
                           else if (raw === 'SHIPPED') ui = 'PROCESSING';
-                          else if (manual === 'SUBMITTED') ui = 'ON_HOLD';
+                          else if (view !== 'MENTOR' && String(detail?.manualPaymentStatus || '').toUpperCase() === 'SUBMITTED') ui = 'ON_HOLD';
                           else if (raw === 'PAID') ui = 'COMPLETED';
                           return statusPill(ui);
                         })()}
@@ -495,7 +506,9 @@ export default function OrdersClient({ rows, variant }: { rows: Row[]; variant?:
                     <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                         <div className="text-xs font-extrabold text-slate-700">Order Total</div>
-                        <div className="text-sm text-slate-900 mt-1 font-extrabold">{formatIdr(Number(detail?.total || 0))}</div>
+                        <div className="text-sm text-slate-900 mt-1 font-extrabold">
+                          {formatIdr(Number(view === 'MENTOR' ? detail?.pricing?.order?.total || 0 : detail?.total || 0))}
+                        </div>
                       </div>
                       <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                         <div className="text-xs font-extrabold text-slate-700">{view === 'ADMIN' ? 'Komisi Platform' : 'Hasil Bersih'}</div>
@@ -687,21 +700,6 @@ export default function OrdersClient({ rows, variant }: { rows: Row[]; variant?:
                         </div>
                       ) : null}
 
-                      {detail?.affiliateCode || detail?.commission ? (
-                        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                          <div className="text-xs font-extrabold text-slate-900">Affiliate</div>
-                          <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="text-slate-600 font-semibold">Kode</div>
-                              <div className="text-slate-900 font-extrabold">{String(detail?.affiliateCode || '-')}</div>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="text-slate-600 font-semibold">Komisi</div>
-                              <div className="text-slate-900 font-extrabold">{formatIdr(Number(detail?.commission?.amount || 0))}</div>
-                            </div>
-                          </div>
-                        </div>
-                      ) : null}
                     </div>
                   ) : null}
 
@@ -764,7 +762,7 @@ export default function OrdersClient({ rows, variant }: { rows: Row[]; variant?:
                     </div>
                   ) : null}
 
-                  {detail?.manualPaymentProofUrl ? (
+                  {view === 'ADMIN' && detail?.manualPaymentProofUrl ? (
                     <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
                       <div className="text-xs font-extrabold text-slate-900">Bukti Pembayaran</div>
                       <a

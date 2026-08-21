@@ -3,6 +3,12 @@ import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { extractYoutubeId } from '@/modules/course/api/service';
 import { DripType } from '@prisma/client';
+import { syncCourseAggregates } from '@/utils/courseAggregates';
+import {
+  getCourseLessonSequence,
+  getCourseRuntimeSettings,
+  getLessonPayload,
+} from '@/modules/course/api/performance';
 
 async function buildCompletedSetForSequential(args: { userId: string; lessonIds: string[] }) {
   const { userId, lessonIds } = args;
@@ -60,41 +66,43 @@ export async function GET(
 
     const { id: courseId, lessonId } = await params;
 
-    const course = await prisma.course.findUnique({
-      where: { id: courseId },
+    const lessonContext = await prisma.lesson.findUnique({
+      where: { id: lessonId },
       select: {
         id: true,
-        instructorId: true,
-        dripEnabled: true,
-        dripType: true,
-        dripDays: true,
-        validityDays: true,
-        subscriptionEligible: true,
-        createdAt: true,
-        publishedAt: true,
+        isPreview: true,
+        module: {
+          select: {
+            courseId: true,
+            course: {
+              select: {
+                id: true,
+                instructorId: true,
+                dripEnabled: true,
+                dripType: true,
+                dripDays: true,
+                validityDays: true,
+                subscriptionEligible: true,
+                createdAt: true,
+                publishedAt: true,
+              },
+            },
+          },
+        },
       },
     });
 
-    if (!course) {
-      return NextResponse.json({ error: 'Course not found' }, { status: 404 });
-    }
-
-    const lessonMeta = await prisma.lesson.findUnique({
-      where: { id: lessonId },
-      select: { id: true, isPreview: true, order: true, module: { select: { courseId: true } } },
-    });
-
-    if (!lessonMeta) {
+    if (!lessonContext) {
       return NextResponse.json({ error: 'Lesson not found' }, { status: 404 });
     }
 
-    if (lessonMeta.module.courseId !== courseId) {
+    if (lessonContext.module.courseId !== courseId) {
       return NextResponse.json({ error: 'Invalid course context' }, { status: 400 });
     }
 
-    const settingsPage = await prisma.page.findUnique({ where: { slug: '__course_settings__' }, select: { content: true } });
-    const settings = settingsPage?.content ? (JSON.parse(settingsPage.content) as Record<string, unknown>) : {};
-    const allowStaffView = settings['allowStaffViewCourseContentWithoutEnrolling'] !== false;
+    const course = lessonContext.module.course;
+    const settings = await getCourseRuntimeSettings();
+    const allowStaffView = settings.allowStaffViewCourseContentWithoutEnrolling !== false;
 
     const isInstructor = course.instructorId === user.id;
     const isAdmin = user.role === 'ADMIN';
@@ -135,7 +143,7 @@ export async function GET(
     const accessStartDate = enrollment?.createdAt || activeSubscription?.startDate || null;
 
     if (!enrollment && !activeSubscription && !canBypassEnrollment) {
-      if (!lessonMeta.isPreview) {
+      if (!lessonContext.isPreview) {
         return NextResponse.json({ error: 'Not enrolled' }, { status: 403 });
       }
     }
@@ -149,18 +157,8 @@ export async function GET(
     }
 
     if (accessStartDate && !canBypassEnrollment && course.dripEnabled) {
-      const modules = await prisma.module.findMany({
-        where: { courseId },
-        orderBy: { order: 'asc' },
-        select: {
-          lessons: {
-            orderBy: { order: 'asc' },
-            select: { id: true, isPreview: true },
-          },
-        },
-      });
-
-      const globalLessons = modules.flatMap((m) => m.lessons.map((l) => ({ id: l.id, isPreview: l.isPreview })));
+      const sequence = await getCourseLessonSequence(courseId);
+      const globalLessons = sequence.globalLessons;
       const lessonIndexById = new Map(globalLessons.map((l, idx) => [l.id, idx]));
       const idx = lessonIndexById.get(lessonId) ?? 0;
 
@@ -197,27 +195,7 @@ export async function GET(
       }
     }
 
-    const lesson = await prisma.lesson.findUnique({
-      where: { id: lessonId },
-      include: {
-        assignment: true,
-        quiz: {
-            include: {
-                questions: {
-                    orderBy: { order: 'asc' }, // Ensure questions are ordered
-                    include: { 
-                        options: {
-                            orderBy: { order: 'asc' } // Ensure options are ordered
-                        } 
-                    }
-                }
-            }
-        },
-        attachments: {
-            orderBy: { createdAt: 'desc' }
-        }
-      }
-    });
+    const lesson = await getLessonPayload(lessonId);
 
     if (!lesson) return NextResponse.json({ error: 'Lesson not found' }, { status: 404 });
 
@@ -226,11 +204,14 @@ export async function GET(
         ...lesson,
         quiz: {
           ...lesson.quiz,
-          questions: lesson.quiz.questions.map(
-            ({ correctAnswer: _correctAnswer, correctAnswers: _correctAnswers, answerKey: _answerKey, explanation: _explanation, ...q }) => ({
-              ...q,
-            })
-          ),
+          questions: lesson.quiz.questions.map((question) => {
+            const { correctAnswer, correctAnswers, answerKey, explanation, ...safeQuestion } = question;
+            void correctAnswer;
+            void correctAnswers;
+            void answerKey;
+            void explanation;
+            return safeQuestion;
+          }),
         },
       };
       return NextResponse.json(safeLesson);
@@ -339,10 +320,11 @@ export async function PUT(
             maxFileSize: typeof body.assignment.maxFileSize === 'number' ? body.assignment.maxFileSize : 5,
           },
         });
-
+        await syncCourseAggregates(tx, courseId);
         return { ...updated, assignment };
       }
 
+      await syncCourseAggregates(tx, courseId);
       return updated;
     });
 
@@ -366,7 +348,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const { lessonId } = await params;
+    const { id: courseId, lessonId } = await params;
 
     // Phase 5: Authorization Layer - Ownership Check
     if (user.role !== 'ADMIN') {
@@ -380,8 +362,12 @@ export async function DELETE(
         }
     }
 
-    await prisma.lesson.delete({
-      where: { id: lessonId },
+    await prisma.$transaction(async (tx: any) => {
+      await tx.lesson.delete({
+        where: { id: lessonId },
+      });
+
+      await syncCourseAggregates(tx, courseId);
     });
 
     return NextResponse.json({ success: true });

@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import { Plus, Trash2, Save, GripVertical, Eye, Settings2, Code2, ArrowUp, ArrowDown, Columns2, LayoutTemplate, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Save, GripVertical, Eye, Settings2, Code2, ArrowUp, ArrowDown, LayoutTemplate, ChevronDown } from 'lucide-react';
 import MediaPickerModal from '@/modules/media/components/MediaPickerModal';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 

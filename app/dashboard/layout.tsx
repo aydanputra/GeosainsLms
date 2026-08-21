@@ -1,20 +1,36 @@
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/modules/auth/utils/auth';
-import { prisma } from '@/utils/prisma';
+import { getDashboardSiteLogoUrl, getDashboardUnreadCounts, getDashboardUserSnapshot, getVendorMenuState } from '@/modules/dashboard/api/performance';
 // Import client layout component
 import DashboardLayoutClient from '../../modules/dashboard/components/DashboardLayoutClient';
+
+type DashboardUser = {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+  role: 'ADMIN' | 'MENTOR' | 'STUDENT' | 'VENDOR';
+  isSuperAdmin: boolean;
+};
+
+type VendorMenuState = {
+  mode: 'NONE' | 'PENDING' | 'ACTIVE';
+  isOwner: boolean;
+};
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const db = prisma as any;
   const cookieStore = await cookies();
   const token = cookieStore.get('token')?.value;
   
   let role = 'ADMIN';
   let userId: string | null = null;
+  let initialUser: DashboardUser | null = null;
+  let initialVendorMenu: VendorMenuState = { mode: 'NONE', isOwner: false };
+  let initialSiteLogoUrl = '';
   
   if (token) {
     const payload = await verifyToken(token);
@@ -25,52 +41,55 @@ export default async function DashboardLayout({
     if (payload?.id) userId = String(payload.id);
   }
 
-  const messagePredicate = {
-    OR: [
-      { title: { startsWith: 'Admin' } },
-      { title: { startsWith: 'Kebijakan' } },
-      { title: { startsWith: 'Program' } },
-      { title: { startsWith: 'Promo' } },
-      { title: { startsWith: 'Diskon' } },
-      { title: { startsWith: 'Pesan dari' } },
-      { title: { startsWith: 'Direct Message' } },
-      { title: { startsWith: 'DM' } },
-      { title: { startsWith: 'Pesan Kursus' } },
-      { title: { startsWith: 'Pesan Produk' } },
-      { title: { startsWith: 'Komentar' } },
-      { title: { startsWith: 'Q&A' } },
-      { title: { startsWith: 'Balasan dari' } },
-      { title: { startsWith: 'Tugas' } },
-      { title: { startsWith: 'Pelajaran' } },
-      { title: { startsWith: 'Materi' } },
-    ],
-  };
+  if (userId) {
+    try {
+      const user = await getDashboardUserSnapshot(userId);
+
+      if (user?.id && user?.email && user?.role) {
+        const normalizedRole = String(user.role).toUpperCase();
+        const allowed = new Set(['ADMIN', 'MENTOR', 'STUDENT', 'VENDOR']);
+        const safeRole = (allowed.has(normalizedRole) ? normalizedRole : role) as DashboardUser['role'];
+        role = safeRole;
+        initialUser = {
+          id: String(user.id),
+          name:
+            typeof user.name === 'string' && user.name.trim()
+              ? user.name.trim()
+              : String(user.email).split('@')[0],
+          email: String(user.email),
+          avatarUrl: typeof user.avatarUrl === 'string' ? user.avatarUrl : null,
+          role: safeRole,
+          isSuperAdmin: Boolean((user as any).isSuperAdmin),
+        };
+      }
+    } catch {
+      initialUser = null;
+    }
+  }
+
+  if (userId && role !== 'ADMIN' && role !== 'VENDOR') {
+    try {
+      initialVendorMenu = await getVendorMenuState(userId);
+    } catch {
+      initialVendorMenu = { mode: 'NONE', isOwner: false };
+    }
+  }
+
+  try {
+    initialSiteLogoUrl = await getDashboardSiteLogoUrl();
+  } catch {
+    initialSiteLogoUrl = '';
+  }
 
   let qaUnansweredCount = 0;
   let notificationUnreadCount = 0;
   let dmUnreadCount = 0;
   if (userId) {
     try {
-      const [qaCount, alertCount, dmA, dmB] = await Promise.all([
-        prisma.notification.count({
-          where: { userId, read: false, ...(messagePredicate as any) },
-        }),
-        prisma.notification.count({
-          where: { userId, read: false, NOT: messagePredicate as any },
-        }),
-        db.directThread.aggregate({
-          where: { userAId: userId },
-          _sum: { unreadCountA: true },
-        }),
-        db.directThread.aggregate({
-          where: { userBId: userId },
-          _sum: { unreadCountB: true },
-        }),
-      ]);
-
-      dmUnreadCount = Number(dmA?._sum?.unreadCountA || 0) + Number(dmB?._sum?.unreadCountB || 0);
-      qaUnansweredCount = Number(qaCount || 0) + dmUnreadCount;
-      notificationUnreadCount = Number(alertCount || 0);
+      const counts = await getDashboardUnreadCounts(userId);
+      dmUnreadCount = Number(counts.dmUnreadCount || 0);
+      qaUnansweredCount = Number(counts.qaUnansweredCount || 0);
+      notificationUnreadCount = Number(counts.notificationUnreadCount || 0);
     } catch {
       qaUnansweredCount = 0;
       notificationUnreadCount = 0;
@@ -81,6 +100,9 @@ export default async function DashboardLayout({
   return (
     <DashboardLayoutClient
       role={role as any}
+      initialUser={initialUser}
+      initialVendorMenu={initialVendorMenu}
+      initialSiteLogoUrl={initialSiteLogoUrl}
       qaUnansweredCount={qaUnansweredCount}
       notificationUnreadCount={notificationUnreadCount}
     >

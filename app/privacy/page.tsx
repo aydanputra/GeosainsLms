@@ -1,5 +1,3 @@
-export const dynamic = 'force-dynamic';
-
 export default function PrivacyPage() {
   return (
     <main className="min-h-screen bg-slate-50">
@@ -19,4 +17,3 @@ export default function PrivacyPage() {
     </main>
   );
 }
-

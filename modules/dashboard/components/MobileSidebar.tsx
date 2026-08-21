@@ -7,10 +7,23 @@ import { X } from 'lucide-react';
 
 interface MobileSidebarProps {
   role: 'ADMIN' | 'MENTOR' | 'STUDENT' | 'VENDOR';
+  currentUser?: {
+    id: string;
+    name: string;
+    email: string;
+    avatarUrl?: string | null;
+    role: 'ADMIN' | 'MENTOR' | 'STUDENT' | 'VENDOR';
+    isSuperAdmin?: boolean;
+  } | null;
+  initialVendorMenu?: {
+    mode: 'NONE' | 'PENDING' | 'ACTIVE';
+    isOwner: boolean;
+  };
+  initialSiteLogoUrl?: string;
   qaUnansweredCount?: number;
 }
 
-export default function MobileSidebar({ role, qaUnansweredCount }: MobileSidebarProps) {
+export default function MobileSidebar({ role, currentUser = null, initialVendorMenu, initialSiteLogoUrl = '', qaUnansweredCount }: MobileSidebarProps) {
   const { sidebarOpen, setSidebarOpen } = useDashboardStore();
 
   return (
@@ -32,7 +45,13 @@ export default function MobileSidebar({ role, qaUnansweredCount }: MobileSidebar
         )}
       >
         <div className="h-full relative">
-          <Sidebar role={role} qaUnansweredCount={qaUnansweredCount} />
+          <Sidebar
+            role={role}
+            qaUnansweredCount={qaUnansweredCount}
+            currentUser={currentUser}
+            initialVendorMenu={initialVendorMenu}
+            initialSiteLogoUrl={initialSiteLogoUrl}
+          />
           
           {/* Close button inside drawer for accessibility */}
           <button 

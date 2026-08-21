@@ -69,7 +69,26 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const { id } = await params;
     const product = await getProductById(id);
     if (!product) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
-    return NextResponse.json(product);
+
+    const safeVendor = product.vendor
+      ? {
+          id: product.vendor.id,
+          name: product.vendor.name,
+          slug: product.vendor.slug,
+          description: product.vendor.description,
+          status: product.vendor.status,
+          contactEmail: product.vendor.contactEmail,
+          contactPhone: product.vendor.contactPhone,
+          city: product.vendor.city,
+          province: product.vendor.province,
+          country: product.vendor.country,
+        }
+      : null;
+
+    return NextResponse.json({
+      ...product,
+      vendor: safeVendor,
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Failed to fetch product' }, { status: 500 });
   }

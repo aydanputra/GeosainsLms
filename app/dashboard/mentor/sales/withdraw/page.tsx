@@ -130,7 +130,6 @@ export default async function Page() {
   const courseFeePaid = Math.max(0, (courseGrossPaid * feePercent) / 100);
   const courseNetEligible = Math.max(0, (courseGrossEligible * mentorPercent) / 100);
   const courseNetHold = Math.max(0, (courseGrossHold * mentorPercent) / 100);
-  const courseNetPaid = Math.max(0, (courseGrossPaid * mentorPercent) / 100);
 
   const approvedVendors = await prisma.shopVendor.findMany({
     where: role === 'ADMIN' ? undefined : { status: 'APPROVED', OR: [{ ownerId: userId }, { members: { some: { userId } } }] },
@@ -225,7 +224,6 @@ export default async function Page() {
 
   const productGrossPaid = productGrossEligible + productGrossHold;
   const productFeePaid = productFeeEligible + productFeeHold;
-  const productNetPaid = productNetEligible + productNetHold;
 
   const orderWhereRelevant: any = {
     status: 'PAID',

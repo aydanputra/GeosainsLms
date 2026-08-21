@@ -1,17 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
-
-function safeParse(content: string | null | undefined) {
-  if (!content) return {};
-  try {
-    const parsed = JSON.parse(content);
-    if (!parsed || typeof parsed !== 'object') return {};
-    return parsed as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
+import { getCourseAccessContext, getCourseRuntimeSettings } from '@/modules/course/api/performance';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -22,15 +12,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const user = await verifyToken(token);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const page = await prisma.page.findUnique({ where: { slug: '__course_settings__' }, select: { content: true } });
-    const settings = safeParse(page?.content);
-    const enabled = settings['courseRetakeEnabled'] === true;
+    const settings = await getCourseRuntimeSettings();
+    const enabled = settings.courseRetakeEnabled === true;
     if (!enabled) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-    const course = await prisma.course.findUnique({
-      where: { id: courseId },
-      select: { id: true, deletedAt: true, validityDays: true, subscriptionEligible: true },
-    });
+    const course = await getCourseAccessContext(courseId);
     if (!course || course.deletedAt) return NextResponse.json({ error: 'Course not found' }, { status: 404 });
 
     const enrollment = await prisma.enrollment.findUnique({

@@ -22,7 +22,10 @@ export default async function Page() {
   const instructorName = user?.name || user?.email || 'Mentor';
 
   const courses = await prisma.course.findMany({
-    where: { instructorId: userId },
+    where: {
+      instructorId: userId,
+      deletedAt: null,
+    },
     include: {
       _count: { select: { enrollments: true } },
     },

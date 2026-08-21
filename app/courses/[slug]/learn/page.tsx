@@ -47,8 +47,11 @@ export default async function LearnCoursePage({
     where: { slug },
     select: {
       id: true,
+      title: true,
       slug: true,
       status: true,
+      enableQA: true,
+      reviewsEnabled: true,
       instructorId: true,
       validityDays: true,
       subscriptionEligible: true,
@@ -149,6 +152,10 @@ export default async function LearnCoursePage({
   return (
     <CoursePlayerPage
       courseId={course.id}
+      courseSlug={course.slug}
+      courseTitle={course.title}
+      enableQA={course.enableQA}
+      reviewsEnabled={course.reviewsEnabled}
       autoLoadNextCourseContent={autoLoadNextCourseContent}
       courseRetakeEnabled={courseRetakeEnabled}
     />

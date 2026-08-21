@@ -339,8 +339,8 @@ export default function AdminCourseReports({ courses }: { courses: CourseOption[
     const preset = getPresetDates('30D');
     setFromDate(preset.from);
     setToDate(preset.to);
-    loadOverview('30D');
-  }, []);
+    void loadOverview('30D');
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const applyFilters = async () => {
     if (tab === 'overview') await loadOverview();

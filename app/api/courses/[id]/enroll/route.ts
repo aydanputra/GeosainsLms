@@ -3,6 +3,7 @@ import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { CourseStatus } from '@prisma/client';
 import { isSameOrigin } from '@/modules/auth/utils/security';
+import { getCourseCommerceContext } from '@/modules/course/api/performance';
 
 async function hasActiveSubscription(userId: string) {
   const now = new Date();
@@ -62,23 +63,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Sesi login tidak valid' }, { status: 401 });
     }
 
-    const course = await prisma.course.findUnique({
-      where: { id: courseId },
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        price: true,
-        status: true,
-        deletedAt: true,
-        instructorId: true,
-        enrollmentEndDate: true,
-        maxStudents: true,
-        validityDays: true,
-        subscriptionEligible: true,
-        requirements: true,
-      },
-    });
+    const course = await getCourseCommerceContext(courseId);
 
     if (!course || course.deletedAt) {
       return NextResponse.json({ error: 'Kursus tidak ditemukan' }, { status: 404 });

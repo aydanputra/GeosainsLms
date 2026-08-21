@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Table from '../../components/Tables';
 import Cards from '../../components/Cards';
 import EmptyState from '../../components/EmptyState';
@@ -120,7 +120,7 @@ export default function AdminBlog({ posts: initialPosts, categories, tags, canMa
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  const toggleAllVisible = () => {
+  const toggleAllVisible = useCallback(() => {
     setSelectedIds((prev) => {
       const prevSet = new Set(prev);
       const allSelected = visibleIds.length > 0 && visibleIds.every((id) => prevSet.has(id));
@@ -128,7 +128,7 @@ export default function AdminBlog({ posts: initialPosts, categories, tags, canMa
       for (const id of visibleIds) prevSet.add(id);
       return Array.from(prevSet);
     });
-  };
+  }, [visibleIds]);
 
   const metrics = [
     { label: 'Total Artikel', value: posts.length, color: 'bg-blue-500' },

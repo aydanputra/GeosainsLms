@@ -117,7 +117,6 @@ export async function GET(req: NextRequest) {
     const rows = baseThreads
       .map((t: any) => {
         const aRole = String(t.userA?.role || '').toUpperCase();
-        const bRole = String(t.userB?.role || '').toUpperCase();
         const customer = aRole === 'ADMIN' ? t.userB : t.userA;
         const state = computeTicketState(logsByThreadId.get(String(t.id)) || []);
         const assignedToAdminId = state.assignedToAdminId;

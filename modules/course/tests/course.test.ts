@@ -1,13 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createCourse, getCourses, submitQuiz, generateCertificate } from '../api/service';
+import { createCourse, submitQuiz, generateCertificate } from '../api/service';
 import { prisma } from '@/utils/prisma';
+
+vi.mock('@/modules/certificates/api/service', () => ({
+  issueCertificateIfEligible: vi.fn(),
+}));
 
 // Mock dependencies
 vi.mock('@/utils/prisma', () => ({
   prisma: {
+    page: {
+      findUnique: vi.fn(),
+    },
     course: {
       create: vi.fn(),
       findMany: vi.fn(),
+      findUnique: vi.fn(),
+    },
+    lesson: {
       findUnique: vi.fn(),
     },
     userProgress: {
@@ -22,26 +32,57 @@ vi.mock('@/utils/prisma', () => ({
     },
     quiz: {
       findUnique: vi.fn(),
-    }
+    },
+    quizAttempt: {
+      count: vi.fn(),
+      create: vi.fn(),
+    },
+    $transaction: vi.fn(),
   },
 }));
 
 describe('Course Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (prisma.page.findUnique as any).mockResolvedValue(null);
+    (prisma.lesson.findUnique as any).mockResolvedValue({ id: 'lesson-1', module: { courseId: 'course-1' } });
+    (prisma.quizAttempt.count as any).mockResolvedValue(0);
+    (prisma.quizAttempt.create as any).mockResolvedValue({ id: 'attempt-1' });
+    (prisma.$transaction as any).mockImplementation(async (callback: any) =>
+      callback({
+        quizAttempt: prisma.quizAttempt,
+        userProgress: prisma.userProgress,
+      })
+    );
   });
 
   describe('createCourse', () => {
-    it('should create a course successfully', async () => {
+    it('should create a course successfully and sanitize description', async () => {
       const mockCourse = {
         title: 'New Course',
         instructorId: 'user-1',
+        description: '<p>Aman</p><script>alert(1)</script>',
+        price: 0,
+        subscriptionEligible: false,
+        status: 'DRAFT' as const,
+        level: 'BEGINNER' as const,
+        enableQA: true,
+        isPublic: false,
+        reviewsEnabled: true,
+        certificateEnabled: true,
+        dripEnabled: false,
+        dripType: 'NONE' as const,
       };
       (prisma.course.create as any).mockResolvedValue({ id: '1', ...mockCourse });
 
       const result = await createCourse(mockCourse);
 
-      expect(prisma.course.create).toHaveBeenCalled();
+      expect(prisma.course.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          title: 'New Course',
+          description: '<p>Aman</p>',
+        }),
+      }));
       expect(result).toHaveProperty('id', '1');
     });
   });
@@ -57,16 +98,24 @@ describe('Course Service', () => {
       };
       (prisma.quiz.findUnique as any).mockResolvedValue(mockQuiz);
       (prisma.userProgress.findUnique as any).mockResolvedValue(null);
-      (prisma.userProgress.create as any).mockResolvedValue({ completed: true, score: 100 });
+      (prisma.userProgress.create as any).mockResolvedValue({ completed: true, lessonId: 'lesson-1' });
 
       // Note: the implementation expects answers array. [0, 1] means Q1 answer is index 0, Q2 answer is index 1
-      await submitQuiz('user-1', 'lesson-1', [0, 1]);
+      const result = await submitQuiz('user-1', 'lesson-1', [0, 1]);
 
-      expect(prisma.quiz.findUnique).toHaveBeenCalledWith({ where: { lessonId: 'lesson-1' }, include: { questions: true } });
-      // Score should be 100% (2/2 correct)
-      expect(prisma.userProgress.create).toHaveBeenCalledWith(expect.objectContaining({
-        data: expect.objectContaining({ score: 100 })
-      }));
+      expect(prisma.quiz.findUnique).toHaveBeenCalledWith({
+        where: { lessonId: 'lesson-1' },
+        include: { questions: { orderBy: { order: 'asc' } } },
+      });
+      expect(prisma.userProgress.create).toHaveBeenCalledWith({
+        data: {
+          userId: 'user-1',
+          lessonId: 'lesson-1',
+          completed: true,
+        },
+      });
+      expect(result.score).toBe(100);
+      expect(result.passed).toBe(true);
     });
   });
 
@@ -83,27 +132,25 @@ describe('Course Service', () => {
         ]
       };
       (prisma.course.findUnique as any).mockResolvedValue(mockCourse);
-      (prisma.userProgress.findMany as any).mockResolvedValue([{ lessonId: 'l1', completed: true }]);
-      (prisma.certificate.findUnique as any).mockResolvedValue(null);
-      (prisma.certificate.create as any).mockResolvedValue({ code: 'CERT-123' });
+      const { issueCertificateIfEligible } = await import('@/modules/certificates/api/service');
+      (issueCertificateIfEligible as any).mockResolvedValue({ code: 'CERT-123' });
 
       const result = await generateCertificate('user-1', 'course-1');
 
-      expect(prisma.certificate.create).toHaveBeenCalled();
+      expect(issueCertificateIfEligible).toHaveBeenCalledWith('user-1', 'course-1');
       expect(result).toHaveProperty('code', 'CERT-123');
     });
 
     it('should throw error if course not completed', async () => {
       const mockCourse = {
         id: 'course-1',
-        modules: [
-          { lessons: [{ id: 'l1' }] }
-        ]
+        certificateEnabled: true,
       };
       (prisma.course.findUnique as any).mockResolvedValue(mockCourse);
-      (prisma.userProgress.findMany as any).mockResolvedValue([]); // No progress
+      const { issueCertificateIfEligible } = await import('@/modules/certificates/api/service');
+      (issueCertificateIfEligible as any).mockResolvedValue(null);
 
-      await expect(generateCertificate('user-1', 'course-1')).rejects.toThrow('Course not completed');
+      await expect(generateCertificate('user-1', 'course-1')).rejects.toThrow('Kursus belum selesai');
     });
   });
 });

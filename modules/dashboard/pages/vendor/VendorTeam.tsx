@@ -1,23 +1,38 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Plus, Trash2, Users } from 'lucide-react';
 
 type VendorOption = { id: string; name: string; slug: string; status: string };
 type MemberRow = { id: string; role: string; createdAt: string; user: { id: string; name: string | null; email: string } };
 
-export default function VendorTeam({ vendors }: { vendors: VendorOption[] }) {
+export default function VendorTeam({
+  vendors,
+  initialMembers = [],
+  initialVendorId = '',
+}: {
+  vendors: VendorOption[];
+  initialMembers?: MemberRow[];
+  initialVendorId?: string;
+}) {
   const options = useMemo(() => vendors || [], [vendors]);
-  const [activeVendorId, setActiveVendorId] = useState<string>(options[0]?.id || '');
-  const [members, setMembers] = useState<MemberRow[]>([]);
+  const [activeVendorId, setActiveVendorId] = useState<string>(initialVendorId || options[0]?.id || '');
+  const [members, setMembers] = useState<MemberRow[]>(Array.isArray(initialMembers) ? initialMembers : []);
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const usedInitialMembersRef = useRef(false);
 
   useEffect(() => {
     if (!activeVendorId) return;
+    if (activeVendorId === initialVendorId && !usedInitialMembersRef.current) {
+      usedInitialMembersRef.current = true;
+      setMembers(Array.isArray(initialMembers) ? initialMembers : []);
+      setIsLoading(false);
+      return;
+    }
     let active = true;
     setIsLoading(true);
     (async () => {
@@ -39,7 +54,7 @@ export default function VendorTeam({ vendors }: { vendors: VendorOption[] }) {
     return () => {
       active = false;
     };
-  }, [activeVendorId]);
+  }, [activeVendorId, initialMembers, initialVendorId]);
 
   const addMember = async () => {
     const value = email.trim().toLowerCase();

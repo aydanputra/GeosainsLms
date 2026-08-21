@@ -134,6 +134,37 @@ type GalleryContent = {
   items?: Array<{ imageUrl?: string; caption?: string; href?: string }>;
 };
 
+type InitialCourse = {
+  id: string;
+  slug: string | null;
+  title: string;
+  thumbnailUrl: string | null;
+  price: number | null;
+  normalPrice?: number | null;
+  instructor?: { name: string | null; email: string | null } | null;
+  level?: string | null;
+  ratingAvg?: number | null;
+  ratingCount?: number | null;
+  isPublic?: boolean | null;
+};
+
+type InitialVendor = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  logoUrl: string | null;
+  coverUrl: string | null;
+  city: string | null;
+  province: string | null;
+  country: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  ratingAvg: number;
+  ratingCount: number;
+  productCount: number;
+};
+
 function sanitizeJsonString(input: string) {
   let inString = false;
   let escaped = false;
@@ -227,7 +258,19 @@ function getSpacingStyle(content: unknown): CSSProperties | undefined {
   };
 }
 
-export default function SectionBlock({ content }: { content: SectionContent }) {
+export default function SectionBlock({
+  content,
+  initialCourses = [],
+  coursesHydratedFromServer = false,
+  initialVendors = [],
+  vendorsHydratedFromServer = false,
+}: {
+  content: SectionContent;
+  initialCourses?: InitialCourse[];
+  coursesHydratedFromServer?: boolean;
+  initialVendors?: InitialVendor[];
+  vendorsHydratedFromServer?: boolean;
+}) {
   const columns = Array.isArray(content.columns) ? content.columns : [];
   const columnsCount = Math.max(1, Math.min(4, columns.length || 1));
 
@@ -323,10 +366,19 @@ export default function SectionBlock({ content }: { content: SectionContent }) {
                 if (widget.type === 'COURSES')
                   return spacingStyle ? (
                     <div key={widget.id} style={spacingStyle}>
-                      <CoursesBlock content={widgetContent as CoursesContent} />
+                      <CoursesBlock
+                        content={widgetContent as CoursesContent}
+                        initialCourses={initialCourses}
+                        hydratedFromServer={coursesHydratedFromServer}
+                      />
                     </div>
                   ) : (
-                    <CoursesBlock key={widget.id} content={widgetContent as CoursesContent} />
+                    <CoursesBlock
+                      key={widget.id}
+                      content={widgetContent as CoursesContent}
+                      initialCourses={initialCourses}
+                      hydratedFromServer={coursesHydratedFromServer}
+                    />
                   );
                 if (widget.type === 'GRID')
                   return spacingStyle ? (
@@ -367,10 +419,19 @@ export default function SectionBlock({ content }: { content: SectionContent }) {
                 if (widget.type === 'VENDORS')
                   return spacingStyle ? (
                     <div key={widget.id} style={spacingStyle}>
-                      <VendorsBlock content={widgetContent as VendorsContent} />
+                      <VendorsBlock
+                        content={widgetContent as VendorsContent}
+                        initialVendors={initialVendors}
+                        hydratedFromServer={vendorsHydratedFromServer}
+                      />
                     </div>
                   ) : (
-                    <VendorsBlock key={widget.id} content={widgetContent as VendorsContent} />
+                    <VendorsBlock
+                      key={widget.id}
+                      content={widgetContent as VendorsContent}
+                      initialVendors={initialVendors}
+                      hydratedFromServer={vendorsHydratedFromServer}
+                    />
                   );
 
                 if (widget.type === 'GALLERY')

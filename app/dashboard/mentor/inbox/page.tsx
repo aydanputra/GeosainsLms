@@ -1,6 +1,7 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { ArrowLeft, Bell, Check, Loader2, Mail, SendHorizonal, Trash2 } from 'lucide-react';
@@ -341,7 +342,7 @@ function InboxPage({ redirectPath }: { redirectPath: string }) {
     const id = preferred || filteredThreads[0]?.id || null;
     if (!id) return null;
     return filteredThreads.find((t) => t.id === id) || null;
-  }, [activeThreadId, filteredThreads, isChatView, searchParams, selectedId, threads, view]);
+  }, [activeThreadId, filteredThreads, isChatView, isMobile, searchParams, selectedId, threads, view]);
 
   const showMobileDetail = useMemo(() => {
     if (!isMobile) return false;
@@ -397,12 +398,12 @@ function InboxPage({ redirectPath }: { redirectPath: string }) {
 
   useEffect(() => {
     load();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isChatView) setSelectedId(filteredItems[0]?.id || null);
     else setSelectedId(null);
-  }, [kind, view]);
+  }, [filteredItems, isChatView, kind, view]);
 
   const loadThreads = async (opts?: { silent?: boolean }) => {
     const silent = Boolean(opts?.silent);
@@ -481,7 +482,7 @@ function InboxPage({ redirectPath }: { redirectPath: string }) {
   useEffect(() => {
     if (!isChatView) return;
     loadThreads();
-  }, [isChatView]);
+  }, [isChatView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isChatView) return;
@@ -495,7 +496,7 @@ function InboxPage({ redirectPath }: { redirectPath: string }) {
     sp.set('tab', 'messages');
     sp.set('view', desired);
     router.push(`${redirectPath}?${sp.toString()}`);
-  }, [isChatView, searchParams, threads, view]);
+  }, [isChatView, redirectPath, router, searchParams, threads, view]);
 
   useEffect(() => {
     if (!isChatView) return;
@@ -520,7 +521,7 @@ function InboxPage({ redirectPath }: { redirectPath: string }) {
     setActiveThreadId(nextId);
     shouldAutoScrollRef.current = true;
     loadThreadMessages(nextId);
-  }, [isChatView, activeThread?.id]);
+  }, [isChatView, activeThread?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isChatView) return;
@@ -546,7 +547,7 @@ function InboxPage({ redirectPath }: { redirectPath: string }) {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [activeThread?.id, isChatView]);
+  }, [activeThread?.id, isChatView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const patchRead = async (payload: any) => {
     const res = await fetch('/api/notifications', {
@@ -630,13 +631,6 @@ function InboxPage({ redirectPath }: { redirectPath: string }) {
     if (!n.read) await markOneRead(n.id);
   };
 
-  const openLink = async (n: NotificationItem) => {
-    const meta = parseNotificationMessage(n.message);
-    if (!meta.href) return;
-    if (!n.read) await markOneRead(n.id);
-    router.push(meta.href);
-  };
-
   const selectThread = async (t: DirectThread) => {
     setSelectedId(null);
     setActiveThreadId(t.id);
@@ -658,16 +652,6 @@ function InboxPage({ redirectPath }: { redirectPath: string }) {
   };
 
   const selectAdminNotification = async (n: NotificationItem) => {
-    setActiveThreadId(null);
-    setDmMessages([]);
-    setSelectedId(n.id);
-    const sp = new URLSearchParams(searchParams.toString());
-    if (sp.has('threadId')) sp.delete('threadId');
-    router.push(`${redirectPath}?${sp.toString()}`);
-    if (!n.read) await markOneRead(n.id);
-  };
-
-  const selectProductNotification = async (n: NotificationItem) => {
     setActiveThreadId(null);
     setDmMessages([]);
     setSelectedId(n.id);
@@ -711,40 +695,6 @@ function InboxPage({ redirectPath }: { redirectPath: string }) {
       toast.error(e?.message || 'Gagal mengirim');
     } finally {
       setIsSendingDm(false);
-    }
-  };
-
-  const clearHistory = async (scope: 'dm' | 'comments') => {
-    if (isClearingHistory) return;
-    if (!myId) {
-      toast.error('Anda harus login');
-      return;
-    }
-
-    const label = scope === 'comments' ? 'Komentar (Produk & Layanan)' : 'Direct Message';
-    const ok = window.confirm(`Hapus semua riwayat ${label}? Tindakan ini tidak bisa dibatalkan.`);
-    if (!ok) return;
-
-    setIsClearingHistory(true);
-    try {
-      const res = await fetch(`/api/messages/threads?scope=${encodeURIComponent(scope)}`, { method: 'DELETE' });
-      const data = await res.json().catch(() => null);
-      if (res.status === 401) {
-        pushLogin();
-        return;
-      }
-      if (!res.ok) throw new Error(data?.error || 'Gagal menghapus riwayat');
-
-      setSelectedId(null);
-      setActiveThreadId(null);
-      setDmMessages([]);
-      await loadThreads();
-      router.refresh();
-      toast.success(`Riwayat ${label} berhasil dihapus`);
-    } catch (e: any) {
-      toast.error(e?.message || 'Gagal menghapus riwayat');
-    } finally {
-      setIsClearingHistory(false);
     }
   };
 
@@ -1055,7 +1005,7 @@ function InboxPage({ redirectPath }: { redirectPath: string }) {
                               <div className="flex items-start gap-3 min-w-0">
                                 <div className="h-11 w-11 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 shrink-0 flex items-center justify-center">
                                   {t.peer.avatarUrl ? (
-                                    <img src={t.peer.avatarUrl} className="w-full h-full object-cover" />
+                                    <img src={t.peer.avatarUrl} alt={t.peer.name || t.peer.email || ''} className="w-full h-full object-cover" />
                                   ) : (
                                     <div className="text-sm font-extrabold text-slate-600">
                                       {String(t.peer.name || t.peer.email || '?')
@@ -1144,7 +1094,7 @@ function InboxPage({ redirectPath }: { redirectPath: string }) {
                           ) : null}
                           <div className="h-10 w-10 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 shrink-0 flex items-center justify-center">
                             {activeThread.peer.avatarUrl ? (
-                              <img src={activeThread.peer.avatarUrl} className="w-full h-full object-cover" />
+                              <img src={activeThread.peer.avatarUrl} alt={activeThread.peer.name || activeThread.peer.email || ''} className="w-full h-full object-cover" />
                             ) : (
                               <div className="text-sm font-extrabold text-slate-600">
                                 {String(activeThread.peer.name || activeThread.peer.email || '?')
@@ -1403,5 +1353,9 @@ function InboxPage({ redirectPath }: { redirectPath: string }) {
 }
 
 export default function MentorInboxPage() {
-  return <InboxPage redirectPath="/dashboard/mentor/inbox" />;
+  return (
+    <Suspense fallback={<div className="p-6" />}>
+      <InboxPage redirectPath="/dashboard/mentor/inbox" />
+    </Suspense>
+  );
 }

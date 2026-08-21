@@ -1,8 +1,10 @@
 import BlogListPage from '@/modules/blog/pages/BlogListPage';
+import { getPublicBlogPosts } from '@/modules/public/api/performance';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300;
 
-export default function Page() {
-  return <BlogListPage />;
+export default async function Page() {
+  const posts = await getPublicBlogPosts();
+
+  return <BlogListPage initialPosts={posts} />;
 }
-

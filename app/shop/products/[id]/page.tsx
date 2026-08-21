@@ -6,10 +6,15 @@ import ProductInfoTabs from '@/modules/shop/components/ProductInfoTabs';
 import ProductImageGallery from '@/modules/shop/components/ProductImageGallery';
 import { BadgeCheck, Store, Tag } from 'lucide-react';
 import type { Metadata } from 'next';
-import { headers } from 'next/headers';
 import { getAppUrl } from '@/modules/core/utils/appUrl';
+import { unstable_cache } from 'next/cache';
+import { getPublicProductRouteIds } from '@/modules/public/api/performance';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300;
+
+export async function generateStaticParams() {
+  return getPublicProductRouteIds();
+}
 
 function safeParse(content: string | null | undefined) {
   if (!content) return {};
@@ -44,19 +49,47 @@ function pickProductShareImage(appUrl: string, product: { imageUrl: unknown; ima
   return null;
 }
 
+const getSiteSettingsPage = unstable_cache(
+  async () => {
+    return prisma.page.findUnique({ where: { slug: '__site_settings__' }, select: { content: true, updatedAt: true } });
+  },
+  ['product-page-site-settings'],
+  { revalidate: 300 }
+);
+
+const getPublicProduct = unstable_cache(
+  async (idOrSlug: string) => {
+    return prisma.product.findFirst({
+      where: { OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
+      include: {
+        categoryRef: true,
+        vendor: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            description: true,
+            status: true,
+            contactEmail: true,
+            contactPhone: true,
+            city: true,
+            province: true,
+            country: true,
+          },
+        },
+      },
+    });
+  },
+  ['product-page-public-detail'],
+  { revalidate: 300 }
+);
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id: idOrSlug } = await params;
-  const hdrs = await headers();
-  const appUrl = getAppUrl(hdrs);
+  const appUrl = getAppUrl();
 
   try {
-    const [product, siteSettingsPage] = await Promise.all([
-      prisma.product.findFirst({
-        where: { OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
-        select: { id: true, slug: true, name: true, description: true, imageUrl: true, imageUrls: true, updatedAt: true },
-      }),
-      prisma.page.findUnique({ where: { slug: '__site_settings__' }, select: { content: true, updatedAt: true } }),
-    ]);
+    const [product, siteSettingsPage] = await Promise.all([getPublicProduct(idOrSlug), getSiteSettingsPage()]);
 
     const canonicalId = product?.slug || product?.id || idOrSlug;
     const canonical = `${appUrl}/shop/products/${encodeURIComponent(canonicalId)}`;
@@ -102,12 +135,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: idOrSlug } = await params;
 
-  const product = await prisma.product.findFirst({
-    where: { OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
-    include: { categoryRef: true, vendor: true },
-  });
+  const product = await getPublicProduct(idOrSlug);
 
   if (!product) return notFound();
+  const adminWhatsAppNumber =
+    (product.vendor as any)?.contactPhone && typeof (product.vendor as any).contactPhone === 'string'
+      ? String((product.vendor as any).contactPhone)
+      : '';
 
   const imageUrl =
     typeof product.imageUrl === 'string' && product.imageUrl.trim() && !product.imageUrl.startsWith('blob:') ? product.imageUrl : null;
@@ -118,6 +152,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const vendorLocation = [product.vendor?.city, product.vendor?.province, product.vendor?.country].filter(Boolean).join(', ');
   const productType = (product as any)?.type === 'SERVICE' || (product as any)?.type === 'RENTAL' ? (product as any).type : 'PHYSICAL';
   const isInStock = productType === 'SERVICE' ? true : Number(product.stock || 0) > 0;
+  const isRentalChatOnly = productType === 'RENTAL' && Number(product.price || 0) <= 0;
 
   const moreWhere: any = { id: { not: product.id } };
   if (product.vendorId) moreWhere.vendorId = product.vendorId;
@@ -128,7 +163,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     where: moreWhere,
     orderBy: { createdAt: 'desc' },
     take: 8,
-    select: { id: true, slug: true, name: true, description: true, price: true, imageUrl: true },
+    select: { id: true, slug: true, name: true, description: true, price: true, imageUrl: true, type: true },
   });
   const moreProductsNormalized = moreProducts.map((p) => ({
     ...p,
@@ -187,7 +222,9 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               {vendorLocation ? <div className="text-xs text-slate-500 font-semibold">{vendorLocation}</div> : null}
             </div>
 
-            <div className="mt-5 text-3xl font-extrabold text-indigo-700">IDR {Number(product.price).toLocaleString('id-ID')}</div>
+            <div className="mt-5 text-3xl font-extrabold text-indigo-700">
+              {isRentalChatOnly ? 'Hubungi Admin' : `IDR ${Number(product.price).toLocaleString('id-ID')}`}
+            </div>
 
             {product.description ? (
               <div className="mt-4 text-sm text-slate-600 leading-relaxed whitespace-pre-line">{product.description}</div>
@@ -197,7 +234,10 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
 
             <div className="mt-auto pt-6 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               {isInStock ? (
-                <AddToCartButton product={{ id: product.id, name: product.name, price: product.price, imageUrl: imageUrl, type: productType }} />
+                <AddToCartButton
+                  product={{ id: product.id, name: product.name, price: product.price, imageUrl: imageUrl, type: productType }}
+                  adminWhatsAppNumber={adminWhatsAppNumber}
+                />
               ) : (
                 <button
                   type="button"
@@ -236,6 +276,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
               : null
           }
           moreProducts={moreProductsNormalized}
+          adminWhatsAppNumber={adminWhatsAppNumber}
         />
       </div>
     </div>

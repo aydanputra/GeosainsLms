@@ -23,7 +23,7 @@ export default function MentorQuizzes({ quizzes }: MentorQuizzesProps) {
         columns={columns} 
         data={quizzes} 
         isLoading={false}
-        actions={(row) => (
+        actions={() => (
           <button className="text-indigo-600 hover:text-indigo-800 text-sm">Edit</button>
         )}
       />

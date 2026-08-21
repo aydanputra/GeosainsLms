@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     }
 
     const withdrawal = await requestWithdrawal(user.id, parsed.data.amount, parsed.data.note);
-    const withdrawalId = Array.isArray(withdrawal) ? ((withdrawal as any)?.[0]?.id ? String((withdrawal as any)[0].id) : null) : null;
+    const withdrawalId = (withdrawal as any)?.id ? String((withdrawal as any).id) : null;
 
     const adminUsers = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
     if (adminUsers.length > 0) {

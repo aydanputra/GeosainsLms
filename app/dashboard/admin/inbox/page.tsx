@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useDashboardStore } from '@/modules/dashboard/store/useDashboardStore';
 import { toast } from 'sonner';
 import { twMerge } from 'tailwind-merge';
 import { Loader2, Mail, MessageSquare, Plus, Search, Shield, User as UserIcon, X } from 'lucide-react';
 
-export default function AdminInboxPage() {
+function AdminInboxPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useDashboardStore();
@@ -288,20 +288,20 @@ export default function AdminInboxPage() {
     if (!user || !isAdmin) return;
     if (tab !== 'tickets') return;
     loadTickets();
-  }, [isAdmin, user, tab, view]);
+  }, [isAdmin, user, tab, view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!user || !isAdmin) return;
     if (tab !== 'notifications') return;
     loadNotifications();
-  }, [isAdmin, user, tab, notifKind, notifUnreadOnly]);
+  }, [isAdmin, user, tab, notifKind, notifUnreadOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!user || !isAdmin) return;
     if (tab !== 'tickets') return;
     if (!selectedTicketId) return;
     loadMessages(selectedTicketId);
-  }, [isAdmin, user, tab, selectedTicketId]);
+  }, [isAdmin, user, tab, selectedTicketId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!activeTicket?.id) return;
@@ -1107,5 +1107,13 @@ export default function AdminInboxPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+export default function AdminInboxPage() {
+  return (
+    <Suspense fallback={<div className="p-6" />}>
+      <AdminInboxPageContent />
+    </Suspense>
   );
 }

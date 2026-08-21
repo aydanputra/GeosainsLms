@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
-import { Prisma } from '@prisma/client';
 import { verifyToken } from '@/modules/auth/utils/auth';
 
 function toInt(value: string | null): number | null {

@@ -5,7 +5,10 @@ import { randomBytes } from 'crypto';
 import { prisma } from '@/utils/prisma';
 import { createToken, hashPassword } from '@/modules/auth/utils/auth';
 import { enforceRateLimit, getClientIp, isSameOrigin } from '@/modules/auth/utils/security';
-import { writeAuditLog } from '@/utils/audit';
+import { writeAuditLog, writeRateLimitAuditLog } from '@/utils/audit';
+import { issueVerificationEmail } from '@/modules/auth/utils/emailVerification';
+import { getAppUrl } from '@/modules/core/utils/appUrl';
+import { createPendingVerificationToken, setAuthCookies, setPendingVerificationCookie } from '@/modules/auth/utils/verificationAutoLogin';
 import fs from 'fs';
 import path from 'path';
 
@@ -96,6 +99,12 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
     const rl = enforceRateLimit({ key: `auth:google:${ip}`, limit: 25, windowMs: 15 * 60 * 1000 });
     if (!rl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        action: 'AUTH_GOOGLE_RATE_LIMITED',
+        key: `auth:google:${ip}`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      });
       return NextResponse.json(
         { error: 'Terlalu banyak percobaan. Coba lagi nanti.' },
         { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
@@ -142,22 +151,20 @@ export async function POST(req: NextRequest) {
           avatarUrl: picture || null,
           password: hashedPassword,
           role: 'STUDENT',
-          emailVerifiedAt: new Date(),
+          emailVerifiedAt: null,
         },
       });
       createdNew = true;
     } else {
       const shouldUpdate =
         (name && !user.name) ||
-        (picture && (!user.avatarUrl || user.avatarUrl.startsWith('blob:'))) ||
-        !user.emailVerifiedAt;
+        (picture && (!user.avatarUrl || user.avatarUrl.startsWith('blob:')));
       if (shouldUpdate) {
         user = await prisma.user.update({
           where: { id: user.id },
           data: {
             name: user.name || (name || null),
             avatarUrl: user.avatarUrl || (picture || null),
-            emailVerifiedAt: user.emailVerifiedAt ? undefined : new Date(),
           },
         });
       }
@@ -180,6 +187,38 @@ export async function POST(req: NextRequest) {
           })),
         });
       }
+    }
+
+    if (!user.emailVerifiedAt && user.role !== 'ADMIN') {
+      const issued = await issueVerificationEmail({
+        userId: String(user.id),
+        email,
+        name: user.name || name || null,
+        origin: getAppUrl(req.headers),
+      });
+      const devVerifyUrl = process.env.NODE_ENV !== 'production' ? issued.verifyUrl : undefined;
+      const response = NextResponse.json(
+        {
+          verificationSent: true,
+          createdNew,
+          devVerifyUrl,
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            avatarUrl: user.avatarUrl,
+            isSuperAdmin: Boolean((user as any).isSuperAdmin),
+          },
+        },
+        { status: 200 }
+      );
+      const pendingToken = await createPendingVerificationToken(String(user.id), {
+        source: 'google',
+        allowPasswordSetup: createdNew,
+      });
+      setPendingVerificationCookie(response, pendingToken);
+      return response;
     }
 
     if (Boolean((user as any).totpEnabled)) {
@@ -213,6 +252,7 @@ export async function POST(req: NextRequest) {
       role: user.role,
       isSuperAdmin: Boolean((user as any).isSuperAdmin),
       totpEnabled: Boolean((user as any).totpEnabled),
+      sessionVersion: Number((user as any).sessionVersion || 0),
     });
 
     const response = NextResponse.json(
@@ -231,14 +271,6 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     );
 
-    response.cookies.set('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 24,
-      path: '/',
-    });
-
     const sessionId = (() => {
       try {
         return crypto.randomUUID();
@@ -247,13 +279,7 @@ export async function POST(req: NextRequest) {
       }
     })();
 
-    response.cookies.set('sid', sessionId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 24,
-      path: '/',
-    });
+    setAuthCookies(response, token, sessionId);
 
     const country =
       (req as any)?.geo?.country ||

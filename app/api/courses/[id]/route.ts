@@ -4,8 +4,7 @@ import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
 import { CourseStatus, Prisma } from '@prisma/client';
 import { writeAuditLog } from '@/utils/audit';
-
-const COURSE_SETTINGS_SLUG = '__course_settings__';
+import { getCourseRuntimeSettings } from '@/modules/course/api/performance';
 
 function toNullableInt(value: unknown): number | null | undefined {
   if (value === '' || value === null) return null;
@@ -53,24 +52,12 @@ function toStringArray(value: unknown): string[] | undefined {
     .filter(Boolean);
 }
 
-function safeParseJsonObject(value: string | null | undefined): Record<string, unknown> {
-  if (!value) return {};
-  try {
-    const parsed = JSON.parse(value);
-    if (!parsed || typeof parsed !== 'object') return {};
-    return parsed as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-
 async function getCoursePermissionSettings() {
-  const page = await prisma.page.findUnique({ where: { slug: COURSE_SETTINGS_SLUG }, select: { content: true } });
-  const raw = safeParseJsonObject(page?.content);
+  const raw = await getCourseRuntimeSettings();
   return {
-    allowInstructorsToPublishCourses: raw['allowInstructorsToPublishCourses'] !== false,
-    allowInstructorsToTrashCourses: raw['allowInstructorsToTrashCourses'] !== false,
-    allowInstructorsToChangeCourseAuthor: raw['allowInstructorsToChangeCourseAuthor'] === true,
+    allowInstructorsToPublishCourses: raw.allowInstructorsToPublishCourses !== false,
+    allowInstructorsToTrashCourses: raw.allowInstructorsToTrashCourses !== false,
+    allowInstructorsToChangeCourseAuthor: raw.allowInstructorsToChangeCourseAuthor === true,
   };
 }
 

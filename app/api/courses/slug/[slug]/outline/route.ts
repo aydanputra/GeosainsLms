@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
-import { DripType, Prisma } from '@prisma/client';
+import { DripType } from '@prisma/client';
+import { getCourseOutlineBase, getCourseRuntimeSettings } from '@/modules/course/api/performance';
 
 async function addPassedAssignmentLessons(args: {
   userId: string;
@@ -58,64 +59,18 @@ export async function GET(
         user = await verifyToken(token);
     }
 
-    const settingsPage = await prisma.page.findUnique({ where: { slug: '__course_settings__' }, select: { content: true } });
-    const settings = settingsPage?.content ? (JSON.parse(settingsPage.content) as Record<string, unknown>) : {};
-    const mustLogin = settings['studentsMustBeLoggedInToViewCourse'] === true;
-    const allowStaffView = settings['allowStaffViewCourseContentWithoutEnrolling'] !== false;
+    const settings = await getCourseRuntimeSettings();
+    const mustLogin = settings.studentsMustBeLoggedInToViewCourse === true;
+    const allowStaffView = settings.allowStaffViewCourseContentWithoutEnrolling !== false;
 
     if (mustLogin && !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // 2. Fetch Course Structure (Lightweight)
-    const course = await prisma.course.findUnique({
-      where: { slug },
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        dripEnabled: true,
-        dripType: true,
-        dripDays: true,
-        validityDays: true,
-        subscriptionEligible: true,
-        createdAt: true,
-        publishedAt: true,
-        instructorId: true,
-        modules: {
-          orderBy: { order: 'asc' },
-          select: {
-            id: true,
-            title: true,
-            order: true,
-            lessons: {
-              select: {
-                id: true,
-                title: true,
-                type: true,
-                duration: true,
-                isPreview: true,
-                order: true,
-              },
-              orderBy: { order: 'asc' },
-            },
-          },
-        },
-        instructor: {
-          select: { id: true },
-        },
-      },
-    });
+    const course = await getCourseOutlineBase(slug);
 
     if (!course) return NextResponse.json({ error: 'Course not found' }, { status: 404 });
-
-    const moduleIds = course.modules.map((m) => m.id);
-    const moduleDescriptions = moduleIds.length
-      ? await prisma.$queryRaw<{ id: string; description: string | null }[]>(
-          Prisma.sql`SELECT "id", "description" FROM "Module" WHERE "id" IN (${Prisma.join(moduleIds)})`
-        )
-      : [];
-    const descriptionById = new Map(moduleDescriptions.map((r) => [r.id, r.description] as const));
 
     // 3. Fetch Enrollment (If User exists)
     let enrollment = null;
@@ -203,7 +158,6 @@ export async function GET(
     // 4. Calculate Lock Status per Lesson
     const modulesWithStatus = course.modules.map(module => ({
         ...module,
-        description: descriptionById.get(module.id) ?? null,
         lessons: module.lessons.map(lesson => {
             let isLocked = false;
             let unlockDate: Date | null = null;
@@ -297,6 +251,7 @@ export async function GET(
             title: course.title,
             slug: course.slug,
             dripEnabled: course.dripEnabled,
+            dripType: course.dripType,
             modules: modulesWithStatus
         }
     });

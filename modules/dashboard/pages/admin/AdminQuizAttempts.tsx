@@ -150,8 +150,8 @@ export default function AdminQuizAttempts({ courses }: { courses: CourseOption[]
   };
 
   useEffect(() => {
-    fetchAttempts({ reset: true });
-  }, []);
+    void fetchAttempts({ reset: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleAllOnPage = () => {
     const allIds = rows.map((r) => r.id);
@@ -201,7 +201,7 @@ export default function AdminQuizAttempts({ courses }: { courses: CourseOption[]
     setIsBulkWorking(true);
     try {
       for (const id of ids) {
-        // eslint-disable-next-line no-await-in-loop
+         
         await resetAttempt(id);
       }
       setSelectedIds(new Set());
@@ -607,4 +607,3 @@ export default function AdminQuizAttempts({ courses }: { courses: CourseOption[]
     </div>
   );
 }
-

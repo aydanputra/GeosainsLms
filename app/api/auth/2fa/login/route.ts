@@ -4,7 +4,7 @@ import { createToken } from '@/modules/auth/utils/auth';
 import { enforceRateLimit, getClientIp, isSameOrigin } from '@/modules/auth/utils/security';
 import { jwtVerify } from 'jose';
 import { createDecipheriv, createHash, createHmac } from 'crypto';
-import { writeAuditLog } from '@/utils/audit';
+import { writeAuditLog, writeRateLimitAuditLog } from '@/utils/audit';
 
 function getJwtKey() {
   const secret = process.env.JWT_SECRET;
@@ -92,6 +92,13 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
     const ipRl = enforceRateLimit({ key: `auth:2fa:login:ip:${ip}`, limit: 50, windowMs: 15 * 60 * 1000 });
     if (!ipRl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        action: 'AUTH_2FA_LOGIN_RATE_LIMITED',
+        key: `auth:2fa:login:ip:${ip}`,
+        retryAfterSeconds: ipRl.retryAfterSeconds,
+        metadata: { scope: 'ip' },
+      });
       return NextResponse.json(
         { error: 'Terlalu banyak percobaan. Coba lagi nanti.' },
         { status: 429, headers: { 'Retry-After': String(ipRl.retryAfterSeconds) } }
@@ -113,6 +120,15 @@ export async function POST(req: NextRequest) {
 
     const userRl = enforceRateLimit({ key: `auth:2fa:login:user:${uid}:${ip}`, limit: 10, windowMs: 15 * 60 * 1000 });
     if (!userRl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        action: 'AUTH_2FA_LOGIN_RATE_LIMITED',
+        key: `auth:2fa:login:user:${uid}:${ip}`,
+        retryAfterSeconds: userRl.retryAfterSeconds,
+        entityType: 'User',
+        entityId: uid,
+        metadata: { scope: 'user' },
+      });
       return NextResponse.json(
         { error: 'Terlalu banyak percobaan untuk akun ini. Coba lagi nanti.' },
         { status: 429, headers: { 'Retry-After': String(userRl.retryAfterSeconds) } }
@@ -121,7 +137,7 @@ export async function POST(req: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { id: uid },
-      select: { id: true, email: true, name: true, role: true, isSuperAdmin: true, totpEnabled: true, totpSecretEnc: true },
+      select: { id: true, email: true, name: true, role: true, isSuperAdmin: true, totpEnabled: true, totpSecretEnc: true, sessionVersion: true },
     });
     if (!user) return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
     if (!user.totpEnabled || !user.totpSecretEnc) return NextResponse.json({ error: '2FA tidak aktif' }, { status: 400 });
@@ -136,6 +152,7 @@ export async function POST(req: NextRequest) {
       role: user.role,
       isSuperAdmin: Boolean((user as any).isSuperAdmin),
       totpEnabled: true,
+      sessionVersion: Number((user as any).sessionVersion || 0),
     });
 
     const response = NextResponse.json(

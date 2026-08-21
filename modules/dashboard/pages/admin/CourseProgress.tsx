@@ -53,6 +53,7 @@ export default function CourseProgress({ progressData }: CourseProgressProps) {
   ];
 
   const handleGenerateCertificate = async (studentId: string) => {
+    void studentId;
     // Mock API call
     alert('Sertifikat berhasil dibuat (simulasi)');
   };

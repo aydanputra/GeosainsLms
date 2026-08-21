@@ -1,7 +1,8 @@
 "use client";
 
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
 
 type CategoryOption = { id: string; name: string };
@@ -15,12 +16,31 @@ type ShopProduct = {
   stock?: number | null;
   type?: 'PHYSICAL' | 'SERVICE' | 'RENTAL';
   imageUrl?: string | null;
+  imageUrls?: string[] | null;
   categoryId?: string | null;
   categoryRef?: { id: string; name: string } | null;
+  vendor?: { contactPhone?: string | null } | null;
   createdAt?: string | null;
 };
 
-export default function ShopPage() {
+type ShopProductsPage = {
+  items: ShopProduct[];
+  total: number;
+  take: number;
+  skip: number;
+  hasMore: boolean;
+  nextOffset: number;
+};
+
+const PRODUCTS_PER_BATCH = 12;
+
+export default function ShopPage({
+  initialProductsPage,
+  initialCategories = [],
+}: {
+  initialProductsPage?: ShopProductsPage;
+  initialCategories?: CategoryOption[];
+}) {
   const sortOptions = useMemo(
     () =>
       [
@@ -36,17 +56,45 @@ export default function ShopPage() {
   const [category, setCategory] = useState<string>('ALL');
   const [sort, setSort] = useState<'NEWEST' | 'PRICE_ASC' | 'PRICE_DESC' | 'NAME_ASC'>('NEWEST');
   const [onlyInStock, setOnlyInStock] = useState(false);
+  const defaultProductsPage = initialProductsPage ?? {
+    items: [],
+    total: 0,
+    take: PRODUCTS_PER_BATCH,
+    skip: 0,
+    hasMore: false,
+    nextOffset: PRODUCTS_PER_BATCH,
+  };
+  const useInitialProducts =
+    !search.trim() && category === 'ALL' && sort === 'NEWEST' && onlyInStock === false;
 
-  const { data: products, isLoading, error } = useQuery({
-    queryKey: ['shop-products'],
-    queryFn: async ({ signal }) => {
-      const res = await fetch('/api/shop/products', { signal });
+  const { data, isLoading, error, hasNextPage, isFetchingNextPage, fetchNextPage } = useInfiniteQuery<ShopProductsPage>({
+    queryKey: ['shop-products', search, category, sort, onlyInStock],
+    initialPageParam: 0,
+    initialData: useInitialProducts
+      ? {
+          pages: [defaultProductsPage],
+          pageParams: [0],
+        }
+      : undefined,
+    queryFn: async ({ signal, pageParam }) => {
+      const params = new URLSearchParams();
+      params.set('paginated', '1');
+      params.set('take', String(PRODUCTS_PER_BATCH));
+      params.set('skip', String(pageParam));
+      params.set('sort', sort);
+      if (search.trim()) params.set('q', search.trim());
+      if (category !== 'ALL') params.set('categoryId', category);
+      if (onlyInStock) params.set('onlyInStock', 'true');
+
+      const res = await fetch(`/api/shop/products?${params.toString()}`, { signal });
       if (!res.ok) throw new Error('Failed to fetch products');
       return res.json();
     },
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextOffset : undefined),
+    staleTime: 60_000,
   });
 
-  const { data: categoriesData } = useQuery({
+  const { data: categoriesData = initialCategories } = useQuery({
     queryKey: ['shop-categories-public'],
     queryFn: async ({ signal }) => {
       const res = await fetch('/api/shop/categories/public', { signal });
@@ -54,10 +102,15 @@ export default function ShopPage() {
       const data = await res.json().catch(() => []);
       return Array.isArray(data) ? data : [];
     },
+    initialData: initialCategories,
     staleTime: 60_000,
   });
 
-  const normalizedProducts = useMemo<ShopProduct[]>(() => (Array.isArray(products) ? (products as ShopProduct[]) : []), [products]);
+  const loadedProducts = useMemo<ShopProduct[]>(
+    () => data?.pages.flatMap((page) => (Array.isArray(page.items) ? page.items : [])) ?? [],
+    [data]
+  );
+  const totalProducts = data?.pages?.[0]?.total ?? 0;
 
   const categoryOptions = useMemo(() => {
     const base = Array.isArray(categoriesData) ? categoriesData : [];
@@ -66,26 +119,6 @@ export default function ShopPage() {
       .filter((c): c is CategoryOption => typeof c.id === 'string' && typeof c.name === 'string')
       .map((c) => ({ id: c.id, name: c.name }));
   }, [categoriesData]);
-
-  const filteredProducts = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    let list = normalizedProducts.slice();
-
-    if (q) list = list.filter((p) => p.name.toLowerCase().includes(q));
-    if (category !== 'ALL') list = list.filter((p) => String(p.categoryRef?.id || p.categoryId || '') === category);
-    if (onlyInStock) list = list.filter((p) => Number(p.stock || 0) > 0);
-
-    list.sort((a, b) => {
-      if (sort === 'PRICE_ASC') return Number(a.price || 0) - Number(b.price || 0);
-      if (sort === 'PRICE_DESC') return Number(b.price || 0) - Number(a.price || 0);
-      if (sort === 'NAME_ASC') return String(a.name || '').localeCompare(String(b.name || ''), 'id');
-      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return bTime - aTime;
-    });
-
-    return list;
-  }, [normalizedProducts, search, category, onlyInStock, sort]);
 
   if (isLoading) {
     return (
@@ -121,8 +154,8 @@ export default function ShopPage() {
           <div className="text-xs font-bold text-slate-500">Geoshop</div>
           <div className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Belanja Produk</div>
           <div className="text-sm text-slate-600 mt-1">
-            Menampilkan <span className="font-bold text-slate-700">{filteredProducts.length}</span> dari{' '}
-            <span className="font-bold text-slate-700">{normalizedProducts.length}</span> produk
+            Menampilkan <span className="font-bold text-slate-700">{loadedProducts.length}</span> dari{' '}
+            <span className="font-bold text-slate-700">{totalProducts}</span> produk
           </div>
         </div>
 
@@ -201,12 +234,32 @@ export default function ShopPage() {
           </div>
         </div>
 
-        {filteredProducts.length > 0 ? (
-          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {filteredProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
+        {loadedProducts.length > 0 ? (
+          <>
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {loadedProducts.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  adminWhatsAppNumber={product.vendor && typeof product.vendor.contactPhone === 'string' ? product.vendor.contactPhone : ''}
+                />
+              ))}
+            </div>
+
+            {hasNextPage ? (
+              <div className="mt-6 flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => void fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-brand-gradient text-white text-sm font-extrabold hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isFetchingNextPage ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  {isFetchingNextPage ? 'Memuat...' : 'Load More'}
+                </button>
+              </div>
+            ) : null}
+          </>
         ) : (
           <div className="mt-6 bg-white border border-slate-200 rounded-2xl p-10 text-center text-slate-500">
             Produk tidak ditemukan untuk filter yang dipilih.

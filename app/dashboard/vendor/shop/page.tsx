@@ -6,6 +6,20 @@ import AdminShop from '@/modules/dashboard/pages/admin/AdminShop';
 
 export const dynamic = 'force-dynamic';
 
+const vendorShopSelect = {
+  id: true,
+  name: true,
+  status: true,
+  description: true,
+  contactEmail: true,
+  contactPhone: true,
+  addressLine1: true,
+  city: true,
+  province: true,
+  postalCode: true,
+  country: true,
+} as const;
+
 function getStoreDiscountAmount(it: any) {
   const store = Number(it?.discountStoreAmount || 0);
   const marketplace = Number(it?.discountMarketplaceAmount || 0);
@@ -23,12 +37,24 @@ export default async function Page() {
   const role = payload?.role ? String(payload.role) : null;
   if (!userId || !role) return <div>Access Denied</div>;
 
-  const vendors = await prisma.shopVendor.findMany({
-    where: role === 'ADMIN' ? undefined : { OR: [{ ownerId: userId }, { members: { some: { userId } } }] },
-    select: { id: true, status: true },
-  });
+  const [vendors, categories] = await Promise.all([
+    prisma.shopVendor.findMany({
+      where: role === 'ADMIN' ? undefined : { OR: [{ ownerId: userId }, { members: { some: { userId } } }] },
+      select: vendorShopSelect,
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.productCategoryModel.findMany({
+      select: { id: true, name: true },
+      orderBy: { createdAt: 'desc' },
+    }),
+  ]);
 
-  const approvedVendorIds = vendors.filter((v) => v.status === 'APPROVED').map((v) => v.id);
+  const approvedVendors = vendors.filter((v) => v.status === 'APPROVED');
+  const approvedVendorIds = approvedVendors.map((v) => v.id);
+  const initialVendors = (role === 'ADMIN' ? vendors : approvedVendors).map((vendor) => ({
+    id: String(vendor.id),
+    name: String(vendor.name || ''),
+  }));
   if (role !== 'ADMIN' && approvedVendorIds.length === 0) {
     return (
       <div className="space-y-6 pb-12 max-w-2xl">
@@ -45,20 +71,7 @@ export default async function Page() {
   }
 
   if (role !== 'ADMIN') {
-    const v = await prisma.shopVendor.findFirst({
-      where: { id: { in: approvedVendorIds } },
-      select: {
-        id: true,
-        description: true,
-        contactEmail: true,
-        contactPhone: true,
-        addressLine1: true,
-        city: true,
-        province: true,
-        postalCode: true,
-        country: true,
-      },
-    });
+    const v = approvedVendors[0] || null;
     if (v) {
       const missing: string[] = [];
       if (!v.description) missing.push('Deskripsi');
@@ -97,7 +110,10 @@ export default async function Page() {
       ? await prisma.product.findMany({
           where: role === 'ADMIN' ? undefined : { vendorId: { in: approvedVendorIds } },
           orderBy: { createdAt: 'desc' },
-          include: { categoryRef: true, vendor: true },
+          include: {
+            categoryRef: { select: { id: true, name: true } },
+            vendor: { select: { id: true, name: true, slug: true } },
+          },
         })
       : [];
 
@@ -146,6 +162,8 @@ export default async function Page() {
         stock: p.stock ?? 0,
         imageUrl: typeof p.imageUrl === 'string' && p.imageUrl.startsWith('blob:') ? null : p.imageUrl,
       }))}
+      initialCategories={categories.map((category) => ({ id: String(category.id), name: String(category.name || '') }))}
+      initialVendors={initialVendors}
     />
   );
 }

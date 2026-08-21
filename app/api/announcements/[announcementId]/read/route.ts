@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { CourseStatus } from '@prisma/client';
+import { getAnnouncementAccessContext } from '@/modules/course/api/performance';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ announcementId: string }> }) {
   try {
@@ -12,20 +13,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ann
     const user = await verifyToken(token);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const announcement = await prisma.announcement.findUnique({
-      where: { id: announcementId },
-      include: {
-        course: {
-          select: {
-            id: true,
-            instructorId: true,
-            status: true,
-            deletedAt: true,
-            validityDays: true,
-          },
-        },
-      },
-    });
+    const announcement = await getAnnouncementAccessContext(announcementId);
     if (!announcement || announcement.course.deletedAt) {
       return NextResponse.json({ error: 'Announcement not found' }, { status: 404 });
     }

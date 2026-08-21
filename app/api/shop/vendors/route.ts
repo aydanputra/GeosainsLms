@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
 
+const selfVendorSelect = {
+  id: true,
+  ownerId: true,
+  name: true,
+  slug: true,
+  logoUrl: true,
+  coverUrl: true,
+  status: true,
+  contactEmail: true,
+  contactPhone: true,
+  adminWhatsapp: true,
+  addressLine1: true,
+  addressLine2: true,
+  city: true,
+  province: true,
+  postalCode: true,
+  country: true,
+} as const;
+
 function slugify(input: string) {
   return input
     .trim()
@@ -34,15 +53,17 @@ export async function GET(req: NextRequest) {
     const user = await verifyToken(token);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+    const scope = (req.nextUrl.searchParams.get('scope') || '').trim().toLowerCase();
     const isAdmin = user.role === 'ADMIN';
-    const where = isAdmin
-      ? Promise.resolve(undefined)
-      : Promise.resolve({
-          OR: [{ ownerId: String(user.id) }, { members: { some: { userId: String(user.id) } } }],
-        });
+    const selfScope = {
+      OR: [{ ownerId: String(user.id) }, { members: { some: { userId: String(user.id) } } }],
+    };
+    const where = isAdmin ? (scope === 'self' ? selfScope : undefined) : selfScope;
+    const select = scope === 'self' ? selfVendorSelect : undefined;
 
     const vendors = await prisma.shopVendor.findMany({
-      where: await where,
+      where,
+      select,
       orderBy: { createdAt: 'desc' },
     });
     return NextResponse.json(vendors);
@@ -68,6 +89,7 @@ export async function POST(req: NextRequest) {
       coverUrl?: unknown;
       contactEmail?: unknown;
       contactPhone?: unknown;
+      adminWhatsapp?: unknown;
       addressLine1?: unknown;
       addressLine2?: unknown;
       city?: unknown;
@@ -92,6 +114,7 @@ export async function POST(req: NextRequest) {
     const coverUrl = typeof body.coverUrl === 'string' ? body.coverUrl.trim() : '';
     const contactEmail = typeof body.contactEmail === 'string' ? body.contactEmail.trim() : '';
     const contactPhone = typeof body.contactPhone === 'string' ? body.contactPhone.trim() : '';
+    const adminWhatsapp = typeof body.adminWhatsapp === 'string' ? body.adminWhatsapp.trim() : '';
     const addressLine1 = typeof body.addressLine1 === 'string' ? body.addressLine1.trim() : '';
     const addressLine2 = typeof body.addressLine2 === 'string' ? body.addressLine2.trim() : '';
     const city = typeof body.city === 'string' ? body.city.trim() : '';
@@ -150,6 +173,7 @@ export async function POST(req: NextRequest) {
               coverUrl,
               contactEmail,
               contactPhone,
+              adminWhatsapp,
               addressLine1,
               addressLine2,
               city,
@@ -207,6 +231,7 @@ export async function POST(req: NextRequest) {
         coverUrl: coverUrl || null,
         contactEmail: contactEmail || null,
         contactPhone: contactPhone || null,
+        adminWhatsapp: adminWhatsapp || null,
         addressLine1: addressLine1 || null,
         addressLine2: addressLine2 || null,
         city: city || null,

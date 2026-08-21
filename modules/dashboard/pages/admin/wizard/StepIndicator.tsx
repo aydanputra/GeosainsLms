@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight } from 'lucide-react';
+import { Check } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -42,7 +42,7 @@ export default function StepIndicator({ steps, currentStep }: StepIndicatorProps
         {steps.map((step, index) => {
           const isCompleted = currentStep > step.id;
           const isActive = currentStep === step.id;
-          const isLast = index === steps.length - 1;
+          void index;
 
           return (
             <div 

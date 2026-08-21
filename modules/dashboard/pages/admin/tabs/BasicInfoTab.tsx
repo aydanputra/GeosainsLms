@@ -51,7 +51,7 @@ export default function BasicInfoTab({ course, mentors }: BasicInfoTabProps) {
 
       alert('Perubahan berhasil disimpan');
       router.refresh();
-    } catch (error) {
+    } catch {
       alert('Terjadi kesalahan saat menyimpan perubahan.');
     } finally {
       setIsSubmitting(false);

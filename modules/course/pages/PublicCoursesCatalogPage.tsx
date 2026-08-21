@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
-import { BookOpen, Loader2, Star } from 'lucide-react';
+import { BookOpen, Star } from 'lucide-react';
+import { normalizeImageUrl, toOptimizedImageUrl } from '@/modules/core/utils/image';
 
 type CourseCategory = { id: string; name: string; slug: string };
 
@@ -26,14 +27,7 @@ type PublicCourse = {
   createdAt?: string | null;
 };
 
-function resolveThumbnail(value: string | null | undefined) {
-  if (!value) return null;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith('blob:')) return null;
-  if (trimmed.startsWith('/') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
-  return null;
-}
+const COURSES_PER_BATCH = 15;
 
 function getLevelLabel(level: string) {
   if (level === 'ADVANCED') return 'Advanced';
@@ -47,16 +41,133 @@ function levelBars(level?: string | null) {
   return 1;
 }
 
-export default function PublicCoursesCatalogPage({ initialTagSlug }: { initialTagSlug?: string } = {}) {
+function CourseCatalogCard({
+  course,
+  index,
+}: {
+  course: PublicCourse;
+  index: number;
+}) {
+  const [imgError, setImgError] = useState(false);
+
+  const thumb = normalizeImageUrl(course.thumbnailUrl);
+  const optimizedThumb = toOptimizedImageUrl(thumb, { width: 720, height: 405, fit: 'fill' });
+  const href = course.slug ? `/courses/${course.slug}` : '/courses';
+  const ratingAvg = typeof course.ratingAvg === 'number' && Number.isFinite(course.ratingAvg) ? course.ratingAvg : 0;
+  const ratingCount = typeof course.ratingCount === 'number' && Number.isFinite(course.ratingCount) ? course.ratingCount : 0;
+  const filled = Math.max(0, Math.min(5, Math.round(ratingAvg)));
+  const canShowImage = Boolean(optimizedThumb && !imgError);
+  const shouldPrioritize = index < 3;
+
+  return (
+    <Link
+      href={href}
+      className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow group flex flex-col"
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '340px' }}
+    >
+      <div className="aspect-video bg-slate-100 relative overflow-hidden">
+        {canShowImage ? (
+          <Image
+            src={optimizedThumb!}
+            alt={course.title || 'Kursus'}
+            fill
+            sizes="(max-width: 640px) calc(100vw - 2rem), (max-width: 1024px) calc(50vw - 2rem), 360px"
+            priority={shouldPrioritize}
+            className="object-cover group-hover:scale-[1.02] transition-transform"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-slate-300">
+            <BookOpen className="w-10 h-10" />
+          </div>
+        )}
+      </div>
+
+      <div className="p-4 flex-1 flex flex-col gap-2">
+        <h3 className="font-[700] text-slate-900 line-clamp-2 text-base leading-[27px] transition-colors group-hover:text-blue-800">
+          {course.title}
+        </h3>
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-right">
+            {(() => {
+              const price =
+                typeof course.price === 'number' && Number.isFinite(course.price) ? course.price : Number(course.price || 0) || 0;
+              const normalPrice =
+                typeof course.normalPrice === 'number' && Number.isFinite(course.normalPrice)
+                  ? course.normalPrice
+                  : course.normalPrice
+                    ? Number(course.normalPrice)
+                    : 0;
+              const showDiscountPrice = price > 0;
+              const showNormalPrice = normalPrice > 0 && (!showDiscountPrice || normalPrice > price);
+
+              return (
+                <div className="flex items-baseline justify-end gap-2">
+                  {showNormalPrice ? (
+                    <span className="text-sm font-semibold text-rose-500 line-through price-blink">
+                      Rp {Math.round(normalPrice).toLocaleString('id-ID')}
+                    </span>
+                  ) : null}
+                  <span className={showDiscountPrice ? 'text-sm font-extrabold text-slate-600' : 'text-sm font-extrabold text-emerald-600'}>
+                    {showDiscountPrice ? `Rp ${Math.round(price).toLocaleString('id-ID')}` : 'Gratis'}
+                  </span>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+
+        <div className="mt-auto flex items-end justify-between gap-3 pt-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <div className="flex items-center gap-0.5">
+              {Array.from({ length: 5 }).map((_, i) => {
+                const active = i < filled;
+                return (
+                  <Star
+                    key={i}
+                    className={`w-4 h-4 ${active ? 'text-amber-500' : 'text-slate-300'}`}
+                    fill={active ? 'currentColor' : 'none'}
+                  />
+                );
+              })}
+            </div>
+            <div className="text-xs text-slate-500">({ratingCount})</div>
+          </div>
+
+          <div className="flex items-end gap-1 shrink-0">
+            {Array.from({ length: 3 }).map((_, idx) => {
+              const active = idx < levelBars(course.level);
+              const heightClass = idx === 0 ? 'h-2.5' : idx === 1 ? 'h-4' : 'h-6';
+              return (
+                <div key={idx} className={`w-2 rounded-full ${heightClass} ${active ? 'bg-blue-700' : 'bg-blue-200'}`} />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+export default function PublicCoursesCatalogPage({
+  initialTagSlug,
+  initialCourses = [],
+  initialCategories = [],
+}: {
+  initialTagSlug?: string;
+  initialCourses?: PublicCourse[];
+  initialCategories?: CourseCategory[];
+  hydratedFromServer?: boolean;
+} = {}) {
   const searchParams = useSearchParams();
   const initialCategorySlug = searchParams.get('category') || '';
   const queryTagSlug = searchParams.get('tag') || '';
   const queryQ = searchParams.get('q') || '';
   const effectiveTagSlug = initialTagSlug || queryTagSlug;
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [courses, setCourses] = useState<PublicCourse[]>([]);
-  const [categories, setCategories] = useState<CourseCategory[]>([]);
+  const [courses] = useState<PublicCourse[]>(initialCourses);
+  const [categories] = useState<CourseCategory[]>(initialCategories);
 
   const [q, setQ] = useState(queryQ);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('ALL');
@@ -69,6 +180,7 @@ export default function PublicCoursesCatalogPage({ initialTagSlug }: { initialTa
   const [sort, setSort] = useState<'NEWEST' | 'POPULAR' | 'RATING' | 'PRICE_ASC' | 'PRICE_DESC'>('POPULAR');
   const [selectedYears, setSelectedYears] = useState<Record<string, boolean>>({});
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(COURSES_PER_BATCH);
 
   const slugifyTag = (raw: string) =>
     raw
@@ -76,31 +188,6 @@ export default function PublicCoursesCatalogPage({ initialTagSlug }: { initialTa
       .trim()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)+/g, '');
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      setIsLoading(true);
-      try {
-        const [coursesRes, categoriesRes] = await Promise.all([fetch('/api/courses?published=true'), fetch('/api/categories')]);
-        const coursesJson = await coursesRes.json().catch(() => []);
-        const categoriesJson = await categoriesRes.json().catch(() => []);
-        if (!active) return;
-        setCourses(Array.isArray(coursesJson) ? (coursesJson as PublicCourse[]) : []);
-        setCategories(Array.isArray(categoriesJson) ? (categoriesJson as CourseCategory[]) : []);
-      } catch {
-        if (!active) return;
-        setCourses([]);
-        setCategories([]);
-      } finally {
-        if (!active) return;
-        setIsLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     setQ(queryQ);
@@ -180,6 +267,13 @@ export default function PublicCoursesCatalogPage({ initialTagSlug }: { initialTa
 
     return list;
   }, [courses, q, selectedCategoryId, selectedLevels, priceType, sort, selectedYears, effectiveTagSlug]);
+
+  const visibleCourses = useMemo(() => filteredCourses.slice(0, visibleCount), [filteredCourses, visibleCount]);
+  const hasMoreCourses = visibleCourses.length < filteredCourses.length;
+
+  useEffect(() => {
+    setVisibleCount(COURSES_PER_BATCH);
+  }, [q, selectedCategoryId, selectedLevels, priceType, sort, selectedYears, effectiveTagSlug]);
 
   const resetFilters = () => {
     setQ('');
@@ -343,7 +437,8 @@ export default function PublicCoursesCatalogPage({ initialTagSlug }: { initialTa
           <section className="flex-1 min-w-0">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div className="text-sm font-bold text-slate-700">
-                Menampilkan <span className="font-extrabold text-slate-900">{filteredCourses.length}</span> kursus
+                Menampilkan <span className="font-extrabold text-slate-900">{visibleCourses.length}</span> dari{' '}
+                <span className="font-extrabold text-slate-900">{filteredCourses.length}</span> kursus
               </div>
               <input
                 value={q}
@@ -354,113 +449,26 @@ export default function PublicCoursesCatalogPage({ initialTagSlug }: { initialTa
             </div>
 
             <div className="mt-5">
-              {isLoading ? (
-                <div className="flex items-center justify-center py-12 text-slate-500 gap-3">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span className="font-medium">Memuat kursus...</span>
-                </div>
-              ) : filteredCourses.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {filteredCourses.map((course) => {
-                    const thumb = resolveThumbnail(course.thumbnailUrl);
-                    const href = course.slug ? `/courses/${course.slug}` : '/courses';
-                    const ratingAvg = typeof course.ratingAvg === 'number' && Number.isFinite(course.ratingAvg) ? course.ratingAvg : 0;
-                    const ratingCount =
-                      typeof course.ratingCount === 'number' && Number.isFinite(course.ratingCount) ? course.ratingCount : 0;
-                    const filled = Math.max(0, Math.min(5, Math.round(ratingAvg)));
+              {filteredCourses.length > 0 ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {visibleCourses.map((course, index) => (
+                      <CourseCatalogCard key={course.id} course={course} index={index} />
+                    ))}
+                  </div>
 
-                    return (
-                      <Link
-                        key={course.id}
-                        href={href}
-                        className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow group flex flex-col"
+                  {hasMoreCourses ? (
+                    <div className="mt-6 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setVisibleCount((prev) => Math.min(prev + COURSES_PER_BATCH, filteredCourses.length))}
+                        className="px-5 py-3 rounded-2xl bg-brand-gradient text-white text-sm font-extrabold hover:opacity-90 transition-opacity"
                       >
-                        <div className="aspect-video bg-slate-100 relative overflow-hidden">
-                          {thumb ? (
-                            <Image
-                              src={thumb}
-                              alt={course.title || 'Kursus'}
-                              fill
-                              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                              unoptimized
-                              className="object-cover group-hover:scale-[1.02] transition-transform"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-slate-300">
-                              <BookOpen className="w-10 h-10" />
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="p-4 flex-1 flex flex-col gap-2">
-                          <h3 className="font-[700] text-slate-900 line-clamp-2 text-base leading-[27px] transition-colors group-hover:text-blue-800">
-                            {course.title}
-                          </h3>
-
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="text-right">
-                              {(() => {
-                                const price =
-                                  typeof course.price === 'number' && Number.isFinite(course.price) ? course.price : Number(course.price || 0) || 0;
-                                const normalPrice =
-                                  typeof course.normalPrice === 'number' && Number.isFinite(course.normalPrice)
-                                    ? course.normalPrice
-                                    : course.normalPrice
-                                      ? Number(course.normalPrice)
-                                      : 0;
-                                const showDiscountPrice = price > 0;
-                                const showNormalPrice = normalPrice > 0 && (!showDiscountPrice || normalPrice > price);
-
-                                return (
-                                  <>
-                                    <div className="flex items-baseline justify-end gap-2">
-                                      {showNormalPrice ? (
-                                        <span className="text-sm font-semibold text-rose-500 line-through price-blink">
-                                          Rp {Math.round(normalPrice).toLocaleString('id-ID')}
-                                        </span>
-                                      ) : null}
-                                      <span className={showDiscountPrice ? 'text-sm font-extrabold text-slate-600' : 'text-sm font-extrabold text-emerald-600'}>
-                                        {showDiscountPrice ? `Rp ${Math.round(price).toLocaleString('id-ID')}` : 'Gratis'}
-                                      </span>
-                                    </div>
-                                  </>
-                                );
-                              })()}
-                            </div>
-                          </div>
-
-                          <div className="mt-auto flex items-end justify-between gap-3 pt-2">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <div className="flex items-center gap-0.5">
-                                {Array.from({ length: 5 }).map((_, i) => {
-                                  const active = i < filled;
-                                  return (
-                                    <Star
-                                      key={i}
-                                      className={`w-4 h-4 ${active ? 'text-amber-500' : 'text-slate-300'}`}
-                                      fill={active ? 'currentColor' : 'none'}
-                                    />
-                                  );
-                                })}
-                              </div>
-                              <div className="text-xs text-slate-500">({ratingCount})</div>
-                            </div>
-
-                            <div className="flex items-end gap-1 shrink-0">
-                              {Array.from({ length: 3 }).map((_, idx) => {
-                                const active = idx < levelBars(course.level);
-                                const heightClass = idx === 0 ? 'h-2.5' : idx === 1 ? 'h-4' : 'h-6';
-                                return (
-                                  <div key={idx} className={`w-2 rounded-full ${heightClass} ${active ? 'bg-blue-700' : 'bg-blue-200'}`} />
-                                );
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                      </Link>
-                    );
-                  })}
-                </div>
+                        Load More
+                      </button>
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center">
                   <div className="w-14 h-14 rounded-full bg-slate-50 border border-slate-100 flex items-center justify-center mx-auto mb-4">

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createPage, updatePage, getPageBySlug } from '../api/service';
+import { createPage, getPages, getPublishedPageBySlug, updatePage } from '../api/service';
 import { prisma } from '@/utils/prisma';
 
 vi.mock('@/utils/prisma', () => ({
@@ -7,6 +7,7 @@ vi.mock('@/utils/prisma', () => ({
     page: {
       create: vi.fn(),
       update: vi.fn(),
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
       findMany: vi.fn(),
       delete: vi.fn(),
@@ -24,11 +25,11 @@ describe('Pages Service', () => {
   });
 
   describe('createPage', () => {
-    it('should create a page with blocks', async () => {
+    it('should create a page with sanitized blocks', async () => {
       const mockPageData = {
         title: 'Home',
         published: true,
-        blocks: [{ type: 'HERO', content: '{}', order: 0 }],
+        blocks: [{ type: 'TEXT', content: '{"text":"<p>Halo</p><script>alert(1)</script>"}', order: 0 }],
       };
       
       (prisma.page.findUnique as any).mockResolvedValue(null); // Slug unique
@@ -41,7 +42,7 @@ describe('Pages Service', () => {
         data: expect.objectContaining({
           title: 'Home',
           blocks: {
-            create: mockPageData.blocks,
+            create: [{ type: 'TEXT', content: '{"text":"<p>Halo</p>"}', order: 0 }],
           },
         }),
       }));
@@ -53,7 +54,7 @@ describe('Pages Service', () => {
     it('should replace blocks when updating', async () => {
       const updateData = {
         title: 'Home Updated',
-        blocks: [{ type: 'TEXT', content: 'Hello', order: 0 }],
+        blocks: [{ type: 'TEXT', content: '{"text":"Hello<script>alert(1)</script>"}', order: 0 }],
       };
       (prisma.page.update as any).mockResolvedValue({ id: '1', ...updateData });
 
@@ -61,8 +62,34 @@ describe('Pages Service', () => {
       await updatePage('1', updateData);
 
       expect(prisma.pageBlock.deleteMany).toHaveBeenCalledWith({ where: { pageId: '1' } });
-      expect(prisma.pageBlock.createMany).toHaveBeenCalled();
+      expect(prisma.pageBlock.createMany).toHaveBeenCalledWith({
+        data: [{ type: 'TEXT', content: '{"text":"Hello"}', order: 0, pageId: '1' }],
+      });
       expect(prisma.page.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('public page queries', () => {
+    it('should fetch published page by slug only', async () => {
+      (prisma.page.findFirst as any).mockResolvedValue({ id: '1', slug: 'home', published: true });
+
+      await getPublishedPageBySlug('home');
+
+      expect(prisma.page.findFirst).toHaveBeenCalledWith({
+        where: { slug: 'home', published: true },
+        include: { blocks: { orderBy: { order: 'asc' } } },
+      });
+    });
+
+    it('should filter page list to published records when requested', async () => {
+      (prisma.page.findMany as any).mockResolvedValue([{ id: '1', published: true }]);
+
+      await getPages(true);
+
+      expect(prisma.page.findMany).toHaveBeenCalledWith({
+        where: { published: true },
+        orderBy: { updatedAt: 'desc' },
+      });
     });
   });
 });

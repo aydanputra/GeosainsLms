@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import Table from '../../components/Tables';
 import Cards from '../../components/Cards';
 import EmptyState from '../../components/EmptyState';
@@ -77,7 +77,7 @@ export default function AdminShopCategories({
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  const toggleAllVisible = () => {
+  const toggleAllVisible = useCallback(() => {
     setSelectedIds((prev) => {
       const prevSet = new Set(prev);
       const allSelected = visibleIds.length > 0 && visibleIds.every((id) => prevSet.has(id));
@@ -85,7 +85,7 @@ export default function AdminShopCategories({
       for (const id of visibleIds) prevSet.add(id);
       return Array.from(prevSet);
     });
-  };
+  }, [visibleIds]);
 
   const metrics = [
     { label: 'Total Kategori', value: categories.length, color: 'bg-blue-500' },
@@ -102,7 +102,7 @@ export default function AdminShopCategories({
     setEditorOpen(true);
   };
 
-  const openEdit = (row: CategoryRow) => {
+  const openEdit = useCallback((row: CategoryRow) => {
     if (!canEdit) {
       toast.error('Anda tidak memiliki izin untuk mengubah kategori');
       return;
@@ -110,7 +110,7 @@ export default function AdminShopCategories({
     setEditorMode('EDIT');
     setEditorValue(normalizeForm(row));
     setEditorOpen(true);
-  };
+  }, [canEdit]);
 
   const save = async () => {
     if (!editorValue.name.trim()) {
@@ -264,7 +264,7 @@ export default function AdminShopCategories({
     }
 
     return cols;
-  }, [canDelete, canEdit, isAllVisibleSelected, isBulkDeleting, selectedIds, toggleAllVisible, visibleIds.length]);
+  }, [canDelete, canEdit, isAllVisibleSelected, isBulkDeleting, openEdit, selectedIds, toggleAllVisible, visibleIds.length]);
 
   const handleBulkDelete = async () => {
     if (!canDelete) return;

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import Topbar from '../components/Topbar';
 import Sidebar from '../components/Sidebar';
 import { useDashboardStore } from '../../dashboard/store/useDashboardStore';
@@ -59,7 +59,8 @@ describe('Layout Components', () => {
       useDashboardStore.setState({ user: { id: '1', name: 'Admin', email: 'admin@test.com', role: 'ADMIN' } });
       render(<Sidebar />);
       expect(screen.getByText('Overview')).toBeDefined();
-      expect(screen.getByText('Settings')).toBeDefined();
+      expect(screen.getByText('Pengaturan')).toBeDefined();
+      expect(screen.getByText('Pengaturan Platform')).toBeDefined();
     });
   });
 });

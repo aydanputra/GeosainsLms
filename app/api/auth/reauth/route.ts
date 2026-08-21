@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken, verifyPassword } from '@/modules/auth/utils/auth';
-import { isSameOrigin } from '@/modules/auth/utils/security';
+import { enforceRateLimit, getClientIp, isSameOrigin } from '@/modules/auth/utils/security';
+import { writeRateLimitAuditLog } from '@/utils/audit';
 import { SignJWT } from 'jose';
 
 function getSecretKey() {
@@ -14,11 +15,43 @@ export async function POST(req: NextRequest) {
   try {
     if (!isSameOrigin(req)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
+    const ip = getClientIp(req);
+    const ipRl = enforceRateLimit({ key: `auth:reauth:ip:${ip}`, limit: 12, windowMs: 15 * 60 * 1000 });
+    if (!ipRl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        action: 'AUTH_REAUTH_RATE_LIMITED',
+        key: `auth:reauth:ip:${ip}`,
+        retryAfterSeconds: ipRl.retryAfterSeconds,
+        metadata: { scope: 'ip' },
+      });
+      return NextResponse.json(
+        { error: 'Terlalu banyak percobaan re-auth. Coba lagi nanti.' },
+        { status: 429, headers: { 'Retry-After': String(ipRl.retryAfterSeconds) } }
+      );
+    }
+
     const token = req.cookies.get('token')?.value;
     if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const user = await verifyToken(token);
     if (!user || user.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+    const userRl = enforceRateLimit({ key: `auth:reauth:user:${String(user.id)}`, limit: 20, windowMs: 15 * 60 * 1000 });
+    if (!userRl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        actor: { id: String(user.id), role: user.role },
+        action: 'AUTH_REAUTH_RATE_LIMITED',
+        key: `auth:reauth:user:${String(user.id)}`,
+        retryAfterSeconds: userRl.retryAfterSeconds,
+        metadata: { scope: 'user' },
+      });
+      return NextResponse.json(
+        { error: 'Terlalu banyak percobaan re-auth untuk akun ini. Coba lagi nanti.' },
+        { status: 429, headers: { 'Retry-After': String(userRl.retryAfterSeconds) } }
+      );
+    }
 
     const actor = await prisma.user.findUnique({
       where: { id: String(user.id) },

@@ -2,25 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { CourseStatus } from '@prisma/client';
+import { getQaThreadAccessContext } from '@/modules/course/api/performance';
 
 async function enforceStudentThreadAccess(args: { userId: string; threadId: string }) {
   const { userId, threadId } = args;
-  const thread = await prisma.qAThread.findUnique({
-    where: { id: threadId },
-    include: {
-      course: {
-        select: {
-          id: true,
-          instructorId: true,
-          status: true,
-          deletedAt: true,
-          validityDays: true,
-          enableQA: true,
-          subscriptionEligible: true,
-        },
-      },
-    },
-  });
+  const thread = await getQaThreadAccessContext(threadId);
   if (!thread || thread.course.deletedAt) return { status: 404 as const, error: 'Thread not found' };
   if (thread.course.status !== CourseStatus.PUBLISHED) return { status: 403 as const, error: 'Forbidden' };
   if (!thread.course.enableQA) return { status: 403 as const, error: 'Q&A is disabled for this course' };
@@ -61,14 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ thr
     const user = await verifyToken(token);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const thread = await prisma.qAThread.findUnique({
-      where: { id: threadId },
-      include: {
-        course: { select: { id: true, title: true, slug: true, instructorId: true, status: true, deletedAt: true, enableQA: true, validityDays: true } },
-        lesson: { select: { id: true, title: true } },
-        author: { select: { id: true } },
-      },
-    });
+    const thread = await getQaThreadAccessContext(threadId);
     if (!thread || thread.course.deletedAt) return NextResponse.json({ error: 'Thread not found' }, { status: 404 });
 
     const isOwner = user.role === 'ADMIN' || (user.role === 'MENTOR' && user.id === thread.course.instructorId);

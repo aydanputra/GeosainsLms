@@ -10,15 +10,15 @@ describe('CourseProgress Component', () => {
 
   it('renders student list', () => {
     render(<CourseProgress progressData={mockProgress} />);
-    expect(screen.getByText('Budi Santoso')).toBeDefined();
-    expect(screen.getByText('Siti Aminah')).toBeDefined();
-    expect(screen.getByText('Selesai')).toBeDefined();
-    expect(screen.getByText('Berjalan')).toBeDefined();
+    expect(screen.getAllByText('Budi Santoso').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Siti Aminah').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Selesai').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Berjalan').length).toBeGreaterThan(0);
   });
 
   it('shows certificate button only for completed students', () => {
     render(<CourseProgress progressData={mockProgress} />);
-    expect(screen.getByText('Lihat Sertifikat')).toBeDefined();
+    expect(screen.getAllByText('Lihat Sertifikat')).toHaveLength(2);
     expect(screen.getByText('Belum Selesai')).toBeDefined();
   });
 
@@ -26,7 +26,7 @@ describe('CourseProgress Component', () => {
     const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
     render(<CourseProgress progressData={mockProgress} />);
     
-    fireEvent.click(screen.getByText('Lihat Sertifikat'));
+    fireEvent.click(screen.getAllByText('Lihat Sertifikat')[0]);
     expect(alertSpy).toHaveBeenCalledWith('Sertifikat berhasil dibuat (simulasi)');
   });
 });

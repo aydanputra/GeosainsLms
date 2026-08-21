@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import Table from '../../components/Tables';
 import { toast } from 'sonner';
 import { CheckCircle2, Loader2, MessageSquare, Plus, Send, Trash2, X } from 'lucide-react';
@@ -174,13 +174,13 @@ export default function StudentQA({ courses, threads }: { courses: CourseOption[
     return selectableIds.every((id) => set.has(id));
   }, [selectedIds, selectableIds]);
 
-  const toggleOne = (id: string) => {
+  const toggleOne = useCallback((id: string) => {
     const r = rows.find((x) => x.id === id);
     if (!r || r.authorRole !== 'STUDENT') return;
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
+  }, [rows]);
 
-  const toggleAllSelectable = () => {
+  const toggleAllSelectable = useCallback(() => {
     setSelectedIds((prev) => {
       const prevSet = new Set(prev);
       const allSelected = selectableIds.length > 0 && selectableIds.every((id) => prevSet.has(id));
@@ -188,7 +188,7 @@ export default function StudentQA({ courses, threads }: { courses: CourseOption[
       for (const id of selectableIds) prevSet.add(id);
       return Array.from(prevSet);
     });
-  };
+  }, [selectableIds]);
 
   const remove = async (row: ThreadRow) => {
     if (!confirm('Hapus thread ini?')) return;
@@ -342,7 +342,7 @@ export default function StudentQA({ courses, threads }: { courses: CourseOption[
       { header: 'Terakhir', accessorKey: 'lastReplyAt' },
       { header: 'Tanggal', accessorKey: 'createdAt' },
     ];
-  }, [isAllSelectableSelected, isBulkDeleting, selectableIds, selectedIds]);
+  }, [isAllSelectableSelected, isBulkDeleting, selectableIds, selectedIds, toggleAllSelectable, toggleOne]);
 
   const data = rows.map((r) => ({
     id: r.id,

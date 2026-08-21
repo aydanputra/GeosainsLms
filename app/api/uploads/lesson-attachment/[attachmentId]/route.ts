@@ -2,10 +2,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
+import { isSameOrigin } from '@/modules/auth/utils/security';
 import { BlobNotFoundError } from '@vercel/blob';
 import { deleteLessonAttachmentFile } from '@/utils/lessonAttachmentStorage';
 import { unlink } from 'fs/promises';
 import path from 'path';
+import { writeAccessDeniedAuditLog, writeAuditLog } from '@/utils/audit';
+
+function resolveLegacyPublicAttachmentPath(relativeUrl?: string | null) {
+  const raw = typeof relativeUrl === 'string' ? relativeUrl.trim() : '';
+  if (!raw.startsWith('/uploads/')) return null;
+
+  const baseDir = path.resolve(process.cwd(), 'public', 'uploads');
+  const absolutePath = path.resolve(process.cwd(), 'public', raw.replace(/^\//, ''));
+  const relativeFromBase = path.relative(baseDir, absolutePath);
+  if (
+    relativeFromBase.startsWith('..') ||
+    path.isAbsolute(relativeFromBase) ||
+    !absolutePath.startsWith(baseDir)
+  ) {
+    return null;
+  }
+
+  return absolutePath;
+}
 
 export async function DELETE(
   req: NextRequest, 
@@ -13,13 +33,45 @@ export async function DELETE(
 ) {
   try {
     const { attachmentId } = await params;
+
+    if (!isSameOrigin(req)) {
+      await writeAccessDeniedAuditLog({
+        req,
+        action: 'LESSON_ATTACHMENT_DELETE_DENIED',
+        status: 403,
+        entityType: 'LessonAttachment',
+        entityId: attachmentId,
+        reason: 'cross_origin',
+      });
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
     
     // 1. Auth Check
     const token = req.cookies.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!token) {
+      await writeAccessDeniedAuditLog({
+        req,
+        action: 'LESSON_ATTACHMENT_DELETE_DENIED',
+        status: 401,
+        entityType: 'LessonAttachment',
+        entityId: attachmentId,
+        reason: 'missing_token',
+      });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     
     const user = await verifyToken(token);
-    if (!user) return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    if (!user) {
+      await writeAccessDeniedAuditLog({
+        req,
+        action: 'LESSON_ATTACHMENT_DELETE_DENIED',
+        status: 401,
+        entityType: 'LessonAttachment',
+        entityId: attachmentId,
+        reason: 'invalid_token',
+      });
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    }
 
     // 2. Fetch Attachment & Check Ownership
     const attachment = await prisma.lessonAttachment.findUnique({
@@ -51,11 +103,29 @@ export async function DELETE(
         const isAdmin = user.role === 'ADMIN';
 
         if (!isOwner && !isAdmin) {
+            await writeAccessDeniedAuditLog({
+                req,
+                actor: { id: String(user.id), role: user.role },
+                action: 'LESSON_ATTACHMENT_DELETE_DENIED',
+                status: 403,
+                entityType: 'LessonAttachment',
+                entityId: attachmentId,
+                reason: 'forbidden',
+            });
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
     } else {
         // Fallback for orphaned attachments (shouldn't happen with Cascade)
         if (user.role !== 'ADMIN') {
+            await writeAccessDeniedAuditLog({
+                req,
+                actor: { id: String(user.id), role: user.role },
+                action: 'LESSON_ATTACHMENT_DELETE_DENIED',
+                status: 403,
+                entityType: 'LessonAttachment',
+                entityId: attachmentId,
+                reason: 'forbidden_orphan',
+            });
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
     }
@@ -75,8 +145,8 @@ export async function DELETE(
     } else {
         // Legacy public deletion fallback
         const relativePath = attachment.url; // e.g. /uploads/lessons/123/file.pdf
-        if (relativePath && relativePath.startsWith('/uploads/')) {
-            const filePath = path.join(process.cwd(), 'public', relativePath.replace(/^\//, ''));
+        const filePath = resolveLegacyPublicAttachmentPath(relativePath);
+        if (filePath) {
             try {
                 await unlink(filePath);
             } catch (err: any) {
@@ -91,6 +161,15 @@ export async function DELETE(
     // 4. Delete DB Record
     await prisma.lessonAttachment.delete({
       where: { id: attachmentId }
+    });
+
+    await writeAuditLog({
+      req,
+      actor: { id: String(user.id), role: user.role },
+      action: 'LESSON_ATTACHMENT_DELETE',
+      entityType: 'LessonAttachment',
+      entityId: attachmentId,
+      metadata: { lessonId: attachment.lessonId },
     });
 
     return NextResponse.json({ ok: true });

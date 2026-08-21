@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Mail, MapPin, Phone, Star } from 'lucide-react';
+import { normalizeImageUrl } from '@/modules/core/utils/image';
 
 type VendorRow = {
   id: string;
@@ -21,26 +21,16 @@ type VendorRow = {
   ratingAvg: number;
   ratingCount: number;
   serviceCount: number;
+  productCount: number;
 };
 
-export default function GeoservicesPage() {
+export default function GeoservicesPage({ initialVendors = [] }: { initialVendors?: VendorRow[] }) {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<'TOP' | 'NEWEST' | 'NAME_ASC'>('TOP');
 
-  const { data, isLoading, error } = useQuery<VendorRow[]>({
-    queryKey: ['geoservices-vendors', 'geo-services'],
-    queryFn: async ({ signal }) => {
-      const res = await fetch('/api/geoservices/vendors/public?category=geo-services', { signal });
-      if (!res.ok) throw new Error('Failed to fetch vendors');
-      const json = await res.json().catch(() => []);
-      return Array.isArray(json) ? (json as VendorRow[]) : [];
-    },
-    staleTime: 60_000,
-  });
-
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    let list = Array.isArray(data) ? data.slice() : [];
+    let list = initialVendors.slice();
     if (q) list = list.filter((v) => (typeof v?.name === 'string' ? v.name : '').toLowerCase().includes(q));
 
     list.sort((a, b) => {
@@ -52,37 +42,7 @@ export default function GeoservicesPage() {
     });
 
     return list;
-  }, [data, search, sort]);
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-6">
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 animate-pulse h-28" />
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 animate-pulse h-24" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-64 bg-white border border-slate-200 rounded-2xl animate-pulse" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center">
-          <div className="text-slate-900 font-extrabold">Geoservices tidak tersedia</div>
-          <div className="text-sm text-slate-500 mt-1">Gagal memuat daftar vendor. Coba refresh.</div>
-          <Link href="/" className="inline-block mt-4 text-sm font-bold text-blue-700 hover:text-blue-800">
-            Kembali ke Home
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  }, [initialVendors, search, sort]);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -130,8 +90,8 @@ export default function GeoservicesPage() {
         {filtered.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filtered.map((v) => {
-              const logoUrl = typeof v.logoUrl === 'string' && v.logoUrl.trim() ? v.logoUrl : '';
-              const coverUrl = typeof v.coverUrl === 'string' && v.coverUrl.trim() ? v.coverUrl : '';
+              const logoUrl = normalizeImageUrl(v.logoUrl, { fallback: '' }) || '';
+              const coverUrl = normalizeImageUrl(v.coverUrl, { fallback: '' }) || '';
               const location = [v.city, v.province, v.country].filter(Boolean).join(', ');
               const email = v.contactEmail || '';
               const phone = v.contactPhone || '';
@@ -146,14 +106,23 @@ export default function GeoservicesPage() {
               return (
                 <div key={v.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                   <div className="h-28 bg-slate-100 relative">
-                    {coverUrl ? <Image src={coverUrl} alt={name} fill unoptimized className="object-cover" /> : null}
+                    {coverUrl ? (
+                      <Image
+                        src={coverUrl}
+                        alt={name}
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        quality={65}
+                        className="object-cover"
+                      />
+                    ) : null}
                     <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-black/5 to-white/0" />
                   </div>
                   <div className="p-5">
                     <div className="-mt-12 flex items-start gap-4">
                       <div className="w-16 h-16 rounded-full bg-white border border-slate-200 overflow-hidden relative shrink-0">
                         {logoUrl ? (
-                          <Image src={logoUrl} alt={name} fill unoptimized className="object-cover" />
+                          <Image src={logoUrl} alt={name} fill sizes="64px" quality={60} className="object-cover" />
                         ) : (
                           <div className="w-full h-full bg-slate-50 flex items-center justify-center text-slate-700 font-extrabold">
                             {initials || 'V'}
@@ -169,6 +138,8 @@ export default function GeoservicesPage() {
                       <span className="text-slate-500 font-semibold">({v.ratingCount || 0})</span>
                       <span className="text-slate-300">•</span>
                       <span className="text-slate-600 font-semibold">{v.serviceCount} layanan</span>
+                      <span className="text-slate-300">•</span>
+                      <span className="text-slate-600 font-semibold">{v.productCount} produk</span>
                     </div>
 
                     <div className="mt-4 text-sm text-slate-600 line-clamp-2 min-h-[40px]">{v.description || ' '}</div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { extractYoutubeId } from '@/modules/course/api/service';
+import { syncCourseAggregates } from '@/utils/courseAggregates';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -81,9 +82,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             maxFileSize: typeof body.assignment.maxFileSize === 'number' ? body.assignment.maxFileSize : 5,
           },
         });
+        await syncCourseAggregates(tx, courseId);
         return { ...createdLesson, assignment };
       }
 
+      await syncCourseAggregates(tx, courseId);
       return createdLesson;
     });
 
@@ -94,7 +97,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 }
 
-export async function PATCH(req: NextRequest) {
+export async function PATCH() {
   // PATCH is not supported here. Use PUT or POST.
   // Actually, we should probably support PATCH for bulk reordering if needed.
   // But for now, let's just return 405.

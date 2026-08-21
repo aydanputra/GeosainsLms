@@ -120,10 +120,10 @@ export default function GridBlock({ content }: { content: GridContent }) {
             } ${isClickable ? 'cursor-pointer' : ''}`;
 
             const inner = (
-              <div className="flex flex-col items-center text-center gap-3">
+              <div className="flex flex-col items-center text-center gap-3" style={{ contentVisibility: 'auto', containIntrinsicSize: '160px' }}>
                 {item.imageUrl ? (
                   <div className="relative w-full h-14 sm:h-16">
-                    <Image src={item.imageUrl} alt={item.title} fill unoptimized className="object-contain" />
+                    <Image src={item.imageUrl} alt={item.title} fill sizes="192px" className="object-contain" />
                   </div>
                 ) : null}
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
+import { getProtectedPaymentProofUrl } from '@/modules/shop/utils/paymentProof';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ orderId: string }> }) {
   try {
@@ -24,7 +25,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ orde
     });
     if (!order) return NextResponse.json({ error: 'Order tidak ditemukan' }, { status: 404 });
 
-    return NextResponse.json(order, { status: 200 });
+    return NextResponse.json(
+      {
+        ...order,
+        manualPaymentProofUrl: getProtectedPaymentProofUrl(
+          String(order.id),
+          Boolean((order as any).manualPaymentProofMediaId || order.manualPaymentProofUrl)
+        ),
+      },
+      { status: 200 }
+    );
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Gagal memuat order' }, { status: 500 });
   }

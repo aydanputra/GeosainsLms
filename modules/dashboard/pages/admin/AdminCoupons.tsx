@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Table from '../../components/Tables';
-import Cards from '../../components/Cards';
 import EmptyState from '../../components/EmptyState';
 import { Loader2, Plus, Search, Trash2, Ticket, X } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
@@ -210,11 +209,11 @@ export default function AdminCoupons({ coupons: initialCoupons, variant = 'ADMIN
     return visibleIds.every((id) => set.has(id));
   }, [selectedIds, visibleIds]);
 
-  const toggleOne = (id: string) => {
+  const toggleOne = useCallback((id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
+  }, []);
 
-  const toggleAllVisible = () => {
+  const toggleAllVisible = useCallback(() => {
     setSelectedIds((prev) => {
       const prevSet = new Set(prev);
       const allSelected = visibleIds.length > 0 && visibleIds.every((id) => prevSet.has(id));
@@ -222,26 +221,16 @@ export default function AdminCoupons({ coupons: initialCoupons, variant = 'ADMIN
       for (const id of visibleIds) prevSet.add(id);
       return Array.from(prevSet);
     });
-  };
+  }, [visibleIds]);
 
-  const getStatus = (c: CouponRow) => {
+  const getStatus = useCallback((c: CouponRow) => {
     if (!c.isActive) return 'INACTIVE';
     if (c.expiresAt) {
       const d = new Date(c.expiresAt);
       if (!Number.isNaN(d.getTime()) && d.getTime() <= Date.now()) return 'EXPIRED';
     }
     return 'ACTIVE';
-  };
-
-  const metrics = useMemo(() => {
-    const active = baseCoupons.filter((c) => getStatus(c) === 'ACTIVE').length;
-    const expired = baseCoupons.filter((c) => getStatus(c) === 'EXPIRED').length;
-    return [
-      { label: isDiscountView ? 'Total Diskon' : 'Total Kupon', value: baseCoupons.length, color: 'bg-blue-500' },
-      { label: isDiscountView ? 'Diskon Aktif' : 'Kupon Aktif', value: active, color: 'bg-green-500' },
-      { label: isDiscountView ? 'Diskon Kedaluwarsa' : 'Kupon Kedaluwarsa', value: expired, color: 'bg-red-500' },
-    ];
-  }, [baseCoupons, isDiscountView]);
+  }, []);
 
   const openCreate = () => {
     const defaults = isMentorVariant

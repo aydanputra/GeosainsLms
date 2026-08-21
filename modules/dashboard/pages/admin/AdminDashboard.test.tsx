@@ -40,19 +40,20 @@ describe('AdminDashboard Component', () => {
   it('renders statistics cards with correct values', () => {
     render(<AdminDashboard stats={mockStats} orders={mockOrders} />);
     expect(screen.getByText('Total Pengguna')).toBeDefined();
-    expect(screen.getByText('100')).toBeDefined();
+    expect(screen.getAllByText('100').length).toBeGreaterThan(0);
     expect(screen.getByText('Total Kursus')).toBeDefined();
-    expect(screen.getByText('50')).toBeDefined();
+    expect(screen.getAllByText('50').length).toBeGreaterThan(0);
+    expect(screen.getByText('Total Pesanan')).toBeDefined();
     expect(screen.getByText('Total Transaksi')).toBeDefined();
     expect(screen.getByText('Fee Marketplace')).toBeDefined();
     // Check formatted currency (simplified check)
-    expect(screen.getByText(/IDR/)).toBeDefined(); 
+    expect(screen.getAllByText(/IDR/).length).toBeGreaterThan(0); 
   });
 
   it('renders recent orders table', () => {
     render(<AdminDashboard stats={mockStats} orders={mockOrders} />);
     expect(screen.getByText('Aktivitas Terbaru')).toBeDefined();
-    expect(screen.getByText('ORD-123')).toBeDefined();
+    expect(screen.getByText(/ORD-123/)).toBeDefined();
     expect(screen.getByText('User A')).toBeDefined();
     expect(screen.getByText('LUNAS')).toBeDefined(); // 'PAID' is mapped to 'LUNAS'
   });

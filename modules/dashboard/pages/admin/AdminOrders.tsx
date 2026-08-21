@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useState } from 'react';
 import Table from '../../components/Tables';
 import Cards from '../../components/Cards';
@@ -236,7 +238,7 @@ export default function AdminOrders({ orders: initialOrders }: AdminOrdersProps)
       } 
     },
     { header: 'Aksi', accessorKey: 'id',
-      cell: (val: string, row: any) => (
+      cell: (val: string) => (
         <div className="flex gap-2 justify-end">
           <button
             type="button"

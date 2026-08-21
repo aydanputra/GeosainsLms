@@ -1,8 +1,10 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { prisma } from '@/utils/prisma';
 import { CourseStatus } from '@prisma/client';
+import { normalizeImageUrl } from '@/modules/core/utils/image';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300;
 
 function formatCurrency(value: number) {
   const n = Number.isFinite(value) ? value : 0;
@@ -38,8 +40,7 @@ export default async function BundlesPage() {
   const bundleCards = bundles.map((b) => {
     const ids = Array.from(new Set((b.courseIds || []).map((c) => c.trim()).filter(Boolean)));
     const publishedCount = ids.filter((id) => publishedCourseIdSet.has(id)).length;
-    const imageUrl =
-      typeof b.thumbnailUrl === 'string' && b.thumbnailUrl.trim() && !b.thumbnailUrl.startsWith('blob:') ? b.thumbnailUrl : null;
+    const imageUrl = normalizeImageUrl(b.thumbnailUrl, { fallback: null });
 
     return {
       id: b.id,
@@ -83,9 +84,16 @@ export default async function BundlesPage() {
                 href={`/bundles/${encodeURIComponent(b.slug)}`}
                 className="group bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
               >
-                <div className="aspect-[16/9] bg-slate-900">
+                <div className="aspect-[16/9] bg-slate-900 relative">
                   {b.imageUrl ? (
-                    <img src={b.imageUrl} alt={b.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                    <Image
+                      src={b.imageUrl}
+                      alt={b.name}
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      quality={65}
+                      className="object-cover"
+                    />
                   ) : (
                     <div className="w-full h-full bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900" />
                   )}

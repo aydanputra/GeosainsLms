@@ -1,0 +1,2 @@
+ALTER TABLE "ShopVendor"
+ADD COLUMN IF NOT EXISTS "adminWhatsapp" TEXT;

@@ -3,6 +3,8 @@ import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { isSameOrigin } from '@/modules/auth/utils/security';
 import { writeAuditLog } from '@/utils/audit';
+import { sendStudentStatusUpdateEmail } from '@/utils/email-notifications';
+import { getAppUrl } from '@/modules/core/utils/appUrl';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -29,7 +31,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const booking = await prisma.serviceBooking.findUnique({
       where: { id: bookingId },
-      include: { orderItem: { include: { order: true } }, product: { select: { id: true, name: true } } },
+      include: {
+        orderItem: { include: { order: true } },
+        product: { select: { id: true, name: true } },
+        user: { select: { name: true, email: true } },
+      },
     });
     if (!booking) return NextResponse.json({ error: 'Booking tidak ditemukan' }, { status: 404 });
 
@@ -94,6 +100,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       },
     });
 
+    if (booking.user?.email) {
+      await sendStudentStatusUpdateEmail({
+        to: booking.user.email,
+        name: booking.user.name || null,
+        title:
+          action === 'CONFIRM'
+            ? 'Jadwal Jasa Dikonfirmasi'
+            : action === 'START'
+              ? 'Jasa Dimulai'
+              : action === 'COMPLETE'
+                ? 'Jasa Selesai'
+                : 'Jasa Dibatalkan',
+        itemName: booking.product?.name || booking.productId,
+        orderId: booking.orderItem?.orderId || null,
+        note: note || null,
+        actionUrl: `${getAppUrl(req.headers)}/dashboard/student/orders?orderId=${encodeURIComponent(String(booking.orderItem?.orderId || ''))}`,
+      });
+    }
+
     await writeAuditLog({
       req,
       actor: { id: String(admin.id), role: admin.role },
@@ -108,4 +133,3 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: error?.message || 'Gagal update booking' }, { status: 500 });
   }
 }
-

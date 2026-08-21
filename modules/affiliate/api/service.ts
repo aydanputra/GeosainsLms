@@ -230,29 +230,35 @@ export const processCommission = async (orderId: string, affiliateCode: string) 
 
 export const requestWithdrawal = async (userId: string, amount: number, note?: string) => {
   await settleAffiliateBalance(userId);
-  const profile = await prisma.affiliateProfile.findUnique({
-    where: { userId },
-  });
+  return prisma.$transaction(async (tx) => {
+    const profile = await tx.affiliateProfile.findUnique({
+      where: { userId },
+      select: { id: true, balance: true },
+    });
 
-  if (!profile) throw new Error('Affiliate profile not found');
-  if (profile.balance < amount) throw new Error('Insufficient balance');
+    if (!profile) throw new Error('Affiliate profile not found');
 
-  return prisma.$transaction([
-    prisma.withdrawal.create({
+    const updated = await tx.affiliateProfile.updateMany({
+      where: {
+        id: profile.id,
+        balance: { gte: amount },
+      },
+      data: {
+        balance: { decrement: amount },
+      },
+    });
+
+    if (updated.count === 0) throw new Error('Insufficient balance');
+
+    return tx.withdrawal.create({
       data: {
         affiliateId: profile.id,
         amount,
         status: 'PENDING',
         note,
       },
-    }),
-    prisma.affiliateProfile.update({
-      where: { id: profile.id },
-      data: {
-        balance: { decrement: amount },
-      },
-    }),
-  ]);
+    });
+  });
 };
 
 export const getAffiliateStats = async (userId: string) => {

@@ -4,9 +4,17 @@ import { useEffect, useState } from 'react';
 import { Star } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function CourseRatingWidget({ courseId }: { courseId: string }) {
-  const [ratingAvg, setRatingAvg] = useState(0);
-  const [ratingCount, setRatingCount] = useState(0);
+export default function CourseRatingWidget({
+  courseId,
+  initialRatingAvg = 0,
+  initialRatingCount = 0,
+}: {
+  courseId: string;
+  initialRatingAvg?: number;
+  initialRatingCount?: number;
+}) {
+  const [ratingAvg, setRatingAvg] = useState(initialRatingAvg);
+  const [ratingCount, setRatingCount] = useState(initialRatingCount);
   const [myRating, setMyRating] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -23,8 +31,8 @@ export default function CourseRatingWidget({ courseId }: { courseId: string }) {
         setMyRating(typeof data.myRating === 'number' ? data.myRating : null);
       } catch {
         if (!active) return;
-        setRatingAvg(0);
-        setRatingCount(0);
+        setRatingAvg(initialRatingAvg);
+        setRatingCount(initialRatingCount);
         setMyRating(null);
       } finally {
         if (!active) return;
@@ -34,7 +42,7 @@ export default function CourseRatingWidget({ courseId }: { courseId: string }) {
     return () => {
       active = false;
     };
-  }, [courseId]);
+  }, [courseId, initialRatingAvg, initialRatingCount]);
 
   const save = async (value: number) => {
     setIsSaving(true);
@@ -108,4 +116,3 @@ export default function CourseRatingWidget({ courseId }: { courseId: string }) {
     </div>
   );
 }
-

@@ -3,14 +3,36 @@ import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { readdir, stat } from 'fs/promises';
 import path from 'path';
+import { isSameOrigin } from '@/modules/auth/utils/security';
+import { writeAccessDeniedAuditLog, writeAuditLog } from '@/utils/audit';
 
 export async function GET(req: NextRequest) {
   try {
     const token = req.cookies.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!token) {
+      await writeAccessDeniedAuditLog({
+        req,
+        action: 'MEDIA_LIST_DENIED',
+        status: 401,
+        entityType: 'MediaAsset',
+        entityId: null,
+        reason: 'missing_token',
+      });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const user = await verifyToken(token);
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user) {
+      await writeAccessDeniedAuditLog({
+        req,
+        action: 'MEDIA_LIST_DENIED',
+        status: 401,
+        entityType: 'MediaAsset',
+        entityId: null,
+        reason: 'invalid_token',
+      });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const searchParams = req.nextUrl.searchParams;
     const q = (searchParams.get('q') || '').trim();
@@ -49,7 +71,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     return NextResponse.json({ items, total, take, skip });
-  } catch (error: unknown) {
+  } catch {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
@@ -76,12 +98,55 @@ function inferCreatedAtFromFilename(filename: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!isSameOrigin(req)) {
+      await writeAccessDeniedAuditLog({
+        req,
+        action: 'MEDIA_REINDEX_DENIED',
+        status: 403,
+        entityType: 'MediaAsset',
+        entityId: null,
+        reason: 'cross_origin',
+      });
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const token = req.cookies.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!token) {
+      await writeAccessDeniedAuditLog({
+        req,
+        action: 'MEDIA_REINDEX_DENIED',
+        status: 401,
+        entityType: 'MediaAsset',
+        entityId: null,
+        reason: 'missing_token',
+      });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const user = await verifyToken(token);
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    if (user.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!user) {
+      await writeAccessDeniedAuditLog({
+        req,
+        action: 'MEDIA_REINDEX_DENIED',
+        status: 401,
+        entityType: 'MediaAsset',
+        entityId: null,
+        reason: 'invalid_token',
+      });
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (user.role !== 'ADMIN') {
+      await writeAccessDeniedAuditLog({
+        req,
+        actor: { id: String(user.id), role: user.role },
+        action: 'MEDIA_REINDEX_DENIED',
+        status: 403,
+        entityType: 'MediaAsset',
+        entityId: null,
+        reason: 'forbidden',
+      });
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const body = (await req.json().catch(() => ({}))) as any;
     const action = typeof body?.action === 'string' ? body.action : '';
@@ -151,6 +216,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    await writeAuditLog({
+      req,
+      actor: { id: String(user.id), role: user.role },
+      action: 'MEDIA_REINDEX',
+      entityType: 'MediaAsset',
+      entityId: null,
+      metadata: {
+        scanned,
+        created,
+        skipped,
+        folders: folders.length,
+        orphanFolders,
+        assignedTo: assignTo,
+      },
+    });
+
     return NextResponse.json(
       {
         ok: true,
@@ -163,7 +244,7 @@ export async function POST(req: NextRequest) {
       },
       { status: 200 }
     );
-  } catch (error: unknown) {
+  } catch {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }

@@ -1,9 +1,9 @@
+/* eslint-disable react-hooks/incompatible-library */
 import { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { X, Save, Plus, Trash2, HelpCircle, Clock, ChevronRight, ChevronLeft, Settings, Layout, CheckSquare, MoreVertical, GripVertical, Loader2, Award, ArrowLeft } from 'lucide-react';
-import { toast } from 'sonner';
+import { X, Save, Plus, Trash2, HelpCircle, Clock, ChevronRight, Settings, Layout, Loader2, Award, ArrowLeft } from 'lucide-react';
 
 const TYPE_LABELS: Record<string, string> = {
   MULTIPLE_CHOICE: 'Pilihan Ganda',
@@ -38,7 +38,6 @@ const quizSchema = z.object({
   })).min(1, "Minimal harus ada 1 pertanyaan"),
 });
 
-type QuizFormData = z.infer<typeof quizSchema>;
 type QuizFormInput = z.input<typeof quizSchema>;
 type QuizFormOutput = z.output<typeof quizSchema>;
 
@@ -67,10 +66,13 @@ export default function QuizModal({ isOpen, onClose, onSave, initialData, isLoad
     }
   });
 
-  const { fields, append, remove, move } = useFieldArray({
+  const { fields, append, remove } = useFieldArray({
     control,
     name: "questions"
   });
+  const watchedQuestions = watch('questions');
+  const watchedHideQuizTime = watch('hideQuizTime');
+  const watchedQuizAutoStart = watch('quizAutoStart');
 
   const [activeTab, setActiveTab] = useState<'details' | 'settings'>('details');
   const [activeQuestionIndex, setActiveQuestionIndex] = useState<number | null>(null);
@@ -239,12 +241,12 @@ export default function QuizModal({ isOpen, onClose, onSave, initialData, isLoad
                      {index + 1}
                    </div>
                    <div className="min-w-0 flex-1 pr-6">
-                     <p className="text-sm font-bold text-slate-800 truncate">{watch(`questions.${index}.text`) || 'Pertanyaan Baru'}</p>
+                     <p className="text-sm font-bold text-slate-800 truncate">{watchedQuestions?.[index]?.text || 'Pertanyaan Baru'}</p>
                      <div className="flex items-center gap-2 mt-1">
                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200 font-semibold uppercase tracking-tight">
-                            {TYPE_LABELS[watch(`questions.${index}.type`)] || 'Pilihan Ganda'}
+                            {TYPE_LABELS[watchedQuestions?.[index]?.type || ''] || 'Pilihan Ganda'}
                         </span>
-                        <span className="text-[10px] text-slate-400 font-medium">{watch(`questions.${index}.points`)} Poin</span>
+                        <span className="text-[10px] text-slate-400 font-medium">{watchedQuestions?.[index]?.points} Poin</span>
                      </div>
                    </div>
                    <ChevronRight className="w-4 h-4 text-slate-300 absolute right-3 top-1/2 -translate-y-1/2"/>
@@ -394,14 +396,14 @@ export default function QuizModal({ isOpen, onClose, onSave, initialData, isLoad
                             <div className="space-y-4">
                                 <h3 className="font-bold text-slate-800 text-base border-b border-slate-100 pb-2">Perilaku</h3>
                                 <div className="grid grid-cols-1 gap-4">
-                                    <div className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setValue('hideQuizTime', !watch('hideQuizTime'))}>
+                                    <div className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setValue('hideQuizTime', !watchedHideQuizTime)}>
                                         <div>
                                             <span className="block text-sm font-bold text-slate-700">Sembunyikan Waktu</span>
                                             <span className="block text-xs text-slate-500 mt-0.5">Jangan tampilkan timer saat mengerjakan</span>
                                         </div>
                                         <input type="checkbox" {...register('hideQuizTime')} className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500 pointer-events-none" />
                                     </div>
-                                    <div className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setValue('quizAutoStart', !watch('quizAutoStart'))}>
+                                    <div className="flex items-center justify-between p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer" onClick={() => setValue('quizAutoStart', !watchedQuizAutoStart)}>
                                         <div>
                                             <span className="block text-sm font-bold text-slate-700">Mulai Otomatis</span>
                                             <span className="block text-xs text-slate-500 mt-0.5">Langsung mulai saat halaman dibuka</span>

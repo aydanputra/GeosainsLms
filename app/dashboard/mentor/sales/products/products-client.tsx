@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -115,19 +115,21 @@ export default function ProductsClient({
   mode,
   variant,
   platform,
+  defaultRangeLabel = 'Hari ini',
   courseRows,
   productRows,
 }: {
   mode: 'COURSE_ONLY' | 'VENDOR_ACTIVE';
   variant?: 'MENTOR' | 'ADMIN';
   platform: { feePercent: number; mentorPercent: number };
+  defaultRangeLabel?: string;
   courseRows: CourseRow[];
   productRows: ProductRow[];
 }) {
   const router = useRouter();
   const view = variant === 'ADMIN' ? 'ADMIN' : 'MENTOR';
-  const safeCourseRows = Array.isArray(courseRows) ? courseRows : [];
-  const safeProductRows = Array.isArray(productRows) ? productRows : [];
+  const safeCourseRows = useMemo(() => (Array.isArray(courseRows) ? courseRows : []), [courseRows]);
+  const safeProductRows = useMemo(() => (Array.isArray(productRows) ? productRows : []), [productRows]);
 
   const allItems: ProductListItem[] = useMemo(() => {
     const courseEditBase = view === 'ADMIN' ? '/dashboard/admin/courses' : '/dashboard/mentor/courses';
@@ -273,7 +275,7 @@ export default function ProductsClient({
     return visibleIds.every((id) => set.has(id));
   }, [selectedIds, visibleIds]);
 
-  const toggleAllVisible = () => {
+  const toggleAllVisible = useCallback(() => {
     setSelectedIds((prev) => {
       const prevSet = new Set(prev);
       const allSelected = visibleIds.length > 0 && visibleIds.every((id) => prevSet.has(id));
@@ -281,7 +283,7 @@ export default function ProductsClient({
       for (const id of visibleIds) prevSet.add(id);
       return Array.from(prevSet);
     });
-  };
+  }, [visibleIds]);
 
   const toggleOne = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -454,6 +456,7 @@ export default function ProductsClient({
                 ? 'Ringkasan pendapatan kursus dan produk vendor Anda.'
                 : 'Vendor belum aktif. Halaman ini menampilkan produk kursus Anda.'}
           </p>
+          <div className="text-xs text-slate-500 mt-2">Perhitungan default: {defaultRangeLabel}</div>
           <div className="text-xs text-slate-500 mt-2">
             Kursus: Fee platform {Number(platform.feePercent || 0)}% • Mentor {Number(platform.mentorPercent || 0)}%
           </div>

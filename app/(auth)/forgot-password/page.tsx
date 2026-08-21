@@ -1,11 +1,12 @@
 "use client";
 
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { AlertCircle, Loader2, Mail, ShieldCheck } from 'lucide-react';
 
-export default function ForgotPasswordPage() {
+function ForgotPasswordPageContent() {
   const searchParams = useSearchParams();
   const emailParam = useMemo(() => (searchParams.get('email') || '').trim().toLowerCase(), [searchParams]);
 
@@ -118,3 +119,10 @@ export default function ForgotPasswordPage() {
   );
 }
 
+export default function ForgotPasswordPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+      <ForgotPasswordPageContent />
+    </Suspense>
+  );
+}

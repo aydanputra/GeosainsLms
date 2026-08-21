@@ -24,7 +24,7 @@ export default function MentorLessons({ lessons }: MentorLessonsProps) {
         columns={columns} 
         data={lessons} 
         isLoading={false}
-        actions={(row) => (
+        actions={() => (
           <button className="text-indigo-600 hover:text-indigo-800 text-sm">Edit</button>
         )}
       />

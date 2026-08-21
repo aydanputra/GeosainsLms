@@ -1,6 +1,5 @@
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/modules/auth/utils/auth';
-import { prisma } from '@/utils/prisma';
 import AdminAudit from '@/modules/dashboard/pages/admin/AdminAudit';
 
 export const dynamic = 'force-dynamic';

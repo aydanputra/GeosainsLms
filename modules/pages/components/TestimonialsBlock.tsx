@@ -181,6 +181,8 @@ function ColumnMotion({
   animatedRef: RefObject<HTMLDivElement | null>;
   loopDuplicate: boolean;
 }) {
+  const avatarSizes = '40px';
+
   return (
     <div className="relative overflow-hidden" style={{ height: `${heightPx}px` }}>
       <div ref={viewportRef} className="h-full overflow-hidden">
@@ -189,13 +191,17 @@ function ColumnMotion({
             {offsetTopPx ? <div style={{ height: `${offsetTopPx}px` }} /> : null}
             <div className="space-y-6">
               {items.map((t, idx) => (
-                <div key={`${t.title || 't'}-${idx}`} className="bg-white text-slate-900 rounded-2xl p-6 shadow-sm">
+                <div
+                  key={`${t.title || 't'}-${idx}`}
+                  className="bg-white text-slate-900 rounded-2xl p-6 shadow-sm"
+                  style={{ contentVisibility: 'auto', containIntrinsicSize: '180px' }}
+                >
                   {t.title ? <div className="text-lg font-[700] leading-[27px]">{t.title}</div> : null}
                   {t.text ? <div className="mt-2 text-sm text-slate-600 leading-relaxed">{t.text}</div> : null}
                   <div className="mt-4 flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden relative shrink-0">
                       {t.avatarUrl ? (
-                        <Image src={t.avatarUrl} alt={t.authorName || 'User'} fill unoptimized className="object-cover" />
+                        <Image src={t.avatarUrl} alt={t.authorName || 'User'} fill sizes={avatarSizes} className="object-cover" />
                       ) : null}
                     </div>
                     <div className="min-w-0">
@@ -214,13 +220,17 @@ function ColumnMotion({
               {offsetTopPx ? <div style={{ height: `${offsetTopPx}px` }} /> : null}
               <div className="space-y-6">
                 {items.map((t, idx) => (
-                  <div key={`dup-${t.title || 't'}-${idx}`} className="bg-white text-slate-900 rounded-2xl p-6 shadow-sm">
+                  <div
+                    key={`dup-${t.title || 't'}-${idx}`}
+                    className="bg-white text-slate-900 rounded-2xl p-6 shadow-sm"
+                    style={{ contentVisibility: 'auto', containIntrinsicSize: '180px' }}
+                  >
                     {t.title ? <div className="text-lg font-[700] leading-[27px]">{t.title}</div> : null}
                     {t.text ? <div className="mt-2 text-sm text-slate-600 leading-relaxed">{t.text}</div> : null}
                     <div className="mt-4 flex items-center gap-3">
                       <div className="w-10 h-10 rounded-full bg-slate-100 overflow-hidden relative shrink-0">
                         {t.avatarUrl ? (
-                          <Image src={t.avatarUrl} alt={t.authorName || 'User'} fill unoptimized className="object-cover" />
+                          <Image src={t.avatarUrl} alt={t.authorName || 'User'} fill sizes={avatarSizes} className="object-cover" />
                         ) : null}
                       </div>
                       <div className="min-w-0">
@@ -241,8 +251,12 @@ function ColumnMotion({
 }
 
 export default function TestimonialsBlock({ content }: { content: TestimonialsContent }) {
-  const badgeText = typeof content?.badgeText === 'string' ? content.badgeText : 'Trusted By 900K+ Students';
-  const heading = typeof content?.heading === 'string' ? content.heading : 'Join Our Supportive Community';
+  const rawBadgeText = typeof content?.badgeText === 'string' ? content.badgeText.trim() : '';
+  const rawHeading = typeof content?.heading === 'string' ? content.heading.trim() : '';
+  const badgeText = !rawBadgeText || rawBadgeText === 'Trusted By 900K+ Students' ? 'Dipercaya Banyak Peserta' : rawBadgeText;
+  const heading = !rawHeading || rawHeading === 'Join Our Supportive Community 😊' || rawHeading === 'Join Our Supportive Community'
+    ? 'Komunitas Belajar GeoSains'
+    : rawHeading;
   const subheading = typeof content?.subheading === 'string' ? content.subheading : '';
 
   const buttons = Array.isArray(content?.buttons) ? content.buttons : [];

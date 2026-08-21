@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import Table from '../../components/Tables';
 import Cards from '../../components/Cards';
 import EmptyState from '../../components/EmptyState';
@@ -43,7 +43,7 @@ export default function AdminPages({ pages: initialPages }: AdminPagesProps) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  const toggleAllVisible = () => {
+  const toggleAllVisible = useCallback(() => {
     setSelectedIds((prev) => {
       const prevSet = new Set(prev);
       const allSelected = visibleIds.length > 0 && visibleIds.every((id) => prevSet.has(id));
@@ -51,7 +51,7 @@ export default function AdminPages({ pages: initialPages }: AdminPagesProps) {
       for (const id of visibleIds) prevSet.add(id);
       return Array.from(prevSet);
     });
-  };
+  }, [visibleIds]);
 
   const metrics = [
     { label: 'Total Halaman', value: pages.length, color: 'bg-blue-500' },
@@ -128,7 +128,7 @@ export default function AdminPages({ pages: initialPages }: AdminPagesProps) {
       if (!res.ok) throw new Error('Gagal memuat halaman');
       const data = await res.json();
       setPages(Array.isArray(data) ? data : []);
-    } catch (e) {
+    } catch {
       toast.error('Gagal memuat halaman');
     }
   };

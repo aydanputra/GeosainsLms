@@ -3,13 +3,28 @@ import { updatePost, deletePost, getPostBySlug } from '@/modules/blog/api/servic
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
 import { writeAuditLog } from '@/utils/audit';
+import { sanitizeRichHtml } from '@/modules/core/utils/sanitizeHtml';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id: slug } = await params;
     const post = await getPostBySlug(slug);
     if (!post) return NextResponse.json({ error: 'Post not found' }, { status: 404 });
-    return NextResponse.json(post);
+
+    if (!post.published) {
+      const token = req.cookies.get('token')?.value;
+      const user = token ? await verifyToken(token) : null;
+      const isAdmin = user?.role === 'ADMIN';
+      const isOwnerMentor = user?.role === 'MENTOR' && String(post.authorId) === String(user.id);
+      if (!isAdmin && !isOwnerMentor) {
+        return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+      }
+    }
+
+    return NextResponse.json({
+      ...post,
+      content: sanitizeRichHtml(post.content),
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

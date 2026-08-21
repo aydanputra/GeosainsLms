@@ -1,26 +1,15 @@
 
 import { prisma } from '@/utils/prisma';
 import { generateUniqueSerial } from '../utils/serial';
-
-function safeParse(content: string | null | undefined) {
-  if (!content) return {};
-  try {
-    const parsed = JSON.parse(content);
-    if (!parsed || typeof parsed !== 'object') return {};
-    return parsed as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
+import { getCourseCertificateContext, getCourseRuntimeSettings } from '@/modules/course/api/performance';
 
 /**
  * Checks if a user has completed a course and issues a certificate if eligible.
  * Idempotent: Returns existing certificate if already issued.
  */
 export async function issueCertificateIfEligible(userId: string, courseId: string) {
-  const settingsPage = await prisma.page.findUnique({ where: { slug: '__course_settings__' }, select: { content: true } });
-  const settings = safeParse(settingsPage?.content);
-  const certificatesEnabled = settings['certificatesEnabled'] !== false;
+  const settings = await getCourseRuntimeSettings();
+  const certificatesEnabled = settings.certificatesEnabled !== false;
   if (!certificatesEnabled) return null;
 
   // 1. Check if certificate already exists
@@ -32,24 +21,10 @@ export async function issueCertificateIfEligible(userId: string, courseId: strin
 
   if (existing) return existing;
 
-  const course = (await prisma.course.findUnique({
-    where: { id: courseId },
-    include: {
-      modules: {
-        include: {
-          lessons: {
-            select: {
-              id: true,
-              quiz: { select: { id: true, passingGrade: true } },
-              assignment: { select: { id: true, passingGrade: true } },
-            },
-          },
-        },
-      }
-    }
-  })) as any;
+  const course = (await getCourseCertificateContext(courseId)) as any;
 
   if (!course) throw new Error('Course not found');
+  if (course.deletedAt) throw new Error('Course not found');
   if (course.certificateEnabled === false) return null;
 
   const modules: any[] = Array.isArray(course.modules) ? course.modules : [];
@@ -125,7 +100,7 @@ export async function issueCertificateIfEligible(userId: string, courseId: strin
             completedAt: new Date(),
         }
     });
-  } catch (error) {
+  } catch {
       // If upsert fails (e.g. serial collision), we should retry or just return existing
       // But since serial is unique, a collision on serial would throw.
       // If race condition on userId_courseId, upsert handles it.

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
-import { writeAuditLog } from '@/utils/audit';
+import { enforceRateLimit, getClientIp, isSameOrigin } from '@/modules/auth/utils/security';
+import { writeAuditLog, writeRateLimitAuditLog } from '@/utils/audit';
 
 const db = prisma as any;
 
@@ -43,12 +44,48 @@ function sanitizeDirectMessage(input: string) {
 
 export async function POST(req: NextRequest) {
   try {
+    if (!isSameOrigin(req)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
     const token = req.cookies.get('token')?.value;
     if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const user = await verifyToken(token);
     if (!user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const me = String(user.id);
     const myRole = String((user as any)?.role || '').toUpperCase();
+
+    const ip = getClientIp(req);
+    const ipRl = enforceRateLimit({ key: `messages:send:ip:${ip}`, limit: 40, windowMs: 10 * 60 * 1000 });
+    if (!ipRl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        actor: { id: me, role: user.role },
+        action: 'MESSAGE_SEND_RATE_LIMITED',
+        key: `messages:send:ip:${ip}`,
+        retryAfterSeconds: ipRl.retryAfterSeconds,
+        entityType: 'DirectMessage',
+        metadata: { scope: 'ip' },
+      });
+      return NextResponse.json(
+        { error: 'Terlalu banyak pesan dikirim. Coba lagi nanti.' },
+        { status: 429, headers: { 'Retry-After': String(ipRl.retryAfterSeconds) } }
+      );
+    }
+    const userRl = enforceRateLimit({ key: `messages:send:user:${me}`, limit: 80, windowMs: 10 * 60 * 1000 });
+    if (!userRl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        actor: { id: me, role: user.role },
+        action: 'MESSAGE_SEND_RATE_LIMITED',
+        key: `messages:send:user:${me}`,
+        retryAfterSeconds: userRl.retryAfterSeconds,
+        entityType: 'DirectMessage',
+        metadata: { scope: 'user' },
+      });
+      return NextResponse.json(
+        { error: 'Terlalu banyak pesan untuk akun ini. Coba lagi nanti.' },
+        { status: 429, headers: { 'Retry-After': String(userRl.retryAfterSeconds) } }
+      );
+    }
 
     const body = (await req.json().catch(() => ({}))) as { toUserId?: unknown; message?: unknown; topic?: unknown };
     const toUserId = typeof body.toUserId === 'string' ? body.toUserId.trim() : '';

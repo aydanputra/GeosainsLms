@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
 import StudentCourses from '@/modules/dashboard/pages/student/StudentCourses';
+import { getEnrolledCourses } from '@/modules/course/api/service';
 
 export default async function Page() {
   const cookieStore = await cookies();
@@ -15,57 +16,70 @@ export default async function Page() {
   if (!userId) return <div>Access Denied</div>;
   if (role !== 'STUDENT' && role !== 'ADMIN' && role !== 'MENTOR') return <div>Access Denied</div>;
 
-  const enrollments = await prisma.enrollment.findMany({
-    where: { userId },
-    include: {
-      course: {
-        include: {
-          instructor: {
-            select: { name: true, email: true }
-          },
-          modules: {
-            include: { lessons: true }
-          }
-        }
-      }
-    },
-    orderBy: { createdAt: 'desc' }
-  });
+  const formattedCourses = await getEnrolledCourses(userId);
+  const courseIds = formattedCourses.map((course: any) => String(course.id)).filter(Boolean);
 
-  // Fetch progress separately if not on Enrollment
-  const progressRecords = await prisma.userProgress.findMany({
-      where: { userId },
-      select: { lessonId: true, completed: true }
-  });
-  
-  const completedLessonIds = new Set(progressRecords.filter(p => p.completed).map(p => p.lessonId));
+  const [courseMetaRows, reviewSummaryRows, myReviewRows] = courseIds.length
+    ? await Promise.all([
+        prisma.course.findMany({
+          where: { id: { in: courseIds } },
+          select: { id: true, reviewsEnabled: true },
+        }),
+        prisma.courseReview.groupBy({
+          by: ['courseId'],
+          where: { courseId: { in: courseIds } },
+          _avg: { rating: true },
+          _count: { rating: true },
+        }),
+        prisma.courseReview.findMany({
+          where: { userId, courseId: { in: courseIds } },
+          select: { courseId: true, rating: true, comment: true },
+        }),
+      ])
+    : [[], [], []];
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const formattedCourses = enrollments.map((e: any) => {
-    // Calculate progress
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const allLessons = e.course.modules.flatMap((m: any) => m.lessons);
-    const totalLessons = allLessons.length;
-    
-    // Count completed lessons for this course
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const completedLessons = allLessons.filter((l: any) => completedLessonIds.has(l.id)).length;
-    
-    const progressPercent = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+  const courseMetaMap = new Map(
+    courseMetaRows.map((course) => [String(course.id), { reviewsEnabled: course.reviewsEnabled !== false }] as const)
+  );
+  const reviewSummaryMap = new Map(
+    reviewSummaryRows.map((row) => [
+      String(row.courseId),
+      {
+        ratingAvg: row._avg.rating ?? 0,
+        ratingCount: row._count.rating ?? 0,
+      },
+    ] as const)
+  );
+  const myReviewMap = new Map(
+    myReviewRows.map((row) => [
+      String(row.courseId),
+      {
+        myRating: row.rating ?? null,
+        myComment: row.comment ?? '',
+      },
+    ] as const)
+  );
 
+  const coursesWithReviewState = formattedCourses.map((course: any) => {
+    const key = String(course.id);
     return {
-      id: e.course.id,
-      slug: e.course.slug,
-      title: e.course.title,
-      thumbnailUrl: e.course.thumbnailUrl,
-      instructorName: e.course.instructor?.name || e.course.instructor?.email || 'Unknown',
-      enrolledAt: e.createdAt.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
-      progress: progressPercent,
-      totalLessons,
-      completedLessons,
-      status: progressPercent === 100 ? 'COMPLETED' : 'IN_PROGRESS'
+      ...course,
+      reviewsEnabled: courseMetaMap.get(key)?.reviewsEnabled !== false,
     };
   });
 
-  return <StudentCourses courses={formattedCourses} />;
+  const initialReviewState = courseIds.reduce<Record<string, { ratingAvg: number; ratingCount: number; myRating: number | null; myComment: string }>>(
+    (acc, courseId) => {
+      acc[courseId] = {
+        ratingAvg: reviewSummaryMap.get(courseId)?.ratingAvg ?? 0,
+        ratingCount: reviewSummaryMap.get(courseId)?.ratingCount ?? 0,
+        myRating: myReviewMap.get(courseId)?.myRating ?? null,
+        myComment: myReviewMap.get(courseId)?.myComment ?? '',
+      };
+      return acc;
+    },
+    {}
+  );
+
+  return <StudentCourses courses={coursesWithReviewState} initialReviewState={initialReviewState} />;
 }

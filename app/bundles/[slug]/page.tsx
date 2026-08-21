@@ -1,12 +1,15 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { cookies } from 'next/headers';
-import { prisma } from '@/utils/prisma';
-import { verifyToken } from '@/modules/auth/utils/auth';
-import { CourseStatus } from '@prisma/client';
 import BundleCTA from './components/BundleCTA';
+import { getPublicBundleDetail, getPublicBundleSlugs } from '@/modules/public/api/performance';
+import { normalizeImageUrl } from '@/modules/core/utils/image';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300;
+
+export async function generateStaticParams() {
+  return getPublicBundleSlugs();
+}
 
 function formatCurrency(value: number) {
   const n = Number.isFinite(value) ? value : 0;
@@ -16,43 +19,12 @@ function formatCurrency(value: number) {
 
 export default async function BundleDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const bundle = await prisma.courseBundle.findUnique({ where: { slug } });
+  const data = await getPublicBundleDetail(slug);
 
-  if (!bundle || !bundle.published) return notFound();
+  if (!data) return notFound();
 
-  const rawCourseIds = Array.from(new Set((bundle.courseIds || []).map((c) => c.trim()).filter(Boolean)));
-  const courses =
-    rawCourseIds.length > 0
-      ? await prisma.course.findMany({
-          where: { id: { in: rawCourseIds }, deletedAt: null, status: CourseStatus.PUBLISHED },
-          select: { id: true, slug: true, title: true, price: true, thumbnailUrl: true, subtitle: true },
-        })
-      : [];
-
-  const courseMap = new Map(courses.map((c) => [c.id, c]));
-  const orderedCourses = rawCourseIds.map((id) => courseMap.get(id)).filter(Boolean) as typeof courses;
-  const missingCount = rawCourseIds.filter((id) => !courseMap.has(id)).length;
-
-  const subtotal = orderedCourses.reduce((sum, c) => sum + Number(c.price || 0), 0);
-  const price = Math.max(0, Number(bundle.price || 0));
-  const discount = Math.max(0, Math.round((subtotal - price) * 100) / 100);
-
-  const cookieStore = await cookies();
-  const token = cookieStore.get('token')?.value;
-  const user = token ? await verifyToken(token) : null;
-  const isLoggedIn = !!user;
-
-  const enrolledCount =
-    user && orderedCourses.length > 0
-      ? await prisma.enrollment.count({
-          where: { userId: user.id, courseId: { in: orderedCourses.map((c) => c.id) } },
-        })
-      : 0;
-
-  const thumbnailUrl =
-    typeof bundle.thumbnailUrl === 'string' && bundle.thumbnailUrl.trim() && !bundle.thumbnailUrl.startsWith('blob:')
-      ? bundle.thumbnailUrl
-      : null;
+  const { bundle, orderedCourses, missingCount, subtotal, price, discount } = data;
+  const thumbnailUrl = normalizeImageUrl(bundle.thumbnailUrl, { fallback: null });
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
@@ -93,9 +65,9 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ s
             </div>
 
             <div className="hidden lg:block">
-              <div className="aspect-[16/9] rounded-2xl overflow-hidden border border-white/10 bg-slate-800">
+              <div className="aspect-[16/9] rounded-2xl overflow-hidden border border-white/10 bg-slate-800 relative">
                 {thumbnailUrl ? (
-                  <img src={thumbnailUrl} alt={bundle.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                  <Image src={thumbnailUrl} alt={bundle.name} fill priority sizes="(max-width: 1280px) 100vw, 360px" quality={70} className="object-cover" />
                 ) : (
                   <div className="w-full h-full bg-gradient-to-br from-slate-800 via-slate-700 to-indigo-800" />
                 )}
@@ -135,10 +107,7 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ s
                   <div className="text-sm text-slate-600">Bundel ini belum memiliki kursus.</div>
                 ) : (
                   orderedCourses.map((c) => {
-                    const img =
-                      typeof c.thumbnailUrl === 'string' && c.thumbnailUrl.trim() && !c.thumbnailUrl.startsWith('blob:')
-                        ? c.thumbnailUrl
-                        : null;
+                    const img = normalizeImageUrl(c.thumbnailUrl, { fallback: null });
                     const courseHref = c.slug ? `/courses/${encodeURIComponent(c.slug)}` : '/courses';
                     return (
                       <Link
@@ -146,9 +115,16 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ s
                         href={courseHref}
                         className="group border border-slate-200 rounded-2xl overflow-hidden bg-white hover:shadow-md transition-shadow"
                       >
-                        <div className="aspect-[16/9] bg-slate-900">
+                        <div className="aspect-[16/9] bg-slate-900 relative">
                           {img ? (
-                            <img src={img} alt={c.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                            <Image
+                              src={img}
+                              alt={c.title}
+                              fill
+                              sizes="(max-width: 768px) 100vw, 50vw"
+                              quality={65}
+                              className="object-cover"
+                            />
                           ) : (
                             <div className="w-full h-full bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900" />
                           )}
@@ -175,8 +151,6 @@ export default async function BundleDetailPage({ params }: { params: Promise<{ s
               courseCount={orderedCourses.length}
               subtotal={subtotal}
               price={price}
-              isLoggedIn={isLoggedIn}
-              enrolledCount={enrolledCount}
             />
           </div>
         </div>

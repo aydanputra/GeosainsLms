@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { registerUser, loginUser } from '../api/service';
 import { prisma } from '@/utils/prisma';
-import { hashPassword, verifyPassword } from '../utils/auth';
+import { createToken, hashPassword, verifyPassword } from '../utils/auth';
 
 // Mock dependencies
 vi.mock('@/utils/prisma', () => ({
@@ -41,11 +41,11 @@ describe('Auth Service', () => {
       const result = await registerUser({
         name: 'Test User',
         email: 'test@example.com',
-        password: 'password123',
+        password: 'SangatKuat#2026',
       });
 
       expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'test@example.com' } });
-      expect(hashPassword).toHaveBeenCalledWith('password123');
+      expect(hashPassword).toHaveBeenCalledWith('SangatKuat#2026');
       expect(prisma.user.create).toHaveBeenCalled();
       expect(result).toEqual({
         id: '1',
@@ -61,7 +61,7 @@ describe('Auth Service', () => {
       await expect(registerUser({
         name: 'Test User',
         email: 'test@example.com',
-        password: 'password123',
+        password: 'SangatKuat#2026',
       })).rejects.toThrow('User already exists');
     });
   });
@@ -74,6 +74,8 @@ describe('Auth Service', () => {
         email: 'test@example.com',
         password: 'hashed-password',
         role: 'STUDENT',
+        emailVerifiedAt: new Date('2026-01-01T00:00:00.000Z'),
+        sessionVersion: 3,
       };
 
       (prisma.user.findUnique as any).mockResolvedValue(mockUser);
@@ -81,18 +83,23 @@ describe('Auth Service', () => {
 
       const result = await loginUser({
         email: 'test@example.com',
-        password: 'password123',
+        password: 'SangatKuat#2026',
       });
 
       expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'test@example.com' } });
-      expect(verifyPassword).toHaveBeenCalledWith('password123', 'hashed-password');
+      expect(verifyPassword).toHaveBeenCalledWith('SangatKuat#2026', 'hashed-password');
+      expect(createToken).toHaveBeenCalledWith(expect.objectContaining({
+        id: '1',
+        email: 'test@example.com',
+        sessionVersion: 3,
+      }));
       expect(result).toHaveProperty('token');
-      expect(result.user).toEqual({
+      expect(result.user).toEqual(expect.objectContaining({
         id: '1',
         name: 'Test User',
         email: 'test@example.com',
         role: 'STUDENT',
-      });
+      }));
     });
 
     it('should throw error for invalid credentials', async () => {
@@ -100,8 +107,28 @@ describe('Auth Service', () => {
 
       await expect(loginUser({
         email: 'wrong@example.com',
-        password: 'password123',
+        password: 'SangatKuat#2026',
       })).rejects.toThrow('Invalid credentials');
+    });
+
+    it('should block unverified non-admin user after password check passes', async () => {
+      (prisma.user.findUnique as any).mockResolvedValue({
+        id: '1',
+        name: 'Test User',
+        email: 'test@example.com',
+        password: 'hashed-password',
+        role: 'STUDENT',
+        emailVerifiedAt: null,
+        sessionVersion: 0,
+      });
+      (verifyPassword as any).mockResolvedValue(true);
+
+      await expect(loginUser({
+        email: 'test@example.com',
+        password: 'SangatKuat#2026',
+      })).rejects.toMatchObject({ message: 'Email belum terverifikasi', code: 'EMAIL_NOT_VERIFIED' });
+
+      expect(createToken).not.toHaveBeenCalled();
     });
   });
 });

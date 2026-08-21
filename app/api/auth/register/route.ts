@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { registerUser } from '@/modules/auth/api/service';
 import { prisma } from '@/utils/prisma';
-import { enforceRateLimit, generateOpaqueToken, getClientIp, isSameOrigin, sha256Hex } from '@/modules/auth/utils/security';
-import { writeAuditLog } from '@/utils/audit';
-import { sendEmail } from '@/utils/email';
+import { enforceRateLimit, getClientIp, isSameOrigin } from '@/modules/auth/utils/security';
+import { writeAuditLog, writeRateLimitAuditLog } from '@/utils/audit';
+import { issueVerificationEmail } from '@/modules/auth/utils/emailVerification';
+import { getAppUrl } from '@/modules/core/utils/appUrl';
+import { createPendingVerificationToken, setPendingVerificationCookie } from '@/modules/auth/utils/verificationAutoLogin';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,6 +15,12 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
     const rl = enforceRateLimit({ key: `auth:register:${ip}`, limit: 5, windowMs: 10 * 60 * 1000 });
     if (!rl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        action: 'AUTH_REGISTER_RATE_LIMITED',
+        key: `auth:register:${ip}`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      });
       return NextResponse.json(
         { error: 'Terlalu banyak percobaan. Coba lagi nanti.' },
         { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
@@ -35,24 +43,17 @@ export async function POST(req: NextRequest) {
 
     const emailVerifiedAt = (user as any)?.emailVerifiedAt ? new Date((user as any).emailVerifiedAt as any) : null;
     const needsEmailVerification = !emailVerifiedAt;
-    const rawToken = needsEmailVerification ? generateOpaqueToken(32) : null;
-    const verifyUrl = rawToken ? `${req.nextUrl.origin}/verify-email?token=${encodeURIComponent(rawToken)}` : null;
-    if (rawToken) {
-      const tokenHash = sha256Hex(rawToken);
-      await prisma.emailVerificationToken.create({
-        data: {
-          userId: String((user as any).id),
-          tokenHash,
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-        },
-      });
+    let verifyUrl: string | null = null;
+    if (needsEmailVerification) {
       const email = typeof (user as any)?.email === 'string' ? (user as any).email.trim().toLowerCase() : '';
-      if (email && verifyUrl) {
-        await sendEmail({
-          to: email,
-          subject: 'Verifikasi Email - Geosains LMS',
-          text: `Klik link berikut untuk verifikasi email Anda:\n${verifyUrl}\n\nJika Anda tidak merasa mendaftar, abaikan email ini.`,
+      if (email) {
+        const issued = await issueVerificationEmail({
+          userId: String((user as any).id),
+          email,
+          name: typeof (user as any)?.name === 'string' ? (user as any).name : '',
+          origin: getAppUrl(req.headers),
         });
+        verifyUrl = issued.verifyUrl;
       }
     }
 
@@ -81,10 +82,15 @@ export async function POST(req: NextRequest) {
 
     const devVerifyUrl = process.env.NODE_ENV !== 'production' && verifyUrl ? verifyUrl : undefined;
 
-    return NextResponse.json(
+    const response = NextResponse.json(
       { user, verificationSent: needsEmailVerification, devVerifyUrl },
       { status: 201 }
     );
+    if (needsEmailVerification && (user as any)?.id) {
+      const pendingToken = await createPendingVerificationToken(String((user as any).id));
+      setPendingVerificationCookie(response, pendingToken);
+    }
+    return response;
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || 'Something went wrong' },

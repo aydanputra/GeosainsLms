@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { X, Save, FileText, Video, Image, Clock, Check, Loader2, Upload } from 'lucide-react';
+import { X, Save, FileText, Video, Image as ImageIcon, Loader2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import dynamic from 'next/dynamic';
 import LessonAttachmentModal from '@/modules/media/components/LessonAttachmentModal';
@@ -378,7 +378,7 @@ export default function LessonModal({
             <div className="space-y-2 hidden lg:block">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Gambar Unggulan</label>
               <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 flex flex-col items-center justify-center text-center hover:bg-slate-100 transition-colors cursor-pointer bg-white">
-                <Image className="w-8 h-8 text-slate-300 mb-2" />
+                <ImageIcon className="w-8 h-8 text-slate-300 mb-2" />
                 <span className="text-xs text-slate-500 font-medium">Unggah Gambar</span>
               </div>
             </div>

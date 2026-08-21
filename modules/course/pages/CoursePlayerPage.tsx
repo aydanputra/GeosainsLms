@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,6 +14,32 @@ type OutlineLessonStatus = {
   isLocked: boolean;
   unlockDate: string | null;
   lockReason: string | null;
+};
+
+type OutlineCourseData = {
+  course?: {
+    id?: string;
+    title?: string;
+    slug?: string;
+    dripEnabled?: boolean;
+    dripType?: string | null;
+    modules?: Array<{
+      id: string;
+      title: string;
+      order: number;
+      lessons: Array<{
+        id: string;
+        title: string;
+        type: string;
+        duration: number;
+        isPreview: boolean;
+        order: number;
+        isLocked: boolean;
+        unlockDate: string | null;
+        lockReason: string | null;
+      }>;
+    }>;
+  };
 };
 
 type QAThreadSummary = {
@@ -51,6 +77,10 @@ type QAThreadDetail = {
   replies: QAReply[];
 };
 
+type QAThreadListData = {
+  threads: QAThreadSummary[];
+};
+
 function lockReasonText(lockReason: string | null) {
   if (lockReason === 'DRIP_LOCKED') return 'Materi ini masih terkunci (drip).';
   if (lockReason === 'SCHEDULE_LOCKED') return 'Materi ini belum dibuka sesuai jadwal.';
@@ -85,10 +115,18 @@ function formatQaDate(value: string | null | undefined) {
 
 export default function CoursePlayerPage({
   courseId,
+  courseSlug,
+  courseTitle,
+  enableQA,
+  reviewsEnabled,
   autoLoadNextCourseContent,
   courseRetakeEnabled,
 }: {
   courseId?: string;
+  courseSlug?: string;
+  courseTitle?: string;
+  enableQA?: boolean;
+  reviewsEnabled?: boolean | null;
   autoLoadNextCourseContent?: boolean;
   courseRetakeEnabled?: boolean;
 }) {
@@ -112,25 +150,16 @@ export default function CoursePlayerPage({
   const [didInitSidebar, setDidInitSidebar] = useState(false);
   const didCompletionRedirectRef = useRef(false);
 
-  // Fetch course details
-  const { data: course, isLoading: courseLoading } = useQuery({
-    queryKey: ['course', id],
+  const { data: outline, isLoading: outlineLoading } = useQuery({
+    queryKey: ['courseOutline', courseSlug],
     queryFn: async () => {
-      const res = await fetch(`/api/courses/${id}`);
-      if (!res.ok) throw new Error('Failed to fetch course');
-      return res.json();
-    },
-    enabled: !!id,
-  });
-
-  const { data: outline } = useQuery({
-    queryKey: ['courseOutline', course?.slug],
-    queryFn: async () => {
-      const res = await fetch(`/api/courses/slug/${course.slug}/outline`, { cache: 'no-store' });
+      const res = await fetch(`/api/courses/slug/${courseSlug}/outline`, { cache: 'no-store' });
       if (!res.ok) throw new Error('Failed to fetch outline');
       return res.json();
     },
-    enabled: Boolean(course?.slug),
+    enabled: Boolean(courseSlug),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   // Fetch user progress
@@ -140,7 +169,8 @@ export default function CoursePlayerPage({
   const updateProgress = useUpdateLessonProgress(id || '');
 
   // Flatten lessons from modules
-  const allLessons = course?.modules?.flatMap((m: any) => m.lessons) || [];
+  const outlineModules = useMemo(() => outline?.course?.modules || [], [outline?.course?.modules]);
+  const allLessons = useMemo(() => outlineModules.flatMap((m: any) => m.lessons) || [], [outlineModules]);
   const completedLessonIds: string[] = progress?.completedLessonIds || [];
   const preferredLessonId =
     allLessons.find((lesson: any) => !completedLessonIds.includes(lesson.id))?.id || allLessons[0]?.id || null;
@@ -154,7 +184,7 @@ export default function CoursePlayerPage({
   const isCompleted = currentLessonId ? completedLessonIds.includes(currentLessonId) : false;
   const completedLessonsCount = completedLessonIds.length || 0;
 
-  const replaceQueryParams = (next: Record<string, string | null>) => {
+  const replaceQueryParams = useCallback((next: Record<string, string | null>) => {
     const qs = new URLSearchParams(searchParams.toString());
     for (const [k, v] of Object.entries(next)) {
       if (v === null) qs.delete(k);
@@ -162,11 +192,11 @@ export default function CoursePlayerPage({
     }
     const query = qs.toString();
     router.replace(query ? `${pathname}?${query}` : pathname);
-  };
+  }, [pathname, router, searchParams]);
 
   useEffect(() => {
     if (didInitSidebar) return;
-    const modules = course?.modules;
+    const modules = outlineModules;
     if (!Array.isArray(modules) || modules.length === 0) return;
     const currentModuleId =
       currentLessonId && modules.find((m: any) => Array.isArray(m.lessons) && m.lessons.some((l: any) => l?.id === currentLessonId))?.id;
@@ -174,7 +204,7 @@ export default function CoursePlayerPage({
     const first = (currentModuleId || fallbackId) ? [String(currentModuleId || fallbackId)] : [];
     setExpandedModuleIds(first);
     setDidInitSidebar(true);
-  }, [course?.modules, currentLessonId, didInitSidebar]);
+  }, [currentLessonId, didInitSidebar, outlineModules]);
 
   const lockByLessonId = useMemo(() => {
     const map = new Map<string, OutlineLessonStatus>();
@@ -197,7 +227,7 @@ export default function CoursePlayerPage({
 
   const lessonStatus = currentLessonId ? lockByLessonId.get(currentLessonId) : null;
   const isLessonLocked = Boolean(lessonStatus?.isLocked);
-  const qaEnabled = Boolean(course?.enableQA);
+  const qaEnabled = Boolean(enableQA);
   const autoLoadNext = autoLoadNextCourseContent !== false;
 
   const handleRetake = async () => {
@@ -213,7 +243,7 @@ export default function CoursePlayerPage({
       setSelectedLessonId(null);
       replaceQueryParams({ lessonId: null, threadId: null, scope: null });
       await queryClient.invalidateQueries({ queryKey: ['courseProgress', id] });
-      await queryClient.invalidateQueries({ queryKey: ['courseOutline', course?.slug] });
+      await queryClient.invalidateQueries({ queryKey: ['courseOutline', courseSlug] });
       await queryClient.invalidateQueries({ queryKey: ['lesson', id] });
       toast.success('Progress kursus di-reset. Anda bisa mulai dari awal.');
     } catch (e: any) {
@@ -252,6 +282,8 @@ export default function CoursePlayerPage({
       return data;
     },
     enabled: Boolean(id && currentLessonId),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const buildLockMapFromOutline = (outlineData: any) => {
@@ -272,6 +304,113 @@ export default function CoursePlayerPage({
     return map;
   };
 
+  const updateSequentialOutlineCache = useCallback(
+    (completedLessonId: string) => {
+      if (!courseSlug) return null;
+
+      const outlineKey = ['courseOutline', courseSlug] as const;
+      queryClient.setQueryData(outlineKey, (previous: OutlineCourseData | undefined) => {
+        if (!previous?.course?.dripEnabled || previous.course.dripType !== 'SEQUENTIAL') {
+          return previous;
+        }
+
+        const modules = Array.isArray(previous.course.modules) ? previous.course.modules : [];
+        const flattenedLessons = modules.flatMap((module) => module.lessons.map((lesson) => lesson));
+        if (!flattenedLessons.some((lesson) => lesson.id === completedLessonId)) {
+          return previous;
+        }
+
+        const progressCache = queryClient.getQueryData<{
+          completedLessonIds?: string[];
+        }>(['courseProgress', id]);
+        const completedSet = new Set([
+          ...(Array.isArray(progressCache?.completedLessonIds) ? progressCache.completedLessonIds : []),
+          completedLessonId,
+        ]);
+
+        const nextModules = modules.map((module) => ({
+          ...module,
+          lessons: module.lessons.map((lesson) => ({ ...lesson })),
+        }));
+
+        const nextFlattened = nextModules.flatMap((module) => module.lessons);
+        for (let index = 0; index < nextFlattened.length; index += 1) {
+          const lesson = nextFlattened[index];
+          if (lesson.isPreview) {
+            lesson.isLocked = false;
+            lesson.lockReason = 'OK';
+            lesson.unlockDate = null;
+            continue;
+          }
+
+          let locked = false;
+          for (let previousIndex = 0; previousIndex < index; previousIndex += 1) {
+            const previousLesson = nextFlattened[previousIndex];
+            if (previousLesson.isPreview) continue;
+            if (!completedSet.has(previousLesson.id)) {
+              locked = true;
+              break;
+            }
+          }
+
+          lesson.isLocked = locked;
+          lesson.lockReason = locked ? 'SEQUENTIAL_LOCKED' : 'OK';
+          lesson.unlockDate = null;
+        }
+
+        return {
+          ...previous,
+          course: {
+            ...previous.course,
+            modules: nextModules,
+          },
+        };
+      });
+
+      return queryClient.getQueryData(outlineKey);
+    },
+    [courseSlug, id, queryClient]
+  );
+
+  const upsertQaThreadInCaches = useCallback(
+    (thread: QAThreadSummary) => {
+      if (!id) return;
+      const cachedLists = queryClient.getQueriesData<QAThreadListData>({ queryKey: ['qaThreads', id] });
+      for (const [queryKey, data] of cachedLists) {
+        if (!Array.isArray(queryKey)) continue;
+        const scope = queryKey[2];
+        const lessonId = queryKey[3];
+        const shouldInclude =
+          scope === 'COURSE' || (scope === 'LESSON' && thread.lessonId && String(lessonId || '') === String(thread.lessonId));
+        if (!shouldInclude) continue;
+
+        const currentThreads = Array.isArray(data?.threads) ? data.threads : [];
+        const existingIndex = currentThreads.findIndex((item) => item.id === thread.id);
+        const nextThreads =
+          existingIndex >= 0
+            ? currentThreads.map((item) => (item.id === thread.id ? { ...item, ...thread } : item))
+            : [thread, ...currentThreads];
+        queryClient.setQueryData(queryKey, { threads: nextThreads });
+      }
+    },
+    [id, queryClient]
+  );
+
+  const updateQaThreadInCaches = useCallback(
+    (threadId: string, updater: (thread: QAThreadSummary) => QAThreadSummary) => {
+      if (!id) return;
+      const cachedLists = queryClient.getQueriesData<QAThreadListData>({ queryKey: ['qaThreads', id] });
+      for (const [queryKey, data] of cachedLists) {
+        const currentThreads = Array.isArray(data?.threads) ? data.threads : [];
+        if (!currentThreads.some((thread) => thread.id === threadId)) continue;
+        queryClient.setQueryData(queryKey, {
+          threads: currentThreads.map((thread) => (thread.id === threadId ? updater(thread) : thread)),
+        });
+      }
+    },
+    [id, queryClient]
+  );
+
   const redirectAfterCourseCompleted = async () => {
     if (didCompletionRedirectRef.current) return;
     didCompletionRedirectRef.current = true;
@@ -282,8 +421,7 @@ export default function CoursePlayerPage({
       return;
     }
 
-    const reviewsEnabled = (course as any)?.reviewsEnabled !== false;
-    if (!reviewsEnabled) {
+    if (reviewsEnabled === false) {
       router.push(certificatesHref);
       return;
     }
@@ -339,9 +477,7 @@ export default function CoursePlayerPage({
       if (!isCompleted) {
         await updateProgress.mutateAsync({ lessonId: currentLessonId, completed: true });
       }
-      const outlineKey = ['courseOutline', course?.slug] as const;
-      await queryClient.refetchQueries({ queryKey: outlineKey });
-      const latest = queryClient.getQueryData(outlineKey);
+      const latest = updateSequentialOutlineCache(currentLessonId);
       const lockMap = buildLockMapFromOutline(latest);
       if (autoLoadNext) {
         handleNext(lockMap);
@@ -365,9 +501,7 @@ export default function CoursePlayerPage({
       if (!isCompleted) {
         await updateProgress.mutateAsync({ lessonId: currentLessonId, completed: true });
       }
-      const outlineKey = ['courseOutline', course?.slug] as const;
-      await queryClient.refetchQueries({ queryKey: outlineKey });
-      const latest = queryClient.getQueryData(outlineKey);
+      const latest = updateSequentialOutlineCache(currentLessonId);
       const lockMap = buildLockMapFromOutline(latest);
       if (autoLoadNext) {
         setTimeout(() => handleNext(lockMap), 300);
@@ -411,6 +545,8 @@ export default function CoursePlayerPage({
       return data as { threads: QAThreadSummary[] };
     },
     enabled: Boolean(id && qaEnabled && !isLessonLocked),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const { data: qaThreadDetail, isLoading: qaThreadLoading, error: qaThreadError } = useQuery({
@@ -427,6 +563,8 @@ export default function CoursePlayerPage({
       return data as { thread: QAThreadDetail };
     },
     enabled: Boolean(qaSelectedThreadId),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   useEffect(() => {
@@ -453,7 +591,7 @@ export default function CoursePlayerPage({
       if (selectedLessonId !== thread.lessonId) setSelectedLessonId(thread.lessonId);
       replaceQueryParams({ lessonId: String(thread.lessonId) });
     }
-  }, [allLessons, qaThreadDetail?.thread, searchParams, selectedLessonId]);
+  }, [allLessons, qaThreadDetail?.thread, replaceQueryParams, searchParams, selectedLessonId]);
 
   const onCreateThread = async () => {
     if (!id || !qaEnabled || isLessonLocked) return;
@@ -471,11 +609,29 @@ export default function CoursePlayerPage({
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || 'Gagal membuat pertanyaan');
+      const createdThread = data?.thread as QAThreadSummary | undefined;
       toast.success('Pertanyaan dibuat');
       setQaTitle('');
       setQaQuestion('');
-      await queryClient.invalidateQueries({ queryKey: ['qaThreads', id] });
-      if (data?.thread?.id) setQaSelectedThreadId(String(data.thread.id));
+      if (createdThread?.id) {
+        upsertQaThreadInCaches(createdThread);
+        queryClient.setQueryData(['qaThread', createdThread.id], {
+          thread: {
+            id: createdThread.id,
+            courseId: createdThread.courseId,
+            courseTitle: outline?.course?.title || courseTitle || '',
+            lessonId: createdThread.lessonId,
+            lessonTitle: createdThread.lessonTitle,
+            title: createdThread.title,
+            question: createdThread.question,
+            status: createdThread.status,
+            createdAt: createdThread.createdAt,
+            author: createdThread.author,
+            replies: [],
+          } satisfies QAThreadDetail,
+        });
+        setQaSelectedThreadId(String(createdThread.id));
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Gagal membuat pertanyaan';
       toast.error(message);
@@ -502,9 +658,24 @@ export default function CoursePlayerPage({
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || 'Gagal mengirim balasan');
+      const createdReply = data?.reply as QAReply | undefined;
       setQaReplyMessage('');
-      await queryClient.invalidateQueries({ queryKey: ['qaThread', threadId] });
-      await queryClient.invalidateQueries({ queryKey: ['qaThreads', id] });
+      if (createdReply) {
+        queryClient.setQueryData(['qaThread', threadId], (previous: { thread: QAThreadDetail } | undefined) => {
+          if (!previous?.thread) return previous;
+          return {
+            thread: {
+              ...previous.thread,
+              replies: [...previous.thread.replies, createdReply],
+            },
+          };
+        });
+        updateQaThreadInCaches(threadId, (thread) => ({
+          ...thread,
+          replyCount: Number(thread.replyCount || 0) + 1,
+          lastReplyAt: createdReply.createdAt,
+        }));
+      }
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'Gagal mengirim balasan';
       toast.error(messageText);
@@ -529,8 +700,19 @@ export default function CoursePlayerPage({
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error || 'Gagal mengubah status');
       toast.success(nextStatus === 'RESOLVED' ? 'Thread ditandai selesai' : 'Thread dibuka kembali');
-      await queryClient.invalidateQueries({ queryKey: ['qaThread', threadId] });
-      await queryClient.invalidateQueries({ queryKey: ['qaThreads', id] });
+      queryClient.setQueryData(['qaThread', threadId], (previous: { thread: QAThreadDetail } | undefined) => {
+        if (!previous?.thread) return previous;
+        return {
+          thread: {
+            ...previous.thread,
+            status: nextStatus,
+          },
+        };
+      });
+      updateQaThreadInCaches(threadId, (thread) => ({
+        ...thread,
+        status: nextStatus,
+      }));
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'Gagal mengubah status';
       toast.error(messageText);
@@ -550,7 +732,7 @@ export default function CoursePlayerPage({
     );
   }
 
-  if (courseLoading || progressLoading) {
+  if (outlineLoading || progressLoading) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -561,7 +743,7 @@ export default function CoursePlayerPage({
     );
   }
 
-  if (!course) {
+  if (!outline?.course) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center space-y-4">
@@ -586,7 +768,7 @@ export default function CoursePlayerPage({
     <div className="flex flex-col lg:flex-row min-h-screen bg-slate-50">
       {/* Sidebar Navigation */}
       <aside className="w-full lg:w-80 bg-white border-r p-6 overflow-y-auto lg:h-screen lg:sticky lg:top-0">
-        <h2 className="text-xl font-extrabold mb-6 text-slate-900">{course.title}</h2>
+        <h2 className="text-xl font-extrabold mb-6 text-slate-900">{outline?.course?.title || courseTitle}</h2>
         
         <ProgressTracker 
           completedLessons={completedLessonsCount}
@@ -608,7 +790,7 @@ export default function CoursePlayerPage({
         ) : null}
 
         <div className="space-y-4 mt-6">
-          {course.modules.map((module: any) => {
+          {outlineModules.map((module: any) => {
             const moduleId = String(module.id);
             const expanded = expandedModuleIds.includes(moduleId);
             const lessons = Array.isArray(module.lessons) ? module.lessons : [];
@@ -749,7 +931,7 @@ export default function CoursePlayerPage({
                   <div className="mt-4 flex gap-2">
                     <button
                       onClick={() => {
-                        if (course?.slug) router.push(`/courses/${course.slug}`);
+                        if (courseSlug) router.push(`/courses/${courseSlug}`);
                         else router.push('/courses');
                       }}
                       className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-bold hover:bg-slate-50 text-sm"
@@ -763,7 +945,10 @@ export default function CoursePlayerPage({
           ) : lessonDetails?.quiz ? (
             <QuizPlayer courseId={id} quiz={lessonDetails.quiz} onComplete={onQuizComplete} />
           ) : lessonDetails ? (
-            <LessonViewer lesson={lessonDetails} onComplete={onLessonComplete} courseId={id} courseSlug={course.slug} />
+            <LessonViewer
+              lesson={lessonDetails}
+              onComplete={onLessonComplete}
+            />
           ) : isLessonLocked ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-6">
               <div className="flex items-start gap-3">

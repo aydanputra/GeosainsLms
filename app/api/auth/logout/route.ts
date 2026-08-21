@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     res.cookies.set('token', '', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 0, path: '/' });
     res.cookies.set('sid', '', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 0, path: '/' });
     return res;
-  } catch (error: any) {
+  } catch {
     const res = NextResponse.json({ ok: true }, { status: 200 });
     res.cookies.set('token', '', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 0, path: '/' });
     res.cookies.set('sid', '', { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 0, path: '/' });

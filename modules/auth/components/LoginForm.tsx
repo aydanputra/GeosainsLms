@@ -179,21 +179,28 @@ export default function LoginForm() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data?.error || 'Google login gagal');
+            if (typeof window !== 'undefined' && typeof data?.devVerifyUrl === 'string' && data.devVerifyUrl.trim()) {
+              try {
+                window.sessionStorage.setItem('devVerifyUrl', data.devVerifyUrl.trim());
+              } catch {
+              }
+            }
+            if (data?.verificationSent) {
+              const email = typeof data?.user?.email === 'string' ? data.user.email.trim().toLowerCase() : '';
+              setUnverifiedEmail(email || null);
+              const next =
+                `/verify-email` +
+                (email ? `?email=${encodeURIComponent(email)}` : '') +
+                (redirectTarget ? `${email ? '&' : '?'}redirect=${encodeURIComponent(redirectTarget)}` : '');
+              router.push(next);
+              return;
+            }
             if (data?.code === 'TOTP_REQUIRED') {
               const t = typeof data?.tempToken === 'string' ? data.tempToken : '';
               if (!t) throw new Error('Token login tidak valid');
               setTempToken(t);
               setTotpCode('');
               setStep('totp');
-              return;
-            }
-            if (data?.createdNew) {
-              const email = typeof data?.user?.email === 'string' ? data.user.email.trim().toLowerCase() : '';
-              const next =
-                `/verify-email?provider=google&verified=1` +
-                (email ? `&email=${encodeURIComponent(email)}` : '') +
-                (redirectTarget ? `&redirect=${encodeURIComponent(redirectTarget)}` : '');
-              router.push(next);
               return;
             }
             handlePostLoginRedirect(data?.user);
@@ -220,7 +227,7 @@ export default function LoginForm() {
       googleInitializedRef.current = true;
     } catch {
     }
-  }, [googleReady, googleClientId, redirectTarget]);
+  }, [googleReady, googleClientId, redirectTarget]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="min-h-screen bg-slate-50">

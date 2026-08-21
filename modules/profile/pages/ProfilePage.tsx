@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
@@ -155,11 +156,25 @@ type LoginHistoryItem = {
 
 export default function ProfilePage({
   initialUser,
+  initialMeData,
+  initialStudentStats,
+  initialEnrolledCoursesData,
+  initialMentorStats,
+  initialMentorCoursesData,
+  initialCertificatesData,
+  initialMentorPostsData,
   variant = 'standalone',
   context = 'page',
   mode = 'profile',
 }: {
   initialUser: SessionUser;
+  initialMeData?: { user: SessionUser; loginHistory: LoginHistoryItem[] } | null;
+  initialStudentStats?: any;
+  initialEnrolledCoursesData?: any[] | null;
+  initialMentorStats?: any;
+  initialMentorCoursesData?: any[] | null;
+  initialCertificatesData?: any[] | null;
+  initialMentorPostsData?: any[] | null;
   variant?: 'standalone' | 'dashboard';
   context?: 'page' | 'tab';
   mode?: 'profile' | 'settings';
@@ -168,6 +183,16 @@ export default function ProfilePage({
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const didAutoRedirectRef = useRef(false);
+  const meQueryKey = useMemo(() => ['me', 'self'] as const, []);
+  const securityIntent = useMemo(() => (searchParams.get('intent') || '').trim().toLowerCase(), [searchParams]);
+  const wantsPasswordSetup = mode === 'settings' && securityIntent === 'set-password';
+  const initialSettingsTab = useMemo(() => {
+    const raw = (searchParams.get('tab') || '').trim().toLowerCase();
+    if (raw === 'super' || raw === 'additional' || raw === 'images' || raw === 'about' || raw === 'logins') {
+      return raw;
+    }
+    return 'basic';
+  }, [searchParams]);
   const [name, setName] = useState(initialUser.name || '');
   const [email, setEmail] = useState(initialUser.email || '');
   const [savingBasic, setSavingBasic] = useState(false);
@@ -196,7 +221,9 @@ export default function ProfilePage({
   const [totpQrDataUrl, setTotpQrDataUrl] = useState('');
   const [totpSecret, setTotpSecret] = useState('');
   const [savingTotp, setSavingTotp] = useState(false);
-  const [activeSettingsTab, setActiveSettingsTab] = useState<'basic' | 'super' | 'additional' | 'images' | 'about' | 'logins'>('basic');
+  const [activeSettingsTab, setActiveSettingsTab] = useState<'basic' | 'super' | 'additional' | 'images' | 'about' | 'logins'>(
+    initialSettingsTab as 'basic' | 'super' | 'additional' | 'images' | 'about' | 'logins'
+  );
   const [mentorJobTitle, setMentorJobTitle] = useState('');
   const [mentorBio, setMentorBio] = useState('');
   const [mentorSkills, setMentorSkills] = useState<string[]>([]);
@@ -217,22 +244,29 @@ export default function ProfilePage({
   const [facebook, setFacebook] = useState('');
   const [linkedin, setLinkedin] = useState('');
   const [tiktok, setTiktok] = useState('');
+  const [vendorContactEmail, setVendorContactEmail] = useState('');
+  const [vendorContactPhone, setVendorContactPhone] = useState('');
+  const [vendorAdminWhatsapp, setVendorAdminWhatsapp] = useState('');
+  const [vendorAddressLine1, setVendorAddressLine1] = useState('');
+  const [vendorAddressLine2, setVendorAddressLine2] = useState('');
+  const [vendorCity, setVendorCity] = useState('');
+  const [vendorProvince, setVendorProvince] = useState('');
+  const [vendorPostalCode, setVendorPostalCode] = useState('');
+  const [vendorCountry, setVendorCountry] = useState('');
+  const [creatingVendor, setCreatingVendor] = useState(false);
   const [activeProfileTab, setActiveProfileTab] = useState<'about' | 'courses' | 'products' | 'articles'>('about');
 
-  const loginHistoryScope = useMemo(() => {
-    const role = initialUser?.role;
-    if (activeSettingsTab === 'logins' && (role === 'ADMIN' || role === 'MENTOR')) return 'members';
-    return 'self';
-  }, [activeSettingsTab, initialUser?.role]);
+  const loginHistoryScope = 'self';
 
   const { data: meData, isLoading: isMeLoading, isError: isMeError } = useQuery({
-    queryKey: ['me', loginHistoryScope],
+    queryKey: meQueryKey,
     queryFn: async ({ signal }) => {
       const res = await fetch(`/api/me?loginHistoryScope=${encodeURIComponent(loginHistoryScope)}`, { signal, cache: 'no-store', credentials: 'include' });
       if (!res.ok) throw new Error('Failed to fetch session');
       return res.json();
     },
-    staleTime: 30_000,
+    initialData: initialMeData || undefined,
+    staleTime: 60_000,
   });
 
   const user: SessionUser = useMemo(() => {
@@ -359,16 +393,24 @@ export default function ProfilePage({
 
   const settingsHref = '/dashboard/settings';
   const isSuperAdmin = user.role === 'ADMIN' && Boolean((user as any).isSuperAdmin);
-  const isMentorLike = user.role === 'MENTOR' || (user.role === 'ADMIN' && !isSuperAdmin);
+  const hasMentorProfileSettings = user.role === 'MENTOR' || user.role === 'ADMIN';
   const totpEnabled = Boolean((user as any).totpEnabled);
 
   useEffect(() => {
     if (mode !== 'settings') return;
-    if (!isSuperAdmin) return;
-    if (activeSettingsTab === 'additional' || activeSettingsTab === 'images' || activeSettingsTab === 'about') {
+    if (activeSettingsTab === 'super' && !isSuperAdmin) {
       setActiveSettingsTab('basic');
     }
   }, [activeSettingsTab, isSuperAdmin, mode]);
+
+  useEffect(() => {
+    if (mode !== 'settings') return;
+    if (wantsPasswordSetup) {
+      setActiveSettingsTab('basic');
+      return;
+    }
+    setActiveSettingsTab(initialSettingsTab as 'basic' | 'super' | 'additional' | 'images' | 'about' | 'logins');
+  }, [initialSettingsTab, mode, wantsPasswordSetup]);
 
   useEffect(() => {
     if (mode !== 'settings') return;
@@ -394,29 +436,20 @@ export default function ProfilePage({
       if (!res.ok) return null;
       return res.json().catch(() => null);
     },
-    staleTime: 30_000,
+    initialData: initialStudentStats,
+    staleTime: 60_000,
   });
 
   const { data: mentorStats } = useQuery({
     queryKey: ['profile-stats', 'mentor'],
-    enabled: user.role === 'MENTOR',
+    enabled: hasMentorProfileSettings,
     queryFn: async ({ signal }) => {
       const res = await fetch('/api/dashboard/stats/mentor', { signal, cache: 'no-store', credentials: 'include' });
       if (!res.ok) return null;
       return res.json().catch(() => null);
     },
-    staleTime: 30_000,
-  });
-
-  const { data: adminStats } = useQuery({
-    queryKey: ['profile-stats', 'admin'],
-    enabled: user.role === 'ADMIN',
-    queryFn: async ({ signal }) => {
-      const res = await fetch('/api/dashboard/stats/admin', { signal, cache: 'no-store', credentials: 'include' });
-      if (!res.ok) return null;
-      return res.json().catch(() => null);
-    },
-    staleTime: 30_000,
+    initialData: initialMentorStats,
+    staleTime: 60_000,
   });
 
   const { data: enrolledCoursesData } = useQuery({
@@ -428,19 +461,21 @@ export default function ProfilePage({
       const data = await res.json().catch(() => []);
       return Array.isArray(data) ? data : [];
     },
-    staleTime: 30_000,
+    initialData: initialEnrolledCoursesData || undefined,
+    staleTime: 60_000,
   });
 
   const { data: mentorCoursesData } = useQuery({
-    queryKey: ['profile-courses', 'mentor'],
-    enabled: isMentorLike,
+    queryKey: ['profile-courses', 'mentor', user.id],
+    enabled: hasMentorProfileSettings,
     queryFn: async ({ signal }) => {
-      const res = await fetch('/api/dashboard/mentor/courses', { signal, cache: 'no-store', credentials: 'include' });
+      const res = await fetch('/api/dashboard/mentor/courses?scope=self', { signal, cache: 'no-store', credentials: 'include' });
       if (!res.ok) return [];
       const data = await res.json().catch(() => []);
       return Array.isArray(data) ? data : [];
     },
-    staleTime: 30_000,
+    initialData: initialMentorCoursesData || undefined,
+    staleTime: 60_000,
   });
 
   const enrolledCourses = useMemo(() => {
@@ -480,6 +515,7 @@ export default function ProfilePage({
       const data = await res.json().catch(() => []);
       return Array.isArray(data) ? data : [];
     },
+    initialData: initialCertificatesData || undefined,
     staleTime: 60_000,
   });
 
@@ -500,7 +536,7 @@ export default function ProfilePage({
 
   const { data: mentorPostsData } = useQuery({
     queryKey: ['profile-posts', user.id],
-    enabled: isMentorLike,
+    enabled: hasMentorProfileSettings,
     queryFn: async ({ signal }) => {
       const url = new URL('/api/blog/posts', window.location.origin);
       url.searchParams.set('authorId', user.id);
@@ -509,6 +545,7 @@ export default function ProfilePage({
       const data = await res.json().catch(() => []);
       return Array.isArray(data) ? data : [];
     },
+    initialData: initialMentorPostsData || undefined,
     staleTime: 60_000,
   });
 
@@ -526,10 +563,10 @@ export default function ProfilePage({
   }, [mentorPostsData]);
 
   const { data: myVendorsData } = useQuery({
-    queryKey: ['profile-vendors'],
-    enabled: user.role === 'MENTOR' || user.role === 'ADMIN',
+    queryKey: ['profile-vendors', user.id],
+    enabled: (user.role === 'MENTOR' || user.role === 'ADMIN') && activeProfileTab === 'products',
     queryFn: async ({ signal }) => {
-      const res = await fetch('/api/shop/vendors', { signal, cache: 'no-store', credentials: 'include' });
+      const res = await fetch('/api/shop/vendors?scope=self', { signal, cache: 'no-store', credentials: 'include' });
       if (!res.ok) return [];
       const data = await res.json().catch(() => []);
       return Array.isArray(data) ? data : [];
@@ -541,18 +578,17 @@ export default function ProfilePage({
     const list = Array.isArray(myVendorsData) ? myVendorsData : [];
     return list
       .filter((v) => v && typeof v === 'object')
-      .filter((v) => String((v as any).status || '') === 'APPROVED' || user.role === 'ADMIN')
       .map((v) => String((v as any).id || ''))
       .filter(Boolean);
-  }, [myVendorsData, user.role]);
+  }, [myVendorsData]);
 
   const { data: myProductsData } = useQuery({
-    queryKey: ['profile-products', approvedVendorIds.join(',')],
-    enabled: (user.role === 'MENTOR' && approvedVendorIds.length > 0) || user.role === 'ADMIN',
+    queryKey: ['profile-products', user.id, approvedVendorIds.join(',')],
+    enabled: activeProfileTab === 'products' && approvedVendorIds.length > 0,
     queryFn: async ({ signal }) => {
       const p = new URLSearchParams();
       p.set('take', '24');
-      if (user.role !== 'ADMIN') p.set('vendorIds', approvedVendorIds.join(','));
+      p.set('vendorIds', approvedVendorIds.join(','));
       const res = await fetch(`/api/shop/products?${p.toString()}`, { signal, cache: 'no-store' });
       if (!res.ok) return [];
       const data = await res.json().catch(() => []);
@@ -581,18 +617,19 @@ export default function ProfilePage({
     const base: Array<{ id: 'about' | 'courses' | 'products' | 'articles'; label: string; icon: any }> = [
       { id: 'about', label: 'Tentang', icon: User },
     ];
-    if (isMentorLike || user.role === 'STUDENT') base.push({ id: 'courses' as const, label: 'Kursus', icon: BookOpen });
-    if (isMentorLike) base.push({ id: 'products' as const, label: 'Produk', icon: ShoppingBag });
-    if (isMentorLike) base.push({ id: 'articles' as const, label: 'Artikel', icon: FileText });
+    if (hasMentorProfileSettings || user.role === 'STUDENT') base.push({ id: 'courses' as const, label: 'Kursus', icon: BookOpen });
+    if (hasMentorProfileSettings) base.push({ id: 'products' as const, label: 'Produk', icon: ShoppingBag });
+    if (hasMentorProfileSettings) base.push({ id: 'articles' as const, label: 'Artikel', icon: FileText });
     return base;
-  }, [isMentorLike, user.role]);
+  }, [hasMentorProfileSettings, user.role]);
 
   const metrics = useMemo(() => {
-    if (isMentorLike) {
+    if (hasMentorProfileSettings) {
       const totalCourses = Number((mentorStats as any)?.totalCourses) || 0;
-      const adminActiveStudents = Number((adminStats as any)?.activeStudents) || 0;
       const enrolledStudents =
-        user.role === 'MENTOR' ? Number((mentorStats as any)?.enrolledStudents) || 0 : adminActiveStudents;
+        user.role === 'MENTOR'
+          ? Number((mentorStats as any)?.enrolledStudents) || 0
+          : mentorCourses.reduce((acc, course) => acc + Number(course.totalStudents || 0), 0);
       const pendingSubmissions = Number((mentorStats as any)?.pendingSubmissions) || 0;
       const articles = mentorPosts.length;
       return [
@@ -600,18 +637,6 @@ export default function ProfilePage({
         { label: 'Siswa', value: enrolledStudents, icon: GraduationCap },
         { label: 'Tugas Pending', value: pendingSubmissions, icon: Briefcase },
         { label: 'Artikel', value: articles, icon: FileText },
-      ];
-    }
-    if (user.role === 'ADMIN') {
-      const totalUsers = Number((adminStats as any)?.totalUsers) || 0;
-      const totalCourses = Number((adminStats as any)?.totalCourses) || 0;
-      const totalOrders = Number((adminStats as any)?.totalOrders) || 0;
-      const revenue = Number((adminStats as any)?.revenue) || 0;
-      return [
-        { label: 'Pengguna', value: totalUsers, icon: User },
-        { label: 'Kursus', value: totalCourses, icon: BookOpen },
-        { label: 'Order', value: totalOrders, icon: Briefcase },
-        { label: 'Total Pendapatan', value: revenue.toLocaleString('id-ID'), icon: Award, isMoney: true },
       ];
     }
     const completedCourses = Number((studentStats as any)?.completedCourses) || 0;
@@ -623,7 +648,7 @@ export default function ProfilePage({
       { label: 'Sertifikat', value: certificates.length, icon: GraduationCap },
       { label: 'Skor Kuis', value: totalScore, icon: User },
     ];
-  }, [adminStats, isMentorLike, mentorCourses.length, mentorPosts.length, mentorStats, studentStats, user.role, certificates.length]);
+  }, [hasMentorProfileSettings, mentorCourses, mentorPosts.length, mentorStats, studentStats, user.role, certificates.length]);
 
   useEffect(() => {
     setName(user.name || '');
@@ -654,7 +679,7 @@ export default function ProfilePage({
     setFacebook(typeof socials?.facebook === 'string' ? socials.facebook : '');
     setLinkedin(typeof socials?.linkedin === 'string' ? socials.linkedin : '');
     setTiktok(typeof socials?.tiktok === 'string' ? socials.tiktok : '');
-    if (isMentorLike) {
+    if (hasMentorProfileSettings) {
       setMentorJobTitle(typeof user.mentorJobTitle === 'string' ? user.mentorJobTitle : '');
       setMentorBio(typeof user.mentorBio === 'string' ? user.mentorBio : '');
       setMentorSkills(Array.isArray(user.mentorSkills) ? user.mentorSkills.filter((v) => typeof v === 'string') : []);
@@ -699,19 +724,7 @@ export default function ProfilePage({
         : [];
       setMentorAttachments(nextFiles);
     }
-  }, [
-    user.id,
-    user.name,
-    user.email,
-    user.role,
-    isMentorLike,
-    (user as any).mentorJobTitle,
-    (user as any).mentorBio,
-    (user as any).mentorSkills,
-    (user as any).mentorEducations,
-    (user as any).mentorExperiences,
-    (user as any).mentorAttachments,
-  ]);
+  }, [user, hasMentorProfileSettings]);
 
   const avatarUrl =
     typeof user.avatarUrl === 'string' && user.avatarUrl.trim() && !user.avatarUrl.startsWith('blob:') ? user.avatarUrl : '';
@@ -731,8 +744,8 @@ export default function ProfilePage({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan foto profil');
       toast.success('Foto profil diperbarui');
-      queryClient.setQueryData(['me'], (prev: any) => ({ ...(prev || {}), user: { ...(prev?.user || user), avatarUrl: nextUrl || null } }));
-      queryClient.invalidateQueries({ queryKey: ['me'] });
+      queryClient.setQueryData(meQueryKey, (prev: any) => ({ ...(prev || {}), user: { ...(prev?.user || user), avatarUrl: nextUrl || null } }));
+      queryClient.invalidateQueries({ queryKey: meQueryKey });
       router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Gagal menyimpan foto profil';
@@ -753,8 +766,8 @@ export default function ProfilePage({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan cover profil');
       toast.success('Cover profil diperbarui');
-      queryClient.setQueryData(['me'], (prev: any) => ({ ...(prev || {}), user: { ...(prev?.user || user), profileCoverUrl: nextUrl || null } }));
-      queryClient.invalidateQueries({ queryKey: ['me'] });
+      queryClient.setQueryData(meQueryKey, (prev: any) => ({ ...(prev || {}), user: { ...(prev?.user || user), profileCoverUrl: nextUrl || null } }));
+      queryClient.invalidateQueries({ queryKey: meQueryKey });
       router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Gagal menyimpan cover profil';
@@ -775,8 +788,8 @@ export default function ProfilePage({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan tanda tangan');
       toast.success('Tanda tangan diperbarui');
-      queryClient.setQueryData(['me'], (prev: any) => ({ ...(prev || {}), user: { ...(prev?.user || user), signatureUrl: nextUrl || null } }));
-      queryClient.invalidateQueries({ queryKey: ['me'] });
+      queryClient.setQueryData(meQueryKey, (prev: any) => ({ ...(prev || {}), user: { ...(prev?.user || user), signatureUrl: nextUrl || null } }));
+      queryClient.invalidateQueries({ queryKey: meQueryKey });
       router.refresh();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Gagal menyimpan tanda tangan';
@@ -832,7 +845,7 @@ export default function ProfilePage({
   };
 
   const saveSecurity = async () => {
-    if (!currentPassword) {
+    if (!wantsPasswordSetup && !currentPassword) {
       toast.error('Password saat ini wajib diisi');
       return;
     }
@@ -851,15 +864,20 @@ export default function ProfilePage({
       const res = await fetch('/api/me', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ currentPassword, newPassword }),
+        body: JSON.stringify({ currentPassword, newPassword, passwordMode: wantsPasswordSetup ? 'set' : 'change' }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Gagal mengubah password');
-      toast.success('Password berhasil diubah');
+      toast.success(wantsPasswordSetup ? 'Password berhasil ditetapkan' : 'Password berhasil diubah');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       router.refresh();
+      if (wantsPasswordSetup) {
+        if (user.role === 'ADMIN') router.push('/dashboard/admin');
+        else if (user.role === 'MENTOR') router.push('/dashboard/mentor');
+        else router.push('/dashboard/student');
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Gagal mengubah password';
       toast.error(message);
@@ -943,7 +961,7 @@ export default function ProfilePage({
       if (!res.ok) throw new Error(data?.error || 'Gagal mengaktifkan 2FA');
       toast.success('Verifikasi 2 langkah diaktifkan');
       closeTotpModal();
-      queryClient.invalidateQueries({ queryKey: ['me'] });
+      queryClient.invalidateQueries({ queryKey: meQueryKey });
       router.refresh();
     } catch (e: any) {
       toast.error(e?.message || 'Gagal mengaktifkan 2FA');
@@ -972,7 +990,7 @@ export default function ProfilePage({
       if (!res.ok) throw new Error(data?.error || 'Gagal menonaktifkan 2FA');
       toast.success('Verifikasi 2 langkah dinonaktifkan');
       closeTotpModal();
-      queryClient.invalidateQueries({ queryKey: ['me'] });
+      queryClient.invalidateQueries({ queryKey: meQueryKey });
       router.refresh();
     } catch (e: any) {
       toast.error(e?.message || 'Gagal menonaktifkan 2FA');
@@ -1034,9 +1052,11 @@ export default function ProfilePage({
     const prevEmail = (user.email || '').trim();
 
     const shouldSaveBasic = nextName !== prevName || nextEmail !== prevEmail;
-    const shouldSaveSecurity = Boolean(currentPassword || newPassword || confirmPassword);
+    const shouldSaveSecurity = wantsPasswordSetup
+      ? Boolean(newPassword || confirmPassword)
+      : Boolean(currentPassword || newPassword || confirmPassword);
     const shouldSaveMentor =
-      isMentorLike &&
+      hasMentorProfileSettings &&
       (mentorJobTitle.trim() !== String(user.mentorJobTitle || '').trim() ||
         mentorBio !== String(user.mentorBio || '') ||
         JSON.stringify(mentorSkills) !== JSON.stringify(Array.isArray(user.mentorSkills) ? user.mentorSkills : []) ||
@@ -1064,8 +1084,20 @@ export default function ProfilePage({
       facebook.trim() !== String(userSocialLinks?.facebook || '').trim() ||
       linkedin.trim() !== String(userSocialLinks?.linkedin || '').trim() ||
       tiktok.trim() !== String(userSocialLinks?.tiktok || '').trim();
+    const shouldSaveVendor =
+      showVendorSettings &&
+      ((Boolean(activeVendorId) || canUseInstantVendorSettings) &&
+        (vendorContactEmail.trim() !== String((activeVendor as any)?.contactEmail || '').trim() ||
+        vendorContactPhone.trim() !== String((activeVendor as any)?.contactPhone || '').trim() ||
+        vendorAdminWhatsapp.trim() !== String((activeVendor as any)?.adminWhatsapp || '').trim() ||
+        vendorAddressLine1.trim() !== String((activeVendor as any)?.addressLine1 || '').trim() ||
+        vendorAddressLine2.trim() !== String((activeVendor as any)?.addressLine2 || '').trim() ||
+        vendorCity.trim() !== String((activeVendor as any)?.city || '').trim() ||
+        vendorProvince.trim() !== String((activeVendor as any)?.province || '').trim() ||
+        vendorPostalCode.trim() !== String((activeVendor as any)?.postalCode || '').trim() ||
+        vendorCountry.trim() !== String((activeVendor as any)?.country || '').trim()));
 
-    if (!shouldSaveBasic && !shouldSaveSecurity && !shouldSaveMentor && !shouldSaveAdditional) {
+    if (!shouldSaveBasic && !shouldSaveSecurity && !shouldSaveMentor && !shouldSaveAdditional && !shouldSaveVendor) {
       toast.info('Tidak ada perubahan');
       return;
     }
@@ -1102,7 +1134,7 @@ export default function ProfilePage({
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Gagal menyimpan informasi tambahan');
         toast.success('Informasi tambahan berhasil diperbarui');
-        queryClient.invalidateQueries({ queryKey: ['me'] });
+        queryClient.invalidateQueries({ queryKey: meQueryKey });
         router.refresh();
         maybeRedirectAfterProfileComplete();
       } catch (err) {
@@ -1130,7 +1162,7 @@ export default function ProfilePage({
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Gagal menyimpan profil mentor');
         toast.success('Profil mentor berhasil diperbarui');
-        queryClient.invalidateQueries({ queryKey: ['me'] });
+        queryClient.invalidateQueries({ queryKey: meQueryKey });
         router.refresh();
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Gagal menyimpan profil mentor';
@@ -1139,22 +1171,30 @@ export default function ProfilePage({
         setSavingMentorProfile(false);
       }
     }
+    if (shouldSaveVendor) {
+      await saveVendorContact();
+    }
   };
 
   const { data: vendorsData } = useQuery({
-    queryKey: ['my-vendors'],
+    queryKey: ['my-vendors', user.id],
     queryFn: async ({ signal }) => {
-      const res = await fetch('/api/shop/vendors', { signal });
+      const res = await fetch('/api/shop/vendors?scope=self', { signal, credentials: 'include' });
       if (!res.ok) return [];
       const data = await res.json().catch(() => []);
       return Array.isArray(data) ? data : [];
     },
-    enabled: mode === 'settings' && !isSuperAdmin,
+    enabled:
+      mode === 'settings' &&
+      (user.role === 'ADMIN' || user.role === 'MENTOR') &&
+      (activeSettingsTab === 'additional' || activeSettingsTab === 'images'),
     staleTime: 60_000,
   });
 
   const vendors = useMemo(() => (Array.isArray(vendorsData) ? vendorsData : []), [vendorsData]);
   const [activeVendorId, setActiveVendorId] = useState<string>('');
+  const canUseInstantVendorSettings = user.role === 'ADMIN';
+  const showVendorSettings = vendors.length > 0 || canUseInstantVendorSettings;
 
   useEffect(() => {
     if (mode !== 'settings') return;
@@ -1167,14 +1207,87 @@ export default function ProfilePage({
   const vendorLogoUrl = typeof (activeVendor as any)?.logoUrl === 'string' && String((activeVendor as any).logoUrl).trim() ? String((activeVendor as any).logoUrl) : '';
   const vendorCoverUrl = typeof (activeVendor as any)?.coverUrl === 'string' && String((activeVendor as any).coverUrl).trim() ? String((activeVendor as any).coverUrl) : '';
 
+  useEffect(() => {
+    setVendorContactEmail(typeof (activeVendor as any)?.contactEmail === 'string' ? String((activeVendor as any).contactEmail) : '');
+    setVendorContactPhone(typeof (activeVendor as any)?.contactPhone === 'string' ? String((activeVendor as any).contactPhone) : '');
+    setVendorAdminWhatsapp(typeof (activeVendor as any)?.adminWhatsapp === 'string' ? String((activeVendor as any).adminWhatsapp) : '');
+    setVendorAddressLine1(typeof (activeVendor as any)?.addressLine1 === 'string' ? String((activeVendor as any).addressLine1) : '');
+    setVendorAddressLine2(typeof (activeVendor as any)?.addressLine2 === 'string' ? String((activeVendor as any).addressLine2) : '');
+    setVendorCity(typeof (activeVendor as any)?.city === 'string' ? String((activeVendor as any).city) : '');
+    setVendorProvince(typeof (activeVendor as any)?.province === 'string' ? String((activeVendor as any).province) : '');
+    setVendorPostalCode(typeof (activeVendor as any)?.postalCode === 'string' ? String((activeVendor as any).postalCode) : '');
+    setVendorCountry(typeof (activeVendor as any)?.country === 'string' ? String((activeVendor as any).country) : '');
+  }, [activeVendor]);
+
+  const ensurePersonalVendor = async () => {
+    if (activeVendorId) return activeVendorId;
+    if (!canUseInstantVendorSettings) return '';
+
+    setCreatingVendor(true);
+    try {
+      const baseNameRaw =
+        String(user.name || '')
+          .trim()
+          .replace(/\s+/g, ' ') ||
+        String(user.email || '')
+          .split('@')[0]
+          .trim() ||
+        'Admin';
+      const slugBase = `vendor-${baseNameRaw}-${String(user.id || '').slice(-6) || Date.now()}`;
+      const slug = slugBase
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)+/g, '') || `vendor-${Date.now()}`;
+
+      const res = await fetch('/api/shop/vendors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: `Vendor ${baseNameRaw}`,
+          slug,
+          ownerId: String(user.id),
+          status: 'APPROVED',
+          contactEmail: vendorContactEmail.trim() || email.trim() || user.email || '',
+          contactPhone: vendorContactPhone.trim() || phone.trim() || '',
+          adminWhatsapp: vendorAdminWhatsapp.trim() || vendorContactPhone.trim() || phone.trim() || '',
+          addressLine1: vendorAddressLine1.trim(),
+          addressLine2: vendorAddressLine2.trim(),
+          city: vendorCity.trim() || city.trim(),
+          province: vendorProvince.trim() || province.trim(),
+          postalCode: vendorPostalCode.trim(),
+          country: vendorCountry.trim() || country.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Gagal membuat profil vendor');
+
+      const nextId = typeof data?.id === 'string' ? data.id : '';
+      if (!nextId) throw new Error('ID vendor tidak valid');
+
+      setActiveVendorId(nextId);
+      queryClient.invalidateQueries({ queryKey: ['my-vendors'] });
+      queryClient.invalidateQueries({ queryKey: ['profile-vendors'] });
+      toast.success('Profil vendor pribadi berhasil diaktifkan');
+      return nextId;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Gagal membuat profil vendor';
+      toast.error(message);
+      return '';
+    } finally {
+      setCreatingVendor(false);
+    }
+  };
+
   const saveVendorImage = async (target: 'LOGO' | 'COVER', nextUrl: string) => {
-    if (!activeVendorId) {
+    const vendorId = activeVendorId || (await ensurePersonalVendor());
+    if (!vendorId) {
       toast.error('Vendor belum dipilih');
       return;
     }
     try {
       const payload = target === 'LOGO' ? { logoUrl: nextUrl } : { coverUrl: nextUrl };
-      const res = await fetch(`/api/shop/vendors/${encodeURIComponent(activeVendorId)}`, {
+      const res = await fetch(`/api/shop/vendors/${encodeURIComponent(vendorId)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -1189,20 +1302,44 @@ export default function ProfilePage({
     }
   };
 
+  const saveVendorContact = async () => {
+    const vendorId = activeVendorId || (await ensurePersonalVendor());
+    if (!vendorId) return;
+    try {
+      const res = await fetch(`/api/shop/vendors/${encodeURIComponent(vendorId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contactEmail: vendorContactEmail.trim(),
+          contactPhone: vendorContactPhone.trim(),
+          adminWhatsapp: vendorAdminWhatsapp.trim(),
+          addressLine1: vendorAddressLine1.trim(),
+          addressLine2: vendorAddressLine2.trim(),
+          city: vendorCity.trim(),
+          province: vendorProvince.trim(),
+          postalCode: vendorPostalCode.trim(),
+          country: vendorCountry.trim(),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Gagal menyimpan profil vendor');
+      toast.success('Profil vendor berhasil diperbarui');
+      queryClient.invalidateQueries({ queryKey: ['my-vendors'] });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Gagal menyimpan profil vendor';
+      toast.error(message);
+    }
+  };
+
   if (mode === 'settings') {
-    const tabs = isSuperAdmin
-      ? [
-          { id: 'basic' as const, label: 'Dasar' },
-          { id: 'super' as const, label: 'Super Admin' },
-          { id: 'logins' as const, label: 'Login' },
-        ]
-      : [
-          { id: 'basic' as const, label: 'Dasar' },
-          { id: 'additional' as const, label: 'Tambahan' },
-          { id: 'images' as const, label: 'Gambar' },
-          { id: 'about' as const, label: 'Tentang' },
-          { id: 'logins' as const, label: 'Login' },
-        ];
+    const tabs = [
+      { id: 'basic' as const, label: 'Dasar' },
+      { id: 'additional' as const, label: 'Tambahan' },
+      { id: 'images' as const, label: 'Gambar' },
+      { id: 'about' as const, label: 'Tentang' },
+      ...(isSuperAdmin ? [{ id: 'super' as const, label: 'Super Admin' }] : []),
+      { id: 'logins' as const, label: 'Login' },
+    ];
 
     const makeId = () => {
       try {
@@ -1223,12 +1360,19 @@ export default function ProfilePage({
         <div className={isDashboard ? '' : 'max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10'}>
           <div className={surfaceClass}>
             <div className="px-6 py-5 border-b border-slate-200/70">
-              <div className="text-xl font-extrabold text-slate-900">{isSuperAdmin ? 'Pengaturan Super Admin' : 'Pengaturan Akun'}</div>
+              <div className="text-xl font-extrabold text-slate-900">
+                {wantsPasswordSetup ? 'Tetapkan Password' : isSuperAdmin ? 'Pengaturan Super Admin' : 'Pengaturan Akun'}
+              </div>
               <div className="text-sm text-slate-500 mt-1">
-                {isSuperAdmin ? 'Kelola profil dan akses Super Admin untuk operasional platform.' : 'Kelola profil, keamanan, dan preferensi akun.'}
+                {wantsPasswordSetup
+                  ? 'Buat password untuk login email ke akun ini.'
+                  : isSuperAdmin
+                  ? 'Kelola profil, keamanan, data mentor, dan akses Super Admin untuk operasional platform.'
+                  : 'Kelola profil, keamanan, dan preferensi akun.'}
               </div>
             </div>
 
+            {!wantsPasswordSetup ? (
             <div className="border-b border-slate-200/70 px-4 sm:px-6 overflow-x-auto">
               <div className="flex items-center gap-6 min-w-max">
                 {tabs.map((t) => (
@@ -1248,9 +1392,54 @@ export default function ProfilePage({
                 ))}
               </div>
             </div>
+            ) : null}
 
-            <div className="p-5 sm:p-7 pb-[calc(104px+env(safe-area-inset-bottom))] sm:pb-7">
+            <div className={wantsPasswordSetup ? 'p-5 sm:p-7' : 'p-5 sm:p-7 pb-[calc(104px+env(safe-area-inset-bottom))] sm:pb-7'}>
               {activeSettingsTab === 'basic' ? (
+                wantsPasswordSetup ? (
+                  <div className="max-w-xl mx-auto">
+                    <div className={cardClass}>
+                      <div className="text-sm font-extrabold text-slate-900">Tetapkan Password</div>
+                      <div className="text-xs text-slate-500 mt-1">Gunakan password ini saat login dengan email.</div>
+
+                      <div className="mt-5 grid grid-cols-1 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-600">Password</label>
+                          {renderPasswordInput({
+                            value: newPassword,
+                            onChange: setNewPassword,
+                            placeholder: isSuperAdmin ? 'Minimal 12 karakter' : 'Minimal 8 karakter',
+                            show: showNewPassword,
+                            onToggle: () => setShowNewPassword((prev) => !prev),
+                            autoComplete: 'new-password',
+                          })}
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-600">Konfirmasi Password</label>
+                          {renderPasswordInput({
+                            value: confirmPassword,
+                            onChange: setConfirmPassword,
+                            placeholder: 'Ulangi password',
+                            show: showConfirmPassword,
+                            onToggle: () => setShowConfirmPassword((prev) => !prev),
+                            autoComplete: 'new-password',
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="mt-6">
+                        <button
+                          type="button"
+                          onClick={saveAll}
+                          disabled={savingBasic || savingSecurity || savingMentorProfile || savingAdditionalInfo || creatingVendor}
+                          className="w-full h-12 rounded-2xl bg-indigo-600 text-white font-extrabold text-sm shadow-lg shadow-indigo-900/15 hover:bg-indigo-700 disabled:opacity-60"
+                        >
+                          {savingBasic || savingSecurity || savingMentorProfile || savingAdditionalInfo || creatingVendor ? 'Menyimpan...' : 'Tetapkan Password'}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div className={cardClass}>
                     <div className="flex items-start justify-between gap-3">
@@ -1274,21 +1463,27 @@ export default function ProfilePage({
                     </div>
 
                     <div className="mt-6 border-t border-slate-200 pt-6">
-                      <div className="text-sm font-extrabold text-slate-900">Ubah Password</div>
+                      <div className="text-sm font-extrabold text-slate-900">{wantsPasswordSetup ? 'Tetapkan Password' : 'Ubah Password'}</div>
 
                       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {!wantsPasswordSetup ? (
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-slate-600">Password Saat Ini</label>
+                            {renderPasswordInput({
+                              value: currentPassword,
+                              onChange: setCurrentPassword,
+                              placeholder: '••••••••',
+                              show: showCurrentPassword,
+                              onToggle: () => setShowCurrentPassword((prev) => !prev),
+                            })}
+                          </div>
+                        ) : (
+                          <div className="sm:col-span-2 rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3 text-xs font-semibold text-indigo-800">
+                            Akun Google Anda sudah aktif. Sekarang tetapkan password untuk login email.
+                          </div>
+                        )}
                         <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-600">Password Saat Ini</label>
-                          {renderPasswordInput({
-                            value: currentPassword,
-                            onChange: setCurrentPassword,
-                            placeholder: '••••••••',
-                            show: showCurrentPassword,
-                            onToggle: () => setShowCurrentPassword((prev) => !prev),
-                          })}
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-xs font-bold text-slate-600">Password Baru</label>
+                          <label className="text-xs font-bold text-slate-600">{wantsPasswordSetup ? 'Password' : 'Password Baru'}</label>
                           {renderPasswordInput({
                             value: newPassword,
                             onChange: setNewPassword,
@@ -1352,7 +1547,7 @@ export default function ProfilePage({
                         )}
                       </div>
                     </div>
-                    {isSuperAdmin ? (
+                      {isSuperAdmin ? (
                       <div className={cardClass}>
                         <div className={sectionTitleClass}>Foto Profil</div>
                         <div className={sectionDescClass}>Digunakan untuk identifikasi di audit log dan halaman operasional.</div>
@@ -1416,6 +1611,7 @@ export default function ProfilePage({
                     </div>
                   </div>
                 </div>
+                )
               ) : null}
 
               {activeSettingsTab === 'super' ? (
@@ -1455,6 +1651,18 @@ export default function ProfilePage({
                           className="h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 font-extrabold text-sm inline-flex items-center justify-center hover:bg-slate-50"
                         >
                           Order Masuk
+                        </Link>
+                        <Link
+                          href="/dashboard/vendor/profile"
+                          className="h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 font-extrabold text-sm inline-flex items-center justify-center hover:bg-slate-50"
+                        >
+                          Profil Vendor
+                        </Link>
+                        <Link
+                          href="/dashboard/profile"
+                          className="h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 font-extrabold text-sm inline-flex items-center justify-center hover:bg-slate-50"
+                        >
+                          Halaman Profil Saya
                         </Link>
                       </div>
 
@@ -1567,6 +1775,70 @@ export default function ProfilePage({
                         <input value={facebook} onChange={(e) => setFacebook(e.target.value)} className={inputControlClass} placeholder="Facebook" />
                       </div>
                     </div>
+
+                    {showVendorSettings ? (
+                      <div className={cardClass}>
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                          <div>
+                            <div className={sectionTitleClass}>Kontak Vendor</div>
+                            <div className={sectionDescClass}>
+                              Dipakai untuk komunikasi pembeli dan tombol Chat Admin pada produk sewa tanpa harga.
+                              {canUseInstantVendorSettings && !activeVendorId ? ' Profil vendor pribadi akan otomatis dibuat saat Anda menyimpan atau upload gambar vendor pertama kali.' : ''}
+                            </div>
+                          </div>
+                          {vendors.length > 1 ? (
+                            <select
+                              value={activeVendorId}
+                              onChange={(e) => setActiveVendorId(e.target.value)}
+                              className="w-full sm:w-64 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-extrabold text-slate-700"
+                            >
+                              {vendors.map((v: any) => (
+                                <option key={String(v.id)} value={String(v.id)}>
+                                  {String(v.name || v.slug || v.id)}
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-5 space-y-4">
+                          {canUseInstantVendorSettings && !activeVendorId ? (
+                            <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 px-4 py-3 text-xs font-semibold text-indigo-800">
+                              Admin dan Super Admin dapat langsung memakai profil vendor pribadi tanpa verifikasi ulang.
+                            </div>
+                          ) : null}
+                          <div className="space-y-1.5">
+                            <label className={fieldLabelClass}>Email Kontak Vendor</label>
+                            <input
+                              value={vendorContactEmail}
+                              onChange={(e) => setVendorContactEmail(e.target.value)}
+                              className={inputControlClass}
+                              placeholder="toko@email.com"
+                            />
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className={fieldLabelClass}>Telepon / WhatsApp Vendor</label>
+                              <input
+                                value={vendorContactPhone}
+                                onChange={(e) => setVendorContactPhone(e.target.value)}
+                                className={inputControlClass}
+                                placeholder="08xxxx"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className={fieldLabelClass}>Nomor Admin WhatsApp</label>
+                              <input
+                                value={vendorAdminWhatsapp}
+                                onChange={(e) => setVendorAdminWhatsapp(e.target.value)}
+                                className={inputControlClass}
+                                placeholder="08xxxx"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="space-y-6">
@@ -1592,6 +1864,51 @@ export default function ProfilePage({
                         </div>
                       </div>
                     </div>
+
+                    {showVendorSettings ? (
+                      <div className={cardClass}>
+                        <div className={sectionTitleClass}>Alamat Vendor</div>
+                        <div className={sectionDescClass}>Alamat operasional toko untuk kebutuhan administrasi dan pengiriman.</div>
+
+                        <div className="mt-5 space-y-4">
+                          <div className="space-y-1.5">
+                            <label className={fieldLabelClass}>Alamat</label>
+                            <input
+                              value={vendorAddressLine1}
+                              onChange={(e) => setVendorAddressLine1(e.target.value)}
+                              className={inputControlClass}
+                              placeholder="Jl. ..."
+                            />
+                            <input
+                              value={vendorAddressLine2}
+                              onChange={(e) => setVendorAddressLine2(e.target.value)}
+                              className={inputControlClass}
+                              placeholder="Detail tambahan (opsional)"
+                            />
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className={fieldLabelClass}>Kota</label>
+                              <input value={vendorCity} onChange={(e) => setVendorCity(e.target.value)} className={inputControlClass} />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className={fieldLabelClass}>Provinsi</label>
+                              <input value={vendorProvince} onChange={(e) => setVendorProvince(e.target.value)} className={inputControlClass} />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className={fieldLabelClass}>Kode Pos</label>
+                              <input value={vendorPostalCode} onChange={(e) => setVendorPostalCode(e.target.value)} className={inputControlClass} />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className={fieldLabelClass}>Negara</label>
+                              <input value={vendorCountry} onChange={(e) => setVendorCountry(e.target.value)} className={inputControlClass} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
@@ -1655,7 +1972,7 @@ export default function ProfilePage({
                         </button>
                       </div>
 
-                      {isMentorLike ? (
+                      {hasMentorProfileSettings ? (
                         <div className="py-3 flex items-center gap-3">
                           <div className="w-20 h-20 rounded-2xl bg-white border border-slate-200 overflow-hidden flex items-center justify-center shrink-0 relative">
                             {signatureUrl ? <Image src={signatureUrl} alt="Tanda Tangan" width={160} height={64} unoptimized className="w-full h-full object-contain" /> : null}
@@ -1699,11 +2016,16 @@ export default function ProfilePage({
                     </div>
                   </div>
 
-                  {vendors.length > 0 ? (
+                  {showVendorSettings ? (
                     <div className={cardClass}>
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                         <div>
                           <div className={sectionTitleClass}>Gambar Vendor</div>
+                          <div className={sectionDescClass}>
+                            {canUseInstantVendorSettings && !activeVendorId
+                              ? 'Logo dan cover vendor bisa langsung diupload. Profil vendor pribadi akan dibuat otomatis saat upload pertama.'
+                              : 'Kelola logo dan cover untuk vendor aktif Anda.'}
+                          </div>
                         </div>
                         {vendors.length > 1 ? (
                           <select
@@ -1743,9 +2065,10 @@ export default function ProfilePage({
                               setVendorMediaTarget('LOGO');
                               setIsVendorMediaOpen(true);
                             }}
-                            className="h-9 px-4 rounded-xl bg-indigo-600 text-white font-extrabold text-xs hover:bg-indigo-700"
+                            disabled={creatingVendor}
+                            className="h-9 px-4 rounded-xl bg-indigo-600 text-white font-extrabold text-xs hover:bg-indigo-700 disabled:opacity-60"
                           >
-                            Upload
+                            {creatingVendor ? 'Memproses...' : 'Upload'}
                           </button>
                         </div>
 
@@ -1771,9 +2094,10 @@ export default function ProfilePage({
                               setVendorMediaTarget('COVER');
                               setIsVendorMediaOpen(true);
                             }}
-                            className="h-9 px-4 rounded-xl bg-indigo-600 text-white font-extrabold text-xs hover:bg-indigo-700"
+                            disabled={creatingVendor}
+                            className="h-9 px-4 rounded-xl bg-indigo-600 text-white font-extrabold text-xs hover:bg-indigo-700 disabled:opacity-60"
                           >
-                            Upload
+                            {creatingVendor ? 'Memproses...' : 'Upload'}
                           </button>
                         </div>
                       </div>
@@ -1783,7 +2107,7 @@ export default function ProfilePage({
               ) : null}
 
               {activeSettingsTab === 'about' ? (
-                isMentorLike ? (
+                hasMentorProfileSettings ? (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div className="space-y-6">
                       <div className={cardClass}>
@@ -2093,12 +2417,9 @@ export default function ProfilePage({
                     ) : (
                       <div className="rounded-2xl border border-slate-200/80 overflow-hidden">
                         <div className="overflow-x-auto">
-                          <table className={twMerge('w-full', loginHistoryScope === 'members' ? 'min-w-[1350px]' : 'min-w-[1180px]')}>
+                          <table className={twMerge('w-full', 'min-w-[1180px]')}>
                             <thead className="bg-slate-50">
                               <tr className="text-left">
-                                {loginHistoryScope === 'members' ? (
-                                  <th className="px-5 py-4 text-[11px] font-extrabold text-slate-500 tracking-wide uppercase">Member</th>
-                                ) : null}
                                 <th className="px-5 py-4 text-[11px] font-extrabold text-slate-500 tracking-wide uppercase">Sistem Operasi</th>
                                 <th className="px-5 py-4 text-[11px] font-extrabold text-slate-500 tracking-wide uppercase">Browser</th>
                                 <th className="px-5 py-4 text-[11px] font-extrabold text-slate-500 tracking-wide uppercase">Perangkat</th>
@@ -2126,16 +2447,6 @@ export default function ProfilePage({
 
                                 return (
                                   <tr key={item.id} className="text-sm text-slate-700">
-                                    {loginHistoryScope === 'members' ? (
-                                      <td className="px-5 py-5">
-                                        <div className="min-w-[220px]">
-                                          <div className="font-extrabold text-slate-900 truncate">{actorDisplay}</div>
-                                          {actorName && actorEmail && actorName !== actorEmail ? (
-                                            <div className="text-xs text-slate-500 font-bold truncate">{actorEmail}</div>
-                                          ) : null}
-                                        </div>
-                                      </td>
-                                    ) : null}
                                     <td className="px-5 py-5 font-bold text-slate-900">{uaInfo.os}</td>
                                     <td className="px-5 py-5 text-slate-700">{uaInfo.browser}</td>
                                     <td className="px-5 py-5 text-slate-700">{uaInfo.device}</td>
@@ -2173,25 +2484,25 @@ export default function ProfilePage({
           </div>
         </div>
 
-        {!isSuperAdmin || activeSettingsTab === 'basic' ? (
+        {mode === 'settings' && !wantsPasswordSetup ? (
           <div className="fixed bottom-0 inset-x-0 z-40 sm:bottom-6 sm:right-6 sm:left-auto sm:inset-x-auto">
             <div className="sm:hidden border-t border-slate-200 bg-white/95 backdrop-blur px-4 py-3 pb-[calc(12px+env(safe-area-inset-bottom))]">
               <button
                 type="button"
                 onClick={saveAll}
-                disabled={savingBasic || savingSecurity || savingMentorProfile || savingAdditionalInfo}
+                disabled={savingBasic || savingSecurity || savingMentorProfile || savingAdditionalInfo || creatingVendor}
                 className="w-full h-12 rounded-2xl bg-indigo-600 text-white font-extrabold text-sm shadow-lg shadow-indigo-900/15 hover:bg-indigo-700 disabled:opacity-60"
               >
-                {savingBasic || savingSecurity || savingMentorProfile || savingAdditionalInfo ? 'Menyimpan...' : 'Simpan Perubahan'}
+                {savingBasic || savingSecurity || savingMentorProfile || savingAdditionalInfo || creatingVendor ? 'Menyimpan...' : wantsPasswordSetup ? 'Tetapkan Password' : 'Simpan Perubahan'}
               </button>
             </div>
             <button
               type="button"
               onClick={saveAll}
-              disabled={savingBasic || savingSecurity || savingMentorProfile || savingAdditionalInfo}
+              disabled={savingBasic || savingSecurity || savingMentorProfile || savingAdditionalInfo || creatingVendor}
               className="hidden sm:inline-flex items-center justify-center h-12 px-6 rounded-2xl bg-indigo-600 text-white font-extrabold text-sm shadow-lg shadow-indigo-900/15 hover:bg-indigo-700 disabled:opacity-60"
             >
-              {savingBasic || savingSecurity || savingMentorProfile || savingAdditionalInfo ? 'Menyimpan...' : 'Simpan Perubahan'}
+              {savingBasic || savingSecurity || savingMentorProfile || savingAdditionalInfo || creatingVendor ? 'Menyimpan...' : wantsPasswordSetup ? 'Tetapkan Password' : 'Simpan Perubahan'}
             </button>
           </div>
         ) : null}
@@ -2396,7 +2707,7 @@ export default function ProfilePage({
 
                   <div className="mt-5 grid grid-cols-3 w-full border border-slate-200 rounded-2xl overflow-hidden">
                     <div className="p-3">
-                      <div className="text-sm font-extrabold text-slate-900">{isMentorLike ? mentorCourses.length : enrolledCourses.length}</div>
+                      <div className="text-sm font-extrabold text-slate-900">{hasMentorProfileSettings ? mentorCourses.length : enrolledCourses.length}</div>
                       <div className="text-[11px] text-slate-500">Kursus</div>
                     </div>
                     <div className="p-3 border-l border-slate-200">
@@ -2404,8 +2715,8 @@ export default function ProfilePage({
                       <div className="text-[11px] text-slate-500">Sertifikat</div>
                     </div>
                     <div className="p-3 border-l border-slate-200">
-                      <div className="text-sm font-extrabold text-slate-900">{isMentorLike ? mentorPosts.length : loginHistory.length}</div>
-                      <div className="text-[11px] text-slate-500">{isMentorLike ? 'Artikel' : 'Login'}</div>
+                      <div className="text-sm font-extrabold text-slate-900">{hasMentorProfileSettings ? mentorPosts.length : loginHistory.length}</div>
+                      <div className="text-[11px] text-slate-500">{hasMentorProfileSettings ? 'Artikel' : 'Login'}</div>
                     </div>
                   </div>
 
@@ -2482,7 +2793,7 @@ export default function ProfilePage({
                             <Icon className="w-4 h-4 text-indigo-700" />
                             <div className="text-xs font-bold">{m.label}</div>
                           </div>
-                          <div className="mt-2 text-lg font-extrabold text-slate-900">{m.isMoney ? `Rp ${m.value}` : m.value}</div>
+                          <div className="mt-2 text-lg font-extrabold text-slate-900">{m.value}</div>
                         </div>
                       );
                     })}
@@ -2493,7 +2804,7 @@ export default function ProfilePage({
                       <div className="space-y-6">
                         <div className="rounded-2xl border border-slate-200 p-5">
                           <div className="text-sm font-extrabold text-slate-900">Tentang Saya</div>
-                          {isMentorLike ? (
+                          {hasMentorProfileSettings ? (
                             <div className="mt-3 space-y-3">
                               <div className="text-sm text-slate-600">
                                 <span className="font-extrabold text-slate-900">{mentorJobTitle || 'Mentor'}</span>
@@ -2509,7 +2820,7 @@ export default function ProfilePage({
                           )}
                         </div>
 
-                        {isMentorLike ? (
+                        {hasMentorProfileSettings ? (
                           <div className="rounded-2xl border border-slate-200 p-5">
                             <div className="flex items-center gap-2">
                               <Briefcase className="w-4 h-4 text-indigo-700" />
@@ -2533,7 +2844,7 @@ export default function ProfilePage({
                           </div>
                         ) : null}
 
-                        {isMentorLike ? (
+                        {hasMentorProfileSettings ? (
                           <div className="rounded-2xl border border-slate-200 p-5">
                             <div className="flex items-center gap-2">
                               <Award className="w-4 h-4 text-indigo-700" />
@@ -2577,7 +2888,7 @@ export default function ProfilePage({
                           </div>
                         </div>
 
-                        {isMentorLike ? (
+                        {hasMentorProfileSettings ? (
                           <div className="rounded-2xl border border-slate-200 p-5">
                             <div className="flex items-center gap-2">
                               <GraduationCap className="w-4 h-4 text-indigo-700" />
@@ -2608,19 +2919,19 @@ export default function ProfilePage({
                     <div className="mt-6">
                       <div className="text-sm font-extrabold text-slate-900">Kursus</div>
                       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {(isMentorLike ? mentorCourses : enrolledCourses).length === 0 ? (
+                        {(hasMentorProfileSettings ? mentorCourses : enrolledCourses).length === 0 ? (
                           <div className="sm:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-10 text-center text-slate-500">
                             Belum ada kursus untuk ditampilkan.
                           </div>
                         ) : (
-                          (isMentorLike ? mentorCourses : enrolledCourses).slice(0, 12).map((c: any) => (
+                          (hasMentorProfileSettings ? mentorCourses : enrolledCourses).slice(0, 12).map((c: any) => (
                             <div key={c.id} className="rounded-2xl border border-slate-200 overflow-hidden bg-white">
                               <div className="h-28 bg-slate-100 relative">
                                 {c.thumbnailUrl ? <Image src={c.thumbnailUrl} alt={c.title} fill unoptimized className="object-cover" /> : null}
                               </div>
                               <div className="p-4">
                                 <div className="text-sm font-extrabold text-slate-900 line-clamp-2">{c.title}</div>
-                                {isMentorLike ? (
+                                {hasMentorProfileSettings ? (
                                   <div className="text-xs text-slate-500 mt-1">{c.totalStudents} siswa</div>
                                 ) : (
                                   <div className="text-xs text-slate-500 mt-1">{c.instructorName}</div>
@@ -2636,7 +2947,7 @@ export default function ProfilePage({
                                   ) : (
                                     <span className="text-sm text-slate-400">-</span>
                                   )}
-                                  {isMentorLike ? (
+                                  {hasMentorProfileSettings ? (
                                     <span className="px-2.5 py-1 rounded-full text-[11px] font-extrabold border bg-slate-50 text-slate-700 border-slate-200">
                                       {String(c.status || '').toUpperCase() === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT'}
                                     </span>
@@ -2654,7 +2965,7 @@ export default function ProfilePage({
                     <div className="mt-6">
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm font-extrabold text-slate-900">Produk</div>
-                        {isMentorLike ? (
+                        {hasMentorProfileSettings ? (
                           <Link
                             href={user.role === 'ADMIN' ? '/dashboard/admin/shop' : '/dashboard/vendor/shop'}
                             className="text-sm font-extrabold text-indigo-700 hover:text-indigo-800"

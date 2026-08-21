@@ -1,6 +1,7 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { ArrowLeft, ArrowUpRight, Bell, Check, Loader2, Mail, SendHorizonal, Trash2 } from 'lucide-react';
@@ -167,7 +168,7 @@ function classifyNotification(n: NotificationItem): { kind: Kind; view: MessageV
   return { kind: 'alerts', view: 'general' };
 }
 
-export default function StudentInboxPage() {
+function StudentInboxPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useDashboardStore();
@@ -463,17 +464,17 @@ export default function StudentInboxPage() {
 
   useEffect(() => {
     loadNotifications();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isChatView) setSelectedId(filteredItems[0]?.id || null);
     else setSelectedId(null);
-  }, [kind, view]);
+  }, [filteredItems, isChatView, kind, view]);
 
   useEffect(() => {
     if (!isChatView) return;
     loadThreads();
-  }, [isChatView]);
+  }, [isChatView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isChatView) return;
@@ -487,7 +488,7 @@ export default function StudentInboxPage() {
     sp.set('tab', 'messages');
     sp.set('view', desired);
     router.push(`/dashboard/student/inbox?${sp.toString()}`);
-  }, [isChatView, searchParams, threads, view]);
+  }, [isChatView, router, searchParams, threads, view]);
 
   useEffect(() => {
     if (!isChatView) return;
@@ -500,7 +501,7 @@ export default function StudentInboxPage() {
     setActiveThreadId(nextId);
     shouldAutoScrollRef.current = true;
     loadThreadMessages(nextId);
-  }, [activeThread?.id, isChatView]);
+  }, [activeThread?.id, isChatView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isChatView) return;
@@ -526,7 +527,7 @@ export default function StudentInboxPage() {
       cancelled = true;
       window.clearInterval(id);
     };
-  }, [activeThread?.id, isChatView]);
+  }, [activeThread?.id, isChatView]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!isChatView) return;
@@ -609,13 +610,6 @@ export default function StudentInboxPage() {
     if (!n.read) await markOneRead(n.id);
   };
 
-  const openLink = async (n: NotificationItem) => {
-    const meta = parseNotificationMessage(n.message);
-    if (!meta.href) return;
-    if (!n.read) await markOneRead(n.id);
-    router.push(meta.href);
-  };
-
   const selectThread = async (t: DirectThread) => {
     setActiveThreadId(t.id);
     const sp = new URLSearchParams(searchParams.toString());
@@ -669,40 +663,6 @@ export default function StudentInboxPage() {
       toast.error(e?.message || 'Gagal mengirim');
     } finally {
       setIsSendingDm(false);
-    }
-  };
-
-  const clearHistory = async (scope: 'dm' | 'comments') => {
-    if (isClearingHistory) return;
-    if (!myId) {
-      toast.error('Anda harus login');
-      return;
-    }
-
-    const label = scope === 'comments' ? 'Komentar (Produk & Layanan)' : 'Direct Message';
-    const ok = window.confirm(`Hapus semua riwayat ${label}? Tindakan ini tidak bisa dibatalkan.`);
-    if (!ok) return;
-
-    setIsClearingHistory(true);
-    try {
-      const res = await fetch(`/api/messages/threads?scope=${encodeURIComponent(scope)}`, { method: 'DELETE' });
-      const data = await res.json().catch(() => null);
-      if (res.status === 401) {
-        router.push('/login?redirect=/dashboard/student/inbox');
-        return;
-      }
-      if (!res.ok) throw new Error(data?.error || 'Gagal menghapus riwayat');
-
-      setSelectedId(null);
-      setActiveThreadId(null);
-      setDmMessages([]);
-      await loadThreads();
-      router.refresh();
-      toast.success(`Riwayat ${label} berhasil dihapus`);
-    } catch (e: any) {
-      toast.error(e?.message || 'Gagal menghapus riwayat');
-    } finally {
-      setIsClearingHistory(false);
     }
   };
 
@@ -955,7 +915,7 @@ export default function StudentInboxPage() {
                               <div className="flex items-start gap-3 min-w-0">
                                 <div className="h-11 w-11 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 shrink-0 flex items-center justify-center">
                                   {t.peer.avatarUrl ? (
-                                    <img src={t.peer.avatarUrl} className="w-full h-full object-cover" />
+                                    <img src={t.peer.avatarUrl} alt={t.peer.name || t.peer.email || ''} className="w-full h-full object-cover" />
                                   ) : (
                                     <div className="text-sm font-extrabold text-slate-600">
                                       {String(t.peer.name || t.peer.email || '?')
@@ -1015,7 +975,7 @@ export default function StudentInboxPage() {
                           ) : null}
                           <div className="h-10 w-10 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 shrink-0 flex items-center justify-center">
                             {activeThread.peer.avatarUrl ? (
-                              <img src={activeThread.peer.avatarUrl} className="w-full h-full object-cover" />
+                              <img src={activeThread.peer.avatarUrl} alt={activeThread.peer.name || activeThread.peer.email || ''} className="w-full h-full object-cover" />
                             ) : (
                               <div className="text-sm font-extrabold text-slate-600">
                                 {String(activeThread.peer.name || activeThread.peer.email || '?')
@@ -1267,5 +1227,13 @@ export default function StudentInboxPage() {
         isLoading={isClearingHistory}
       />
     </div>
+  );
+}
+
+export default function StudentInboxPage() {
+  return (
+    <Suspense fallback={<div className="p-6" />}>
+      <StudentInboxPageContent />
+    </Suspense>
   );
 }

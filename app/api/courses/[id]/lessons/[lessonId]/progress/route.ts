@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { markLessonComplete } from '@/modules/course/api/service';
 import { verifyToken } from '@/modules/auth/utils/auth';
-import { prisma } from '@/utils/prisma';
+import { getLessonCourseContext } from '@/modules/course/api/performance';
 
 export async function POST(
   req: NextRequest,
@@ -15,10 +15,7 @@ export async function POST(
     const user = await verifyToken(token);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const lesson = await prisma.lesson.findUnique({
-      where: { id: lessonId },
-      select: { id: true, module: { select: { courseId: true } } },
-    });
+    const lesson = await getLessonCourseContext(lessonId);
 
     if (!lesson) {
       return NextResponse.json({ error: 'Lesson not found' }, { status: 404 });

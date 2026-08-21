@@ -163,12 +163,18 @@ export default function RegisterForm() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data?.error || 'Google login gagal');
-            if (data?.createdNew) {
+            if (typeof window !== 'undefined' && typeof data?.devVerifyUrl === 'string' && data.devVerifyUrl.trim()) {
+              try {
+                window.sessionStorage.setItem('devVerifyUrl', data.devVerifyUrl.trim());
+              } catch {
+              }
+            }
+            if (data?.verificationSent) {
               const email = typeof data?.user?.email === 'string' ? data.user.email.trim().toLowerCase() : '';
               const next =
-                `/verify-email?provider=google&verified=1` +
-                (email ? `&email=${encodeURIComponent(email)}` : '') +
-                (redirectTarget ? `&redirect=${encodeURIComponent(redirectTarget)}` : '');
+                `/verify-email` +
+                (email ? `?email=${encodeURIComponent(email)}` : '') +
+                (redirectTarget ? `${email ? '&' : '?'}redirect=${encodeURIComponent(redirectTarget)}` : '');
               router.push(next);
               return;
             }
@@ -197,7 +203,7 @@ export default function RegisterForm() {
       googleInitializedRef.current = true;
     } catch {
     }
-  }, [googleReady, googleClientId, redirectTarget]);
+  }, [googleReady, googleClientId, redirectTarget]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="min-h-screen bg-slate-50">

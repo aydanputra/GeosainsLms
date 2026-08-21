@@ -4,26 +4,12 @@ import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
 import Cards from '@/modules/dashboard/components/Cards';
 import VendorApplyModal from '@/modules/dashboard/components/VendorApplyModal';
+import { getVendorRevenueSummary } from '@/modules/dashboard/api/performance';
 
 export const dynamic = 'force-dynamic';
 
 function formatIdr(value: number) {
   return `IDR ${Number(value || 0).toLocaleString('id-ID')}`;
-}
-
-function getTotalDiscountAmount(it: any) {
-  const store = Number(it?.discountStoreAmount || 0);
-  const marketplace = Number(it?.discountMarketplaceAmount || 0);
-  const fallbackTotal = Number(it?.discountAmount || 0);
-  if (store === 0 && marketplace === 0) return fallbackTotal;
-  return store + marketplace;
-}
-
-function getStoreDiscountAmount(it: any) {
-  const store = Number(it?.discountStoreAmount || 0);
-  const marketplace = Number(it?.discountMarketplaceAmount || 0);
-  if (store === 0 && marketplace === 0) return Number(it?.discountAmount || 0);
-  return store;
 }
 
 export default async function Page({
@@ -172,170 +158,70 @@ export default async function Page({
 
   const vendorIds = vendors.map((v) => v.id);
   const hasScope = role === 'ADMIN' || vendorIds.length > 0;
-  const vendorById = new Map(vendors.map((v: any) => [String(v.id), v] as const));
-
-  const products = hasScope
-    ? await prisma.product.findMany({
-        where: role === 'ADMIN' ? undefined : { vendorId: { in: vendorIds } },
-        select: { id: true, vendorId: true },
-      })
-    : [];
-
-  const productIds = products.map((p) => p.id);
-
-  const paidItems = productIds.length
-    ? await prisma.orderItem.findMany({
-        where: { productId: { in: productIds }, order: { is: { status: 'PAID' } } },
-        select: {
-          productId: true,
-          quantity: true,
-          price: true,
-          discountAmount: true,
-          discountStoreAmount: true,
-          discountMarketplaceAmount: true,
-          refundAmount: true,
-          product: { select: { vendorId: true } },
-        },
-      })
-    : [];
-
-  const grossByProduct = new Map<string, { sold: number; gross: number; vendorId: string }>();
-  for (const it of paidItems) {
-    const pid = it.productId ? String(it.productId) : '';
-    const vendorId = it.product?.vendorId ? String(it.product.vendorId) : '';
-    if (!pid || !vendorId) continue;
-    const prev = grossByProduct.get(pid) || { sold: 0, gross: 0, vendorId };
-    const qty = Number(it.quantity || 0);
-    const lineSubtotal = Number(it.price || 0) * qty;
-    const storeDiscount = Math.max(0, getStoreDiscountAmount(it));
-    const refund = Math.max(0, Number(it.refundAmount || 0));
-    const sellerBase = Math.max(0, lineSubtotal - storeDiscount - refund);
-    grossByProduct.set(pid, { sold: prev.sold + qty, gross: prev.gross + sellerBase, vendorId });
-  }
-
-  const commissionOrders = productIds.length
-    ? await prisma.order.findMany({
-        where: {
-          status: 'PAID',
-          commission: { isNot: null },
-          items: { some: { productId: { in: productIds } } },
-        },
-        select: {
-          total: true,
-          commission: { select: { amount: true, status: true } },
-          items: {
-            where: { productId: { in: productIds } },
-            select: {
-              productId: true,
-              quantity: true,
-              price: true,
-              discountAmount: true,
-              discountStoreAmount: true,
-              discountMarketplaceAmount: true,
-              refundAmount: true,
+  const vendorConfigs = vendors.map((vendor) => ({
+    id: String(vendor.id),
+    commissionType: vendor.commissionType,
+    commissionRate: Number(vendor.commissionRate || 0),
+  }));
+  const revenueSummary = hasScope ? await getVendorRevenueSummary(vendorIds, vendorConfigs) : { totalNet: 0, totalPlatformFee: 0, totalAffiliateFee: 0, totalSoldPaid: 0 };
+  const [totalProducts, orders, paidOrdersCount, pendingOrdersCount] = await Promise.all([
+    hasScope ? prisma.product.count({ where: role === 'ADMIN' ? undefined : { vendorId: { in: vendorIds } } }) : 0,
+    hasScope
+      ? await prisma.order.findMany({
+          where: {
+            items: {
+              some: role === 'ADMIN' ? { productId: { not: null } } : { product: { vendorId: { in: vendorIds } } },
             },
           },
-        },
-      })
-    : [];
-
-  const affiliateFeeByProductId = new Map<string, number>();
-  for (const o of commissionOrders) {
-    const orderTotal = Math.max(0, Number(o.total || 0));
-    const commissionAmount = Math.max(0, Number((o as any)?.commission?.amount || 0));
-    const commissionStatus = String((o as any)?.commission?.status || '').toUpperCase();
-    if (!orderTotal || !commissionAmount || commissionStatus.includes('REVERSED')) continue;
-
-    const items = Array.isArray((o as any)?.items) ? (o as any).items : [];
-    const vendorBuyerPaid = items.reduce((sum: number, it: any) => {
-      const qty = Number(it?.quantity || 0);
-      const price = Number(it?.price || 0);
-      const gross = Math.max(0, qty * price);
-      const refund = Math.max(0, Number(it?.refundAmount || 0));
-      const discountTotal = Math.max(0, getTotalDiscountAmount(it));
-      const buyerPaid = Math.max(0, gross - discountTotal - refund);
-      return sum + buyerPaid;
-    }, 0);
-    if (!vendorBuyerPaid) continue;
-
-    const orderShare = Math.max(0, Math.min(1, vendorBuyerPaid / orderTotal));
-    const feeForVendor = Math.max(0, commissionAmount * orderShare);
-    if (!feeForVendor) continue;
-
-    for (const it of items) {
-      const pid = it?.productId ? String(it.productId) : '';
-      if (!pid) continue;
-      const qty = Number(it?.quantity || 0);
-      const price = Number(it?.price || 0);
-      const gross = Math.max(0, qty * price);
-      const refund = Math.max(0, Number(it?.refundAmount || 0));
-      const discountTotal = Math.max(0, getTotalDiscountAmount(it));
-      const buyerPaid = Math.max(0, gross - discountTotal - refund);
-      if (!buyerPaid) continue;
-      const share = Math.max(0, Math.min(1, buyerPaid / vendorBuyerPaid));
-      const itemFee = Math.max(0, feeForVendor * share);
-      affiliateFeeByProductId.set(pid, (affiliateFeeByProductId.get(pid) || 0) + itemFee);
-    }
-  }
-
-  let totalNet = 0;
-  let totalPlatformFee = 0;
-  let totalAffiliateFee = 0;
-  let totalSoldPaid = 0;
-  for (const [pid, agg] of grossByProduct.entries()) {
-    const vendor = vendorById.get(agg.vendorId);
-    const commissionType = String((vendor as any)?.commissionType || 'PERCENT').toUpperCase();
-    const commissionRate = Number((vendor as any)?.commissionRate || 0);
-    const platformFee =
-      commissionType === 'FLAT' ? Math.max(0, commissionRate * agg.sold) : Math.max(0, (agg.gross * commissionRate) / 100);
-    const affiliateFee = Math.max(0, Number(affiliateFeeByProductId.get(pid) || 0));
-    const net = Math.max(0, agg.gross - platformFee - affiliateFee);
-    totalNet += net;
-    totalPlatformFee += platformFee;
-    totalAffiliateFee += affiliateFee;
-    totalSoldPaid += agg.sold;
-  }
-
-  const orders = productIds.length
-    ? await prisma.order.findMany({
-        where: {
-          items: { some: { productId: { in: productIds } } },
-        },
-        orderBy: { createdAt: 'desc' },
-        take: 10,
-        include: {
-          user: { select: { name: true, email: true } },
-          items: {
-            where: { productId: { in: productIds } },
-            select: {
-              quantity: true,
-              price: true,
-              productId: true,
-              discountAmount: true,
-              discountStoreAmount: true,
-              discountMarketplaceAmount: true,
-              refundAmount: true,
+          orderBy: { createdAt: 'desc' },
+          take: 10,
+          include: {
+            user: { select: { name: true, email: true } },
+            items: {
+              where: role === 'ADMIN' ? { productId: { not: null } } : { product: { vendorId: { in: vendorIds } } },
+              select: {
+                quantity: true,
+                price: true,
+                productId: true,
+                discountAmount: true,
+                discountStoreAmount: true,
+                discountMarketplaceAmount: true,
+                refundAmount: true,
+              },
             },
           },
-        },
-      })
-    : [];
-
-  const paidOrdersCount = productIds.length
-    ? await prisma.order.count({ where: { status: 'PAID', items: { some: { productId: { in: productIds } } } } })
-    : 0;
-  const pendingOrdersCount = productIds.length
-    ? await prisma.order.count({ where: { status: 'PENDING', items: { some: { productId: { in: productIds } } } } })
-    : 0;
+        })
+      : [],
+    hasScope
+      ? prisma.order.count({
+          where: {
+            status: 'PAID',
+            items: {
+              some: role === 'ADMIN' ? { productId: { not: null } } : { product: { vendorId: { in: vendorIds } } },
+            },
+          },
+        })
+      : 0,
+    hasScope
+      ? prisma.order.count({
+          where: {
+            status: 'PENDING',
+            items: {
+              some: role === 'ADMIN' ? { productId: { not: null } } : { product: { vendorId: { in: vendorIds } } },
+            },
+          },
+        })
+      : 0,
+  ]);
 
   const metrics = [
-    { label: 'Total Produk', value: products.length, color: 'bg-blue-500' },
+    { label: 'Total Produk', value: totalProducts, color: 'bg-blue-500' },
     { label: 'Pesanan (Paid)', value: paidOrdersCount, color: 'bg-green-500' },
-    { label: 'Fee Platform', value: formatIdr(totalPlatformFee), color: 'bg-rose-500' },
-    { label: 'Fee Affiliate', value: formatIdr(totalAffiliateFee), color: 'bg-rose-600' },
-    { label: 'Pendapatan Bersih', value: formatIdr(totalNet), color: 'bg-purple-500' },
+    { label: 'Fee Platform', value: formatIdr(revenueSummary.totalPlatformFee), color: 'bg-rose-500' },
+    { label: 'Fee Affiliate', value: formatIdr(revenueSummary.totalAffiliateFee), color: 'bg-rose-600' },
+    { label: 'Pendapatan Bersih', value: formatIdr(revenueSummary.totalNet), color: 'bg-purple-500' },
     { label: 'Pesanan (Pending)', value: pendingOrdersCount, color: 'bg-amber-500' },
-    { label: 'Terjual', value: totalSoldPaid, color: 'bg-emerald-500' },
+    { label: 'Terjual', value: revenueSummary.totalSoldPaid, color: 'bg-emerald-500' },
   ];
 
   const rows = orders.map((o) => {
@@ -344,7 +230,10 @@ export default async function Page({
       const price = Number(it.price || 0);
       const gross = Math.max(0, qty * price);
       const refund = Math.max(0, Number(it.refundAmount || 0));
-      const discountTotal = Math.max(0, getTotalDiscountAmount(it));
+      const store = Number(it?.discountStoreAmount || 0);
+      const marketplace = Number(it?.discountMarketplaceAmount || 0);
+      const fallbackTotal = Number(it?.discountAmount || 0);
+      const discountTotal = Math.max(0, store === 0 && marketplace === 0 ? fallbackTotal : store + marketplace);
       const paid = Math.max(0, gross - discountTotal - refund);
       return acc + paid;
     }, 0);

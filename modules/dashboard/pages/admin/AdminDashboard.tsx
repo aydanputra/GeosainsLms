@@ -5,7 +5,7 @@ import Cards from '../../components/Cards';
 import Table from '../../components/Tables';
 import { useAdminStats, useAdminOrders } from '../../api/service';
 import { useDashboardStore } from '../../store/useDashboardStore';
-import { BookOpen, Users, ShoppingCart, BarChart2, ArrowRight, Clock, Zap, Settings, DollarSign, Eye } from 'lucide-react';
+import { BookOpen, Users, ShoppingBag, ShoppingCart, BarChart2, ArrowRight, Clock, Zap, Settings, DollarSign, Eye, Globe, CircleUser, FileText } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 
 interface AdminDashboardProps {
@@ -68,7 +68,11 @@ export default function AdminDashboard({ stats: initialStats, orders: initialOrd
   const quickLinks = isSuperAdmin
     ? [
         { label: 'Pengaturan Platform', href: '/dashboard/admin/settings', color: 'bg-blue-600', icon: Settings },
-        { label: 'Pengaturan Kursus', href: '/dashboard/admin/courses/settings', color: 'bg-sky-600', icon: BookOpen },
+        { label: 'Manajemen Kursus', href: '/dashboard/admin/courses', color: 'bg-sky-600', icon: BookOpen },
+        { label: 'Artikel', href: '/dashboard/admin/blog', color: 'bg-amber-600', icon: FileText },
+        { label: 'Manajemen Vendor', href: '/dashboard/admin/shop/vendors', color: 'bg-emerald-600', icon: ShoppingBag },
+        { label: 'Halaman / Situs', href: '/dashboard/admin/pages', color: 'bg-cyan-600', icon: Globe },
+        { label: 'Profil Saya', href: '/dashboard/profile', color: 'bg-fuchsia-600', icon: CircleUser },
         { label: 'Audit Log', href: '/dashboard/admin/audit', color: 'bg-slate-700', icon: Eye },
         { label: 'Manajemen Pengguna', href: '/dashboard/admin/users', color: 'bg-indigo-600', icon: Users },
         { label: 'Manajemen Pesanan', href: ordersHref, color: 'bg-purple-600', icon: ShoppingCart },

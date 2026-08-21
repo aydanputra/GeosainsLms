@@ -1,37 +1,45 @@
 "use client";
 
-import { useQuery } from '@tanstack/react-query';
 import PostCard from '../components/PostCard';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
+
+type BlogPostPreview = {
+  id: string;
+  title: string;
+  slug: string;
+  content?: string | null;
+  excerpt?: string | null;
+  publishedAt: string | null;
+  featuredImageUrl?: string | null;
+  thumbnailUrl?: string | null;
+  category?: { name: string; slug: string } | null;
+  tags?: { tag?: { name: string; slug: string } }[];
+  author: {
+    name: string;
+  };
+};
 
 export default function BlogListPage({
   categorySlug,
   categoryName,
   tagSlug,
   tagName,
+  initialPosts = [],
 }: {
   categorySlug?: string;
   categoryName?: string;
   tagSlug?: string;
   tagName?: string;
+  initialPosts?: BlogPostPreview[];
 }) {
   const [search, setSearch] = useState('');
   
-  const { data: posts, isLoading, error } = useQuery({
-    queryKey: ['blog-posts', search, categorySlug || '', tagSlug || ''],
-    queryFn: async () => {
-      // In a real app, use a debounce hook for search
-      const params = new URLSearchParams();
-      if (search) params.append('search', search);
-      if (categorySlug) params.append('category', categorySlug);
-      if (tagSlug) params.append('tag', tagSlug);
-      
-      const res = await fetch(`/api/blog/posts?${params.toString()}`);
-      if (!res.ok) throw new Error('Failed to fetch posts');
-      return res.json();
-    },
-  });
+  const posts = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return initialPosts;
+    return initialPosts.filter((post) => String(post?.title || '').toLowerCase().includes(query));
+  }, [initialPosts, search]);
 
   const archiveLabel = categoryName || tagName || categorySlug || tagSlug || '';
   const archiveType = categorySlug ? 'Kategori' : tagSlug ? 'Tag' : '';
@@ -64,38 +72,20 @@ export default function BlogListPage({
                 />
               </div>
               <div className="mt-2 text-xs text-slate-500">
-                Menampilkan {Array.isArray(posts) ? posts.length : 0} artikel
+                Menampilkan {posts.length} artikel
               </div>
             </div>
           </div>
         </div>
 
         <div className="mt-8">
-          {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div key={i} className="bg-white border border-slate-200 rounded-2xl overflow-hidden animate-pulse">
-                  <div className="aspect-video bg-slate-100" />
-                  <div className="p-5 space-y-3">
-                    <div className="h-3 w-2/3 bg-slate-100 rounded" />
-                    <div className="h-4 w-full bg-slate-100 rounded" />
-                    <div className="h-4 w-4/5 bg-slate-100 rounded" />
-                    <div className="h-3 w-1/2 bg-slate-100 rounded" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : error ? (
-            <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center text-slate-500">
-              Gagal memuat artikel.
-            </div>
-          ) : Array.isArray(posts) && posts.length === 0 ? (
+          {posts.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center text-slate-500">
               Tidak ada artikel ditemukan.
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {(Array.isArray(posts) ? posts : []).map((post: any) => (
+              {posts.map((post) => (
                 <PostCard key={post.id} post={post} />
               ))}
             </div>

@@ -23,17 +23,22 @@ type SiteSettings = {
   logoUrl?: string;
 };
 
-export default function SiteHeader() {
+type SiteHeaderProps = {
+  initialCategories?: CourseCategory[];
+  initialSiteSettings?: SiteSettings;
+};
+
+export default function SiteHeader({ initialCategories = [], initialSiteSettings = {} }: SiteHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [elearningOpen, setElearningOpen] = useState(false);
-  const [categories, setCategories] = useState<CourseCategory[]>([]);
+  const [categories, setCategories] = useState<CourseCategory[]>(initialCategories);
   const [user, setUser] = useState<SessionUser | null>(null);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [siteSettings, setSiteSettings] = useState<SiteSettings>({});
+  const [siteSettings, setSiteSettings] = useState<SiteSettings>(initialSiteSettings);
   const { items: cartItems } = useCartStore();
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
@@ -54,6 +59,8 @@ export default function SiteHeader() {
   }, [pathname, searchParams]);
 
   useEffect(() => {
+    if (hidden) return;
+    if (initialCategories.length > 0) return;
     let active = true;
     (async () => {
       try {
@@ -69,9 +76,10 @@ export default function SiteHeader() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [hidden, initialCategories]);
 
   useEffect(() => {
+    if (hidden) return;
     let active = true;
     (async () => {
       try {
@@ -87,9 +95,10 @@ export default function SiteHeader() {
     return () => {
       active = false;
     };
-  }, [pathname]);
+  }, [hidden, pathname]);
 
   useEffect(() => {
+    if (hidden) return;
     let active = true;
     let timer: any = null;
 
@@ -120,9 +129,10 @@ export default function SiteHeader() {
       active = false;
       if (timer) clearInterval(timer);
     };
-  }, [user?.id]);
+  }, [hidden, user?.id]);
 
   useEffect(() => {
+    if (hidden) return;
     let active = true;
     let timer: any = null;
 
@@ -153,9 +163,11 @@ export default function SiteHeader() {
       active = false;
       if (timer) clearInterval(timer);
     };
-  }, [user?.id]);
+  }, [hidden, user?.id]);
 
   useEffect(() => {
+    if (hidden) return;
+    if (Object.keys(initialSiteSettings).length > 0) return;
     let active = true;
     (async () => {
       try {
@@ -171,9 +183,10 @@ export default function SiteHeader() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [hidden, initialSiteSettings]);
 
   useEffect(() => {
+    if (hidden) return;
     if (!elearningOpen) return;
     if (mobileOpen) return;
     const handler = (e: MouseEvent) => {
@@ -182,9 +195,10 @@ export default function SiteHeader() {
     };
     window.addEventListener('mousedown', handler);
     return () => window.removeEventListener('mousedown', handler);
-  }, [elearningOpen, mobileOpen]);
+  }, [hidden, elearningOpen, mobileOpen]);
 
   useEffect(() => {
+    if (hidden) return;
     if (!userMenuOpen) return;
     const handler = (e: MouseEvent) => {
       if (!userMenuRef.current) return;
@@ -192,9 +206,10 @@ export default function SiteHeader() {
     };
     window.addEventListener('mousedown', handler);
     return () => window.removeEventListener('mousedown', handler);
-  }, [userMenuOpen]);
+  }, [hidden, userMenuOpen]);
 
   useEffect(() => {
+    if (hidden) return;
     const raf = window.requestAnimationFrame(() => {
       setMobileOpen(false);
       setElearningOpen(false);
@@ -202,9 +217,10 @@ export default function SiteHeader() {
       setSearchOpen(false);
     });
     return () => window.cancelAnimationFrame(raf);
-  }, [pathname]);
+  }, [hidden, pathname]);
 
   useEffect(() => {
+    if (hidden) return;
     let raf = 0;
     const update = () => {
       const y = window.scrollY || 0;
@@ -226,16 +242,17 @@ export default function SiteHeader() {
       if (raf) window.cancelAnimationFrame(raf);
       window.removeEventListener('scroll', onScroll);
     };
-  }, []);
+  }, [hidden]);
 
   useEffect(() => {
+    if (hidden) return;
     if (!mobileOpen) return;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = prev;
     };
-  }, [mobileOpen]);
+  }, [hidden, mobileOpen]);
 
   if (hidden) return null;
 
@@ -303,7 +320,6 @@ export default function SiteHeader() {
                   src={siteSettings.logoUrl}
                   alt={siteSettings.siteName || 'Logo'}
                   fill
-                  unoptimized
                   className="object-contain"
                   sizes="192px"
                 />

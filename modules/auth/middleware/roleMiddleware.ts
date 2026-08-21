@@ -46,7 +46,7 @@ export async function middleware(req: NextRequest) {
 
     return NextResponse.next();
 
-  } catch (error) {
+  } catch {
     // Token is invalid or expired
     return NextResponse.redirect(new URL('/login', req.url));
   }

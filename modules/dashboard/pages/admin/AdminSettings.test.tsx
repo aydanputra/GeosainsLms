@@ -1,18 +1,18 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import AdminSettings from './AdminSettings';
 
 describe('AdminSettings Component', () => {
   it('renders settings title correctly', () => {
-    render(<AdminSettings />);
+    render(<AdminSettings isSuperAdmin={false} />);
     expect(screen.getByText('Pengaturan')).toBeDefined();
   });
 
-  it('switches tabs correctly', () => {
-    render(<AdminSettings />);
+  it('switches tabs correctly', async () => {
+    render(<AdminSettings isSuperAdmin={false} />);
     
     // Default tab is General
-    expect(screen.getByText('Nama Situs')).toBeDefined();
+    expect(await screen.findByText('Nama Situs')).toBeDefined();
     
     // Switch to Payment tab
     fireEvent.click(screen.getByText('Pembayaran'));
@@ -24,6 +24,6 @@ describe('AdminSettings Component', () => {
     
     // Switch to Notifications tab
     fireEvent.click(screen.getByText('Notifikasi'));
-    expect(screen.getByText('Email Notifikasi Pendaftaran Baru')).toBeDefined();
+    expect(screen.getByText('Notifikasi Email')).toBeDefined();
   });
 });

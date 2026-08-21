@@ -1,36 +1,37 @@
-"use client";
+import { notFound } from 'next/navigation';
+import PageRenderer from '@/modules/pages/components/PageRenderer';
+import { getPublicCmsPageData, getPublicCmsPageSlugs } from '@/modules/public/api/performance';
 
-import { useQuery } from '@tanstack/react-query';
-import { useParams, notFound } from 'next/navigation';
-import PageRenderer from '../../modules/pages/components/PageRenderer';
+export const revalidate = 300;
 
-export default function DynamicPage() {
-  const params = useParams();
-  const slug = params?.slug as string[];
-  const slugString = slug?.join('/') || '';
+export async function generateStaticParams() {
+  const pages = await getPublicCmsPageSlugs();
+  return pages.map((page) => ({
+    slug: page.segments,
+  }));
+}
 
-  const { data: page, isLoading, error } = useQuery({
-    queryKey: ['page', slugString],
-    queryFn: async () => {
-      if (!slugString) return null;
-      // We need a public endpoint for fetching pages by slug without ID
-      // Let's assume we create /api/pages/public/[...slug] or similar
-      // For now reusing the existing ID-based one if slug is treated as ID in backend logic (it is in our service.ts)
-      const res = await fetch(`/api/pages/${slugString}`); 
-      if (!res.ok) {
-        if (res.status === 404) return null;
-        throw new Error('Failed to fetch page');
-      }
-      return res.json();
-    },
-    enabled: !!slugString,
-  });
+export default async function DynamicPage({ params }: { params: Promise<{ slug: string[] }> }) {
+  const { slug } = await params;
+  const slugString = Array.isArray(slug) ? slug.join('/') : '';
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  
-  if (error) return <div className="min-h-screen flex items-center justify-center text-red-500">Error loading page</div>;
+  if (!slugString) {
+    notFound();
+  }
 
-  if (!page) return notFound();
+  const page = await getPublicCmsPageData(slugString);
 
-  return <PageRenderer blocks={page.blocks || []} />;
+  if (!page) {
+    notFound();
+  }
+
+  return (
+    <PageRenderer
+      blocks={page.blocks}
+      initialCourses={page.initialCourses}
+      coursesHydratedFromServer
+      initialVendors={page.initialVendors}
+      vendorsHydratedFromServer
+    />
+  );
 }

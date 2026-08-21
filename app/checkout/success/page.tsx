@@ -1,10 +1,11 @@
 "use client";
 
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
-export default function CheckoutSuccessPage() {
+function CheckoutSuccessPageContent() {
   const sp = useSearchParams();
   const externalId = useMemo(() => {
     const v = sp.get('externalId') || sp.get('external_id') || '';
@@ -104,5 +105,13 @@ export default function CheckoutSuccessPage() {
         </div>
       </div>
     </section>
+  );
+}
+
+export default function CheckoutSuccessPage() {
+  return (
+    <Suspense fallback={<section className="min-h-screen bg-slate-50 px-4 py-16 sm:py-20" />}>
+      <CheckoutSuccessPageContent />
+    </Suspense>
   );
 }

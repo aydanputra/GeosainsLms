@@ -69,9 +69,24 @@ export default function GalleryBlock({ content }: { content: GalleryContent }) {
             <div className={`grid ${mobileColsClass} sm:grid-cols-2 ${colsClass} gap-4`}>
               {items.map((it, idx) => {
                 const node = (
-                  <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                  <div
+                    className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                    style={{ contentVisibility: 'auto', containIntrinsicSize: `${imageHeightPx + 80}px` }}
+                  >
                     <div className="relative w-full bg-slate-100" style={{ height: `${imageHeightPx}px` }}>
-                      {it.imageUrl ? <Image src={it.imageUrl} alt={it.caption || 'Gallery'} fill unoptimized className="object-cover" /> : null}
+                      {it.imageUrl ? (
+                        <Image
+                          src={it.imageUrl}
+                          alt={it.caption || 'Gallery'}
+                          fill
+                          sizes={
+                            mobileColumns === 2
+                              ? '(max-width: 640px) calc(50vw - 1.25rem), (max-width: 1024px) calc(50vw - 2rem), 25vw'
+                              : '(max-width: 640px) calc(100vw - 2rem), (max-width: 1024px) calc(50vw - 2rem), 25vw'
+                          }
+                          className="object-cover"
+                        />
+                      ) : null}
                     </div>
                     {showCaptions && it.caption ? (
                       <div className="px-4 py-3 text-sm font-semibold text-slate-700 line-clamp-2">{it.caption}</div>
@@ -100,4 +115,3 @@ export default function GalleryBlock({ content }: { content: GalleryContent }) {
     </section>
   );
 }
-

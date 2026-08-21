@@ -986,7 +986,7 @@ export default function MentorStudents({
   useEffect(() => {
     if (!isEvaluationView) return;
     if (tab === 'gradebook' && courseId) loadInboxRef.current(courseId);
-  }, [tab, courseId]);
+  }, [tab, courseId, isEvaluationView]);
 
   useEffect(() => {
     if (!isEvaluationView) return;

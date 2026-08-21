@@ -232,8 +232,8 @@ export default function HeroBlock({ content }: HeroBlockProps) {
           src={s.background.imageUrl}
           alt="Hero Background"
           fill
+          sizes="100vw"
           priority={!!priority}
-          unoptimized
           className={fit === 'CONTAIN' ? 'object-contain bg-slate-950' : 'object-cover'}
           style={{ objectPosition }}
         />

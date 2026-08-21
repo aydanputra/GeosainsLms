@@ -22,6 +22,37 @@ interface Block {
 
 interface PageRendererProps {
   blocks: Block[];
+  initialCourses?: Array<{
+    id: string;
+    slug: string | null;
+    title: string;
+    thumbnailUrl: string | null;
+    price: number | null;
+    normalPrice?: number | null;
+    instructor?: { name: string | null; email: string | null } | null;
+    level?: string | null;
+    ratingAvg?: number | null;
+    ratingCount?: number | null;
+    isPublic?: boolean | null;
+  }>;
+  coursesHydratedFromServer?: boolean;
+  initialVendors?: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    description: string | null;
+    logoUrl: string | null;
+    coverUrl: string | null;
+    city: string | null;
+    province: string | null;
+    country: string | null;
+    contactEmail?: string | null;
+    contactPhone?: string | null;
+    ratingAvg: number;
+    ratingCount: number;
+    productCount: number;
+  }>;
+  vendorsHydratedFromServer?: boolean;
 }
 
 function sanitizeJsonString(input: string) {
@@ -234,7 +265,13 @@ type GalleryContent = {
   items?: Array<{ imageUrl?: string; caption?: string; href?: string }>;
 };
 
-export default function PageRenderer({ blocks }: PageRendererProps) {
+export default function PageRenderer({
+  blocks,
+  initialCourses = [],
+  coursesHydratedFromServer = false,
+  initialVendors = [],
+  vendorsHydratedFromServer = false,
+}: PageRendererProps) {
   if (!blocks || blocks.length === 0) {
     return <div className="py-20 text-center text-gray-500">Empty Page</div>;
   }
@@ -348,10 +385,19 @@ export default function PageRenderer({ blocks }: PageRendererProps) {
           case 'COURSES':
             return spacingStyle ? (
               <div key={block.id} style={spacingStyle}>
-                <CoursesBlock content={content as CoursesContent} />
+                <CoursesBlock
+                  content={content as CoursesContent}
+                  initialCourses={initialCourses}
+                  hydratedFromServer={coursesHydratedFromServer}
+                />
               </div>
             ) : (
-              <CoursesBlock key={block.id} content={content as CoursesContent} />
+              <CoursesBlock
+                key={block.id}
+                content={content as CoursesContent}
+                initialCourses={initialCourses}
+                hydratedFromServer={coursesHydratedFromServer}
+              />
             );
           case 'GRID':
             return spacingStyle ? (
@@ -364,10 +410,23 @@ export default function PageRenderer({ blocks }: PageRendererProps) {
           case 'SECTION':
             return spacingStyle ? (
               <div key={block.id} style={spacingStyle}>
-                <SectionBlock content={content as SectionContent} />
+                <SectionBlock
+                  content={content as SectionContent}
+                  initialCourses={initialCourses}
+                  coursesHydratedFromServer={coursesHydratedFromServer}
+                  initialVendors={initialVendors}
+                  vendorsHydratedFromServer={vendorsHydratedFromServer}
+                />
               </div>
             ) : (
-              <SectionBlock key={block.id} content={content as SectionContent} />
+              <SectionBlock
+                key={block.id}
+                content={content as SectionContent}
+                initialCourses={initialCourses}
+                coursesHydratedFromServer={coursesHydratedFromServer}
+                initialVendors={initialVendors}
+                vendorsHydratedFromServer={vendorsHydratedFromServer}
+              />
             );
           case 'TESTIMONIALS':
             return spacingStyle ? (
@@ -396,10 +455,19 @@ export default function PageRenderer({ blocks }: PageRendererProps) {
           case 'VENDORS':
             return spacingStyle ? (
               <div key={block.id} style={spacingStyle}>
-                <VendorsBlock content={content as VendorsContent} />
+                <VendorsBlock
+                  content={content as VendorsContent}
+                  initialVendors={initialVendors}
+                  hydratedFromServer={vendorsHydratedFromServer}
+                />
               </div>
             ) : (
-              <VendorsBlock key={block.id} content={content as VendorsContent} />
+              <VendorsBlock
+                key={block.id}
+                content={content as VendorsContent}
+                initialVendors={initialVendors}
+                hydratedFromServer={vendorsHydratedFromServer}
+              />
             );
           case 'GALLERY':
             return spacingStyle ? (

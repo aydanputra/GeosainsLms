@@ -2,31 +2,11 @@ import { cookies } from 'next/headers';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
 import OrdersClient from './orders-client';
+import { getCourseRevenueSettings, getMentorScope } from '@/modules/dashboard/api/performance';
 
 export const dynamic = 'force-dynamic';
 
-const SETTINGS_SLUG = '__course_settings__';
-
-function safeParseJson(value: unknown) {
-  try {
-    if (typeof value !== 'string') return {};
-    const parsed = JSON.parse(value);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function toInt(value: unknown, fallback: number) {
-  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
-  if (!Number.isFinite(n)) return fallback;
-  return Math.trunc(n);
-}
-
-function toBool(value: unknown, fallback: boolean) {
-  if (typeof value === 'boolean') return value;
-  return fallback;
-}
+const JAKARTA_UTC_OFFSET_HOURS = 7;
 
 function getDiscountMeta(it: any) {
   const store = Number(it?.discountStoreAmount || 0);
@@ -51,6 +31,23 @@ function deriveUiStatus(order: { status: string; manualPaymentStatus: string; pa
   return 'PENDING_PAYMENT' as const;
 }
 
+function getJakartaTodayRange(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+
+  const year = Number(parts.find((part) => part.type === 'year')?.value || now.getUTCFullYear());
+  const month = Number(parts.find((part) => part.type === 'month')?.value || now.getUTCMonth() + 1);
+  const day = Number(parts.find((part) => part.type === 'day')?.value || now.getUTCDate());
+
+  const gte = new Date(Date.UTC(year, month - 1, day, -JAKARTA_UTC_OFFSET_HOURS, 0, 0, 0));
+  const lt = new Date(Date.UTC(year, month - 1, day + 1, -JAKARTA_UTC_OFFSET_HOURS, 0, 0, 0));
+  return { gte, lt };
+}
+
 export default async function Page() {
   const cookieStore = await cookies();
   const token = cookieStore.get('token')?.value;
@@ -62,49 +59,32 @@ export default async function Page() {
   if (!userId) return <div>Access Denied</div>;
   if (role !== 'MENTOR' && role !== 'ADMIN') return <div>Access Denied</div>;
 
-  const settingsPage = await prisma.page.findUnique({ where: { slug: SETTINGS_SLUG }, select: { content: true } });
-  const settings = safeParseJson(settingsPage?.content);
-  const enableRevenueSharing = toBool((settings as any).enableRevenueSharing, false);
-  const instructorRevenueSharePercent = Math.max(0, Math.min(100, toInt((settings as any).instructorRevenueSharePercent, 90)));
-  const adminRevenueSharePercent = Math.max(0, Math.min(100, toInt((settings as any).adminRevenueSharePercent, 10)));
-  const courseMentorPercent = enableRevenueSharing ? instructorRevenueSharePercent : 100;
-  const courseFeePercent = enableRevenueSharing ? adminRevenueSharePercent : 0;
+  const [settings, mentorScope] = await Promise.all([getCourseRevenueSettings(), getMentorScope(userId)]);
+  const courseMentorPercent = settings.mentorRevenuePercent;
+  const courseIds = mentorScope.courseIds;
+  const todayRange = getJakartaTodayRange();
 
-  const myCourseIds = (
-    await prisma.course.findMany({
-      where: { instructorId: userId, deletedAt: null },
-      select: { id: true },
-    })
-  ).map((c) => c.id);
-
-  const coCourseIds = (
-    await prisma.courseCoInstructor.findMany({
-      where: { userId },
-      select: { courseId: true },
-    })
-  ).map((x) => x.courseId);
-
-  const courseIds = Array.from(new Set([...myCourseIds, ...coCourseIds]));
-
-  const vendors = await prisma.shopVendor.findMany({
-    where: role === 'ADMIN' ? undefined : { status: 'APPROVED', OR: [{ ownerId: userId }, { members: { some: { userId } } }] },
-    select: { id: true, commissionType: true, commissionRate: true },
-  });
-  const vendorIds = vendors.map((v) => v.id);
-  const vendorById = new Map(vendors.map((v) => [v.id, v] as const));
-  const productIds = vendorIds.length
+  const vendorConfigs =
+    role === 'ADMIN'
+      ? await prisma.shopVendor.findMany({
+          select: { id: true, commissionType: true, commissionRate: true },
+        })
+      : mentorScope.vendorConfigs;
+  const vendorIds = vendorConfigs.map((v) => v.id);
+  const vendorById = new Map(vendorConfigs.map((v) => [v.id, v] as const));
+  const productIds = role === 'ADMIN'
     ? (
         await prisma.product.findMany({
-          where: { vendorId: { in: vendorIds } },
           select: { id: true },
         })
       ).map((p) => p.id)
-    : [];
+    : mentorScope.productIds;
 
   const orders =
     courseIds.length > 0 || productIds.length > 0
       ? await prisma.order.findMany({
           where: {
+            createdAt: todayRange,
             OR: [
               ...(courseIds.length > 0 ? [{ items: { some: { courseId: { in: courseIds } } } }] : []),
               ...(productIds.length > 0 ? [{ items: { some: { productId: { in: productIds } } } }] : []),
@@ -196,11 +176,11 @@ export default async function Page() {
       createdAt: o.createdAt.toISOString(),
       orderId: o.id,
       customer: o.user?.name || o.user?.email || 'Customer',
-      orderTotal: Math.max(0, orderTotal),
+      orderTotal: Math.max(0, mentorBuyerPaid),
       earning: netEarning,
       status,
     };
   });
 
-  return <OrdersClient rows={rows as any} />;
+  return <OrdersClient rows={rows as any} defaultRangeLabel="Hari ini" />;
 }

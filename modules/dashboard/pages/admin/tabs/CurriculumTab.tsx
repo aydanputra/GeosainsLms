@@ -11,10 +11,8 @@ import {
   FileText, 
   ChevronDown, 
   ChevronUp,
-  MoreVertical,
   X
 } from 'lucide-react';
-import { twMerge } from 'tailwind-merge';
 
 import { toast } from 'sonner';
 import ConfirmDialog from '../../../components/ConfirmDialog';
@@ -201,7 +199,7 @@ export default function CurriculumTab({ course }: CurriculumTabProps) {
       } else {
         throw new Error('Gagal menambah modul');
       }
-    } catch (error) {
+    } catch {
       toast.error('Gagal menambah modul');
     }
   };
@@ -293,7 +291,7 @@ export default function CurriculumTab({ course }: CurriculumTabProps) {
           throw new Error('Gagal menghapus pelajaran');
         }
       }
-    } catch (error) {
+    } catch {
       toast.error(confirmDialog.type === 'DELETE_MODULE' ? 'Gagal menghapus modul' : 'Gagal menghapus pelajaran');
     } finally {
       setConfirmDialog(prev => ({ ...prev, isOpen: false, isLoading: false }));
@@ -329,7 +327,7 @@ export default function CurriculumTab({ course }: CurriculumTabProps) {
       } else {
         throw new Error('Gagal menambah pelajaran');
       }
-    } catch (error) {
+    } catch {
       toast.error('Gagal menambah pelajaran');
     }
   };

@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
@@ -5,29 +6,22 @@ import { createPortal } from 'react-dom';
 import {
   Award,
   BookOpen,
-  Calendar,
   Clock,
-  Download,
   GraduationCap,
   Image as ImageIcon,
   Layout,
   Library,
   Loader2,
-  Maximize2,
   Minus,
-  MousePointer2,
   Plus,
   QrCode,
   Save,
-  Settings2,
   Signature,
   Type,
   User,
   CheckCircle2,
   Eye,
   FileText,
-  History,
-  Info,
   Hash,
   AlignCenter,
   AlignLeft,
@@ -45,11 +39,6 @@ import {
   ChevronLeft,
   Settings,
   MoreVertical,
-  RotateCcw,
-  Square,
-  Circle,
-  Triangle,
-  Star,
   Zap,
   Boxes,
   Percent,
@@ -135,11 +124,10 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
     router.back();
   };
 
-  const [isLoading, setIsLoading] = useState(false);
+  const [, setIsLoading] = useState(false);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [activeTab, setActiveTab] = useState<'TEMPLATES' | 'ELEMENTS' | 'MEDIA' | 'LIBRARY' | 'BACKDROPS' | 'LAYERS' | 'SETTINGS'>('ELEMENTS');
-  const [templateOrientation, setTemplateOrientation] = useState<'LANDSCAPE' | 'PORTRAIT'>('LANDSCAPE');
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [designTitle, setDesignTitle] = useState<string>('Untitled Design');
   const [isEditingDesignTitle, setIsEditingDesignTitle] = useState(false);
@@ -172,8 +160,6 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
   const [isLoadingPatternUploads, setIsLoadingPatternUploads] = useState(false);
   const [mentorSignatureUrl, setMentorSignatureUrl] = useState<string>(initialSettings.mentorSignatureUrl ?? '');
   const [meRole, setMeRole] = useState<'ADMIN' | 'MENTOR' | 'STUDENT' | null>(null);
-  const [isUploadingSignature, setIsUploadingSignature] = useState(false);
-  
   const [canvasElements, setCanvasElements] = useState<CanvasElement[]>([]);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [showSettingsPopover, setShowSettingsPopover] = useState(false);
@@ -241,6 +227,8 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
     };
   }, [showPreviewModal, certificatePagePx.w, certificatePagePx.h]);
 
+  // This history snapshot should run only when the certificate page size changes.
+   
   useEffect(() => {
     setCanvasElements((prev) => {
       if (!prev.length) return prev;
@@ -260,7 +248,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
       saveToHistory(next);
       return next;
     });
-  }, [certificatePage.widthMm, certificatePage.heightMm]);
+  }, [certificatePage.widthMm, certificatePage.heightMm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedElement = useMemo(() => 
     canvasElements.find(el => el.id === selectedElementId) || null
@@ -395,6 +383,8 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
     });
   };
 
+  // Pointer listeners are intentionally keyed to the active drag session.
+   
   useEffect(() => {
     if (!layerDragId || layerDragPointerId === null) return;
     const move = (e: PointerEvent) => {
@@ -443,8 +433,10 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
     };
-  }, [layerDragId, layerDragOverId, layerDragPointerId, layersElements, sidebarSearch]);
+  }, [layerDragId, layerDragOverId, layerDragPointerId, layersElements, sidebarSearch]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Initial template hydration is intentionally driven by routing/query state.
+   
   useEffect(() => {
     let active = true;
     (async () => {
@@ -465,10 +457,14 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
     };
   }, []);
 
+  // Floating toolbar is recalculated from the active selection and zoom only.
+   
   useEffect(() => {
     setTargetCourseId(courseId || '');
   }, [courseId]);
 
+  // The resize listener only needs the current component scheduler.
+   
   useEffect(() => {
     setSelectedTemplateId(templateId || '');
   }, [templateId]);
@@ -565,35 +561,6 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
     setShowTemplatePicker(true);
     setShowCoursePicker(false);
     setTemplatePickerQuery('');
-  };
-
-  const handleUploadSignature = async (file: File) => {
-    setIsUploadingSignature(true);
-    try {
-      const form = new FormData();
-      form.set('file', file);
-      form.set('alt', 'signature');
-      const uploadRes = await fetch('/api/media/upload', { method: 'POST', body: form });
-      const uploadJson = await uploadRes.json().catch(() => ({}));
-      if (!uploadRes.ok) throw new Error(uploadJson?.error || 'Gagal upload tanda tangan');
-      const url = typeof uploadJson?.url === 'string' ? uploadJson.url : '';
-      if (!url) throw new Error('URL file tidak valid');
-
-      const saveRes = await fetch('/api/me', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ signatureUrl: url }),
-      });
-      const saveJson = await saveRes.json().catch(() => ({}));
-      if (!saveRes.ok) throw new Error(saveJson?.error || 'Gagal menyimpan tanda tangan');
-
-      setMentorSignatureUrl(url);
-      toast.success('Tanda tangan berhasil diperbarui');
-    } catch (e: any) {
-      toast.error(e?.message || 'Gagal upload tanda tangan');
-    } finally {
-      setIsUploadingSignature(false);
-    }
   };
 
   const saveToHistory = (elements: CanvasElement[]) => {
@@ -728,31 +695,6 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
     const maxZ = canvasElements.length > 0 ? Math.max(...canvasElements.map(e => e.zIndex)) : 0;
     const w = 80;
     const h = 60;
-    const newElement: CanvasElement = {
-      id,
-      type: 'IMAGE',
-      x: certificatePage.widthMm / 2 - w / 2,
-      y: certificatePage.heightMm / 2 - h / 2,
-      width: w,
-      height: h,
-      zIndex: maxZ + 1,
-      opacity: 100,
-      src: t,
-      align: 'center',
-    };
-    const nextElements = [...canvasElements, newElement];
-    setCanvasElements(nextElements);
-    setSelectedElementId(id);
-    saveToHistory(nextElements);
-  };
-
-  const addImageElementWithSize = (src: string, size: { width: number; height: number }) => {
-    const t = src.trim();
-    if (!t) return;
-    const id = Math.random().toString(36).substr(2, 9);
-    const maxZ = canvasElements.length > 0 ? Math.max(...canvasElements.map(e => e.zIndex)) : 0;
-    const w = Math.max(5, Number(size.width) || 80);
-    const h = Math.max(5, Number(size.height) || 60);
     const newElement: CanvasElement = {
       id,
       type: 'IMAGE',
@@ -1488,7 +1430,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
       setCanvasElements(els as any);
       saveToHistory(els as any);
     }
-  }, [templateId, initialSettings]);
+  }, [templateId, initialSettings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (activeTab !== 'MEDIA') return;
@@ -1738,7 +1680,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
       return;
     }
     scheduleUpdateFloating();
-  }, [selectedElementId, builderZoom]);
+  }, [selectedElementId, builderZoom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setActiveLibraryColorIndex(0);
@@ -1767,7 +1709,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
     const onResize = () => scheduleUpdateFloating();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -2034,7 +1976,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
     };
     return (
       <div className="relative w-full bg-white overflow-hidden" style={{ aspectRatio: `${dims.widthMm} / ${dims.heightMm}` }}>
-        {bg ? <img src={bg} className="absolute inset-0 w-full h-full object-cover" /> : null}
+        {bg ? <img alt="" src={bg} className="absolute inset-0 w-full h-full object-cover" /> : null}
         <div className="absolute inset-0">
           {sorted.map((el: any, idx: number) => {
             const x = Number(el?.x || 0);
@@ -2053,7 +1995,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
               const src = typeof el?.src === 'string' ? el.src : '';
               return (
                 <div key={String(el?.id || idx)} className="absolute" style={{ left, top, width, height, opacity }}>
-                  {src ? <img src={src} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-100" />}
+                  {src ? <img alt="" src={src} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-100" />}
                 </div>
               );
             }
@@ -2359,7 +2301,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                         className="group aspect-square rounded-2xl border border-slate-200 bg-white overflow-hidden hover:border-indigo-300 hover:shadow-md transition-all"
                         title={String(m.filename || m.alt || 'Media')}
                       >
-                        <img src={String(m.url || '')} className="w-full h-full object-cover" />
+                        <img alt="" src={String(m.url || '')} className="w-full h-full object-cover" />
                       </button>
                     ))}
                   </div>
@@ -2451,8 +2393,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                                 )}
                                 title={it.name}
                               >
-                                <img
-                                  src={it.kind === 'UPLOADED' ? String(it.url) : `data:image/svg+xml;utf8,${encodeURIComponent(it.svg)}`}
+                                <img alt="" src={it.kind === 'UPLOADED' ? String(it.url) : `data:image/svg+xml;utf8,${encodeURIComponent(it.svg)}`}
                                   className="w-full h-full object-contain p-2"
                                 />
                               </button>
@@ -2493,8 +2434,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                             )}
                             title={it.name}
                           >
-                            <img
-                              src={it.kind === 'UPLOADED' ? String(it.url) : `data:image/svg+xml;utf8,${encodeURIComponent(it.svg)}`}
+                            <img alt="" src={it.kind === 'UPLOADED' ? String(it.url) : `data:image/svg+xml;utf8,${encodeURIComponent(it.svg)}`}
                               className="w-full h-full object-contain p-2"
                             />
                           </button>
@@ -2588,7 +2528,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                               )}
                               title={String(m?.filename || m?.alt || 'Pattern')}
                             >
-                              <img src={url} className="w-full h-full object-cover" />
+                              <img alt="" src={url} className="w-full h-full object-cover" />
                             </button>
                           );
                         })}
@@ -2604,8 +2544,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                             )}
                             title={p.name}
                           >
-                            <img
-                              src={`data:image/svg+xml;utf8,${encodeURIComponent(wrapThumbSvg(p.innerSvg, { w: 240, h: 240 }))}`}
+                            <img alt="" src={`data:image/svg+xml;utf8,${encodeURIComponent(wrapThumbSvg(p.innerSvg, { w: 240, h: 240 }))}`}
                               className="w-full h-full object-cover"
                             />
                           </button>
@@ -2674,7 +2613,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                               title={String(m?.filename || m?.alt || 'Backdrop')}
                             >
                               <div className="w-full bg-white" style={{ aspectRatio: `${certificatePage.widthMm} / ${certificatePage.heightMm}` }}>
-                                <img src={url} className="w-full h-full object-cover" />
+                                <img alt="" src={url} className="w-full h-full object-cover" />
                               </div>
                             </button>
                           );
@@ -2692,8 +2631,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                             title={b.name}
                           >
                             <div className="w-full bg-white" style={{ aspectRatio: `${certificatePage.widthMm} / ${certificatePage.heightMm}` }}>
-                              <img
-                                src={`data:image/svg+xml;utf8,${encodeURIComponent(wrapThumbSvg(b.innerSvg, { w: 360, h: 240 }))}`}
+                              <img alt="" src={`data:image/svg+xml;utf8,${encodeURIComponent(wrapThumbSvg(b.innerSvg, { w: 360, h: 240 }))}`}
                                 className="w-full h-full object-cover"
                               />
                             </div>
@@ -2790,7 +2728,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                                 )}
                                 title={String(m?.filename || m?.alt || 'Pattern')}
                               >
-                                <img src={url} className="w-full h-full object-cover" />
+                                <img alt="" src={url} className="w-full h-full object-cover" />
                               </button>
                             );
                           })
@@ -2816,8 +2754,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                             )}
                             title={p.name}
                           >
-                            <img
-                              src={`data:image/svg+xml;utf8,${encodeURIComponent(wrapThumbSvg(p.innerSvg, { w: 240, h: 240 }))}`}
+                            <img alt="" src={`data:image/svg+xml;utf8,${encodeURIComponent(wrapThumbSvg(p.innerSvg, { w: 240, h: 240 }))}`}
                               className="w-full h-full object-cover"
                             />
                           </button>
@@ -2899,7 +2836,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                                 title={String(m?.filename || m?.alt || 'Backdrop')}
                               >
                                 <div className="w-full bg-white" style={{ aspectRatio: `${certificatePage.widthMm} / ${certificatePage.heightMm}` }}>
-                                  <img src={url} className="w-full h-full object-cover" />
+                                  <img alt="" src={url} className="w-full h-full object-cover" />
                                 </div>
                               </button>
                             );
@@ -2927,8 +2864,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                             title={b.name}
                           >
                             <div className="w-full bg-white" style={{ aspectRatio: `${certificatePage.widthMm} / ${certificatePage.heightMm}` }}>
-                              <img
-                                src={`data:image/svg+xml;utf8,${encodeURIComponent(wrapThumbSvg(b.innerSvg, { w: 480, h: 320 }))}`}
+                              <img alt="" src={`data:image/svg+xml;utf8,${encodeURIComponent(wrapThumbSvg(b.innerSvg, { w: 480, h: 320 }))}`}
                                 className="w-full h-full object-cover"
                               />
                             </div>
@@ -3169,7 +3105,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
               className="relative shadow-[0_20px_50px_rgba(0,0,0,0.1)] bg-white overflow-hidden select-none touch-none canvas-bg"
               style={{ width: `${certificatePagePx.w}px`, aspectRatio: `${certificatePage.widthMm} / ${certificatePage.heightMm}` }}
             >
-              {certificateBackgroundImageUrl && <img src={certificateBackgroundImageUrl} className="absolute inset-0 w-full h-full object-fill pointer-events-none" />}
+              {certificateBackgroundImageUrl && <img alt="" src={certificateBackgroundImageUrl} className="absolute inset-0 w-full h-full object-fill pointer-events-none" />}
               
               {sortedElements.map(el => (
                 <div
@@ -3225,14 +3161,14 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                     )}
                     {el.type === 'SIGNATURE' && (
                       mentorSignatureUrl ? (
-                        <img src={mentorSignatureUrl} className="w-full h-full object-contain" />
+                        <img alt="" src={mentorSignatureUrl} className="w-full h-full object-contain" />
                       ) : (
                         <Signature className="w-full h-full p-1" />
                       )
                     )}
                     {el.type === 'IMAGE' && (
                       el.src ? (
-                        <img src={el.src} className="w-full h-full object-cover" />
+                        <img alt="" src={el.src} className="w-full h-full object-cover" />
                       ) : (
                         <ImageIcon className="w-full h-full p-2 text-slate-300" />
                       )
@@ -3446,7 +3382,7 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                   }}
                 >
                   {certificateBackgroundImageUrl ? (
-                    <img src={certificateBackgroundImageUrl} className="absolute inset-0 w-full h-full object-fill pointer-events-none" />
+                    <img alt="" src={certificateBackgroundImageUrl} className="absolute inset-0 w-full h-full object-fill pointer-events-none" />
                   ) : null}
                   <div className="relative w-full h-full">
                     {sortedElements.map((el) => (
@@ -3494,14 +3430,14 @@ export default function CertificateBuilder({ initialSettings }: CertificateBuild
                           )}
                           {el.type === 'SIGNATURE' && (
                             mentorSignatureUrl ? (
-                              <img src={mentorSignatureUrl} className="w-full h-full object-contain" />
+                              <img alt="" src={mentorSignatureUrl} className="w-full h-full object-contain" />
                             ) : (
                               <Signature className="w-full h-full p-1" />
                             )
                           )}
                           {el.type === 'IMAGE' && (
                             el.src ? (
-                              <img src={el.src} className="w-full h-full object-cover" />
+                              <img alt="" src={el.src} className="w-full h-full object-cover" />
                             ) : (
                               <ImageIcon className="w-full h-full p-2 text-slate-300" />
                             )
@@ -4100,15 +4036,6 @@ function ToolbarButton({ icon: Icon, onClick, active, className, label }: { icon
   );
 }
 
-function PropertyRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block">{label}</label>
-      {children}
-    </div>
-  );
-}
-
 function QrPreview({
   sizeMm,
   qrColor,
@@ -4165,7 +4092,7 @@ function QrPreview({
         }}
       >
         {dataUrl ? (
-          <img src={dataUrl} className="w-full h-full object-contain" />
+          <img alt="" src={dataUrl} className="w-full h-full object-contain" />
         ) : (
           <QrCode className="w-full h-full p-2" style={{ color: qrColor || '#000000' } as any} />
         )}

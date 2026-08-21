@@ -2,11 +2,10 @@
 
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import { 
   Bold, Italic, List, ListOrdered, Quote, Undo, Redo, 
-  Heading1, Heading2, Heading3, Code, Minus 
+  Heading1, Heading2, Code, Minus 
 } from 'lucide-react';
 
 interface RichTextEditorProps {
@@ -127,6 +126,7 @@ const MenuBar = ({ editor }: { editor: any }) => {
 };
 
 export default function RichTextEditor({ value, onChange, placeholder }: RichTextEditorProps) {
+  void placeholder;
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -141,12 +141,12 @@ export default function RichTextEditor({ value, onChange, placeholder }: RichTex
         },
         heading: {
           levels: [1, 2, 3],
-        }
-      }),
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: {
-          class: 'text-indigo-600 hover:text-indigo-800 underline',
+        },
+        link: {
+          openOnClick: false,
+          HTMLAttributes: {
+            class: 'text-indigo-600 hover:text-indigo-800 underline',
+          },
         },
       }),
       Image,

@@ -96,8 +96,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     await prisma.category.delete({ where: { id } });
     return NextResponse.json({ ok: true });
-  } catch (error: any) {
+  } catch {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
-

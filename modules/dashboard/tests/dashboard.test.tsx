@@ -8,6 +8,7 @@ import { useDashboardStore } from '../store/useDashboardStore';
 // Mock next/navigation
 vi.mock('next/navigation', () => ({
   usePathname: () => '/dashboard/admin',
+  useSearchParams: () => ({ get: () => null }),
   useRouter: () => ({ push: vi.fn() }),
 }));
 
@@ -30,13 +31,23 @@ describe('Dashboard Components', () => {
       render(<Sidebar role="ADMIN" />);
       expect(screen.getByText('Beranda')).toBeDefined();
       expect(screen.getByText('Manajemen Kursus')).toBeDefined();
-      expect(screen.getByText('User')).toBeDefined();
+      expect(screen.getAllByText('User').length).toBeGreaterThan(0);
+    });
+
+    it('should render article menu for super admin', () => {
+      useDashboardStore.setState({
+        sidebarOpen: true,
+        user: { id: '1', name: 'Super Admin', email: 'superadmin@test.com', role: 'ADMIN', isSuperAdmin: true },
+      });
+      render(<Sidebar role="ADMIN" />);
+      expect(screen.getByText('Artikel')).toBeDefined();
     });
 
     it('should render mentor links correctly', () => {
       render(<Sidebar role="MENTOR" />);
       expect(screen.getByText('Dashboard')).toBeDefined();
       expect(screen.getByText('Mentor')).toBeDefined();
+      fireEvent.click(screen.getByText('Mentor'));
       expect(screen.getByText('Kursus Saya')).toBeDefined();
     });
   });
@@ -78,12 +89,18 @@ describe('Dashboard Components', () => {
     });
 
     it('should render actions if provided', () => {
-      const onEdit = vi.fn();
-      render(<Table columns={columns} data={data} onEdit={onEdit} />);
-      const editButtons = screen.getAllByText('Edit');
-      expect(editButtons.length).toBe(2);
-      fireEvent.click(editButtons[0]);
-      expect(onEdit).toHaveBeenCalledWith(data[0]);
+      const onDetail = vi.fn();
+      render(
+        <Table
+          columns={columns}
+          data={data}
+          actions={(row) => <button onClick={() => onDetail(row)}>Detail</button>}
+        />
+      );
+      const detailButtons = screen.getAllByText('Detail');
+      expect(detailButtons.length).toBe(2);
+      fireEvent.click(detailButtons[0]);
+      expect(onDetail).toHaveBeenCalledWith(data[0]);
     });
   });
 });

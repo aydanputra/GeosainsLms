@@ -1,6 +1,8 @@
 import { prisma } from '@/utils/prisma';
 import { z } from 'zod';
 import { LessonType, CourseStatus, CourseLevel, DripType } from '@prisma/client';
+import { sanitizeRichHtml } from '@/modules/core/utils/sanitizeHtml';
+import { getCourseCertificateContext, getCourseLessonSequence, getCourseRuntimeSettings } from '@/modules/course/api/performance';
 
 // Helper for YouTube ID extraction
 export function extractYoutubeId(url: string): string | null {
@@ -247,7 +249,11 @@ export const createCourse = async (data: z.infer<typeof CourseSchema>) => {
     status = data.published ? CourseStatus.PUBLISHED : CourseStatus.DRAFT;
   }
 
-  const { published, ...createData } = data;
+  const createData = { ...data };
+  delete (createData as Partial<typeof data>).published;
+  if (typeof createData.description === 'string') {
+    createData.description = sanitizeRichHtml(createData.description) || undefined;
+  }
   const categoryIds = Array.isArray((createData as any).categoryIds)
     ? (createData as any).categoryIds.map((v: any) => String(v || '').trim()).filter(Boolean)
     : [];
@@ -290,58 +296,135 @@ export const getCourses = async (publishedOnly = true, instructorId?: string) =>
 };
 
 export const getEnrolledCourses = async (userId: string) => {
-  const enrollments = await prisma.enrollment.findMany({
-    where: { userId },
-    include: {
-      course: {
-        include: {
-          instructor: {
-            select: { name: true, email: true },
-          },
-          category: {
-            select: { name: true },
-          },
-          modules: {
-            include: {
-              lessons: true,
-            },
-          },
-        },
-      },
-    },
-  });
   const now = new Date();
-  const purchasedCourses = enrollments
-    .filter((e) => e.course.deletedAt === null)
-    .filter((e) => {
-      const validityDays = e.course.validityDays;
+  const purchasedCourseRows = await prisma.$queryRaw<
+    Array<{
+      courseId: string;
+      slug: string;
+      title: string;
+      thumbnailUrl: string | null;
+      instructorName: string | null;
+      instructorEmail: string | null;
+      validityDays: number | null;
+      totalLessons: number;
+      completedLessons: number;
+      enrolledAt: Date;
+    }>
+  >`
+    SELECT
+      c.id AS "courseId",
+      c.slug AS "slug",
+      c.title AS "title",
+      c."thumbnailUrl" AS "thumbnailUrl",
+      i.name AS "instructorName",
+      i.email AS "instructorEmail",
+      c."validityDays" AS "validityDays",
+      COUNT(l.id)::int AS "totalLessons",
+      COUNT(up.id) FILTER (WHERE up.completed = true)::int AS "completedLessons",
+      e."createdAt" AS "enrolledAt"
+    FROM "Enrollment" e
+    JOIN "Course" c ON c.id = e."courseId"
+    LEFT JOIN "User" i ON i.id = c."instructorId"
+    LEFT JOIN "Module" m ON m."courseId" = c.id
+    LEFT JOIN "Lesson" l ON l."moduleId" = m.id
+    LEFT JOIN "UserProgress" up ON up."lessonId" = l.id AND up."userId" = e."userId"
+    WHERE e."userId" = ${userId} AND c."deletedAt" IS NULL
+    GROUP BY c.id, c.slug, c.title, c."thumbnailUrl", i.name, i.email, c."validityDays", e."createdAt"
+    ORDER BY e."createdAt" DESC
+  `;
+
+  const formatSummary = (row: {
+    courseId: string;
+    slug: string;
+    title: string;
+    thumbnailUrl: string | null;
+    instructorName: string | null;
+    instructorEmail: string | null;
+    totalLessons: number;
+    completedLessons: number;
+    enrolledAt: Date;
+  }) => {
+    const totalLessons = Number(row.totalLessons) || 0;
+    const completedLessons = Number(row.completedLessons) || 0;
+    const progress = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
+    return {
+      id: String(row.courseId),
+      slug: String(row.slug || ''),
+      title: String(row.title || ''),
+      thumbnailUrl: typeof row.thumbnailUrl === 'string' ? row.thumbnailUrl : null,
+      instructorName: row.instructorName || row.instructorEmail || 'Unknown',
+      instructor: {
+        name: row.instructorName || null,
+        email: row.instructorEmail || null,
+      },
+      enrolledAt: row.enrolledAt.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+      progress,
+      totalLessons,
+      completedLessons,
+      status: progress === 100 ? 'Selesai' : 'Sedang Berjalan',
+    };
+  };
+
+  const purchasedCourses = purchasedCourseRows
+    .filter((row) => {
+      const validityDays = Number(row.validityDays) || 0;
       if (!validityDays || validityDays <= 0) return true;
-      const expiresAt = new Date(e.createdAt);
+      const expiresAt = new Date(row.enrolledAt);
       expiresAt.setDate(expiresAt.getDate() + validityDays);
       return now <= expiresAt;
     })
-    .map((e) => e.course);
+    .map(formatSummary);
 
   const activeSubscription = await prisma.subscription.findFirst({
     where: { userId, startDate: { lte: now }, endDate: { gte: now }, status: 'ACTIVE' },
-    select: { id: true },
+    select: { id: true, startDate: true },
   });
 
   if (!activeSubscription) return purchasedCourses;
 
-  const subscriptionCourses = await prisma.course.findMany({
-    where: { deletedAt: null, status: CourseStatus.PUBLISHED, subscriptionEligible: true },
-    include: {
-      instructor: { select: { name: true, email: true } },
-      category: { select: { name: true } },
-      modules: { include: { lessons: true } },
-    },
-    orderBy: { createdAt: 'desc' },
-  });
+  const subscriptionCourseRows = await prisma.$queryRaw<
+    Array<{
+      courseId: string;
+      slug: string;
+      title: string;
+      thumbnailUrl: string | null;
+      instructorName: string | null;
+      instructorEmail: string | null;
+      totalLessons: number;
+      completedLessons: number;
+    }>
+  >`
+    SELECT
+      c.id AS "courseId",
+      c.slug AS "slug",
+      c.title AS "title",
+      c."thumbnailUrl" AS "thumbnailUrl",
+      i.name AS "instructorName",
+      i.email AS "instructorEmail",
+      COUNT(l.id)::int AS "totalLessons",
+      COUNT(up.id) FILTER (WHERE up.completed = true)::int AS "completedLessons"
+    FROM "Course" c
+    LEFT JOIN "User" i ON i.id = c."instructorId"
+    LEFT JOIN "Module" m ON m."courseId" = c.id
+    LEFT JOIN "Lesson" l ON l."moduleId" = m.id
+    LEFT JOIN "UserProgress" up ON up."lessonId" = l.id AND up."userId" = ${userId}
+    WHERE c."deletedAt" IS NULL AND c.status = ${CourseStatus.PUBLISHED} AND c."subscriptionEligible" = true
+    GROUP BY c.id, c.slug, c.title, c."thumbnailUrl", i.name, i.email
+    ORDER BY c."createdAt" DESC
+  `;
+
+  const subscriptionCourses = subscriptionCourseRows.map((row) =>
+    formatSummary({
+      ...row,
+      enrolledAt: activeSubscription.startDate,
+    })
+  );
 
   const byId = new Map<string, any>();
   for (const c of purchasedCourses) byId.set(String((c as any).id), c);
-  for (const c of subscriptionCourses) byId.set(String((c as any).id), c);
+  for (const c of subscriptionCourses) {
+    if (!byId.has(String((c as any).id))) byId.set(String((c as any).id), c);
+  }
   return Array.from(byId.values());
 };
 
@@ -390,7 +473,8 @@ export const updateCourse = async (id: string, data: Partial<z.infer<typeof Cour
     await validateCourseBeforePublish(id);
   }
 
-  const { published, ...updateData } = data;
+  const updateData = { ...data };
+  delete (updateData as Partial<typeof data>).published;
   
   // Clean up undefined/null values that shouldn't override existing data
   // But allow explicitly null if schema permits (like dates)
@@ -403,6 +487,10 @@ export const updateCourse = async (id: string, data: Partial<z.infer<typeof Cour
         payload[key] = value;
     }
   });
+
+  if (typeof payload.description === 'string') {
+    payload.description = sanitizeRichHtml(payload.description) || null;
+  }
 
   const normalizedCategoryIds = Array.isArray(payload.categoryIds)
     ? payload.categoryIds.map((v: any) => String(v || '').trim()).filter(Boolean)
@@ -451,7 +539,8 @@ export const createLesson = async (data: z.infer<typeof LessonSchema>) => {
     }
   }
 
-  const { videoUrl, ...lessonData } = data;
+  const lessonData = { ...data };
+  delete (lessonData as Partial<typeof data>).videoUrl;
 
   return prisma.lesson.create({
     data: {
@@ -472,7 +561,8 @@ export const updateLesson = async (id: string, data: Partial<z.infer<typeof Less
     }
   }
 
-  const { videoUrl, ...lessonData } = data;
+  const lessonData = { ...data };
+  delete (lessonData as Partial<typeof data>).videoUrl;
 
   return prisma.lesson.update({
     where: { id },
@@ -497,14 +587,8 @@ export const createQuiz = async (data: any) => {
     }
 
     if (effectiveRetryLimit === undefined) {
-      const settingsPage = await tx.page.findUnique({ where: { slug: '__course_settings__' }, select: { content: true } });
-      let settings: any = {};
-      try {
-        settings = settingsPage?.content ? JSON.parse(settingsPage.content) : {};
-      } catch {
-        settings = {};
-      }
-      const def = settings?.defaultQuizRetryLimit;
+      const settings = await getCourseRuntimeSettings();
+      const def = settings.defaultQuizRetryLimit;
       effectiveRetryLimit = typeof def === 'number' && def > 0 ? Math.floor(def) : null;
     }
 
@@ -731,18 +815,11 @@ export const markLessonComplete = async (userId: string, lessonId: string) => {
   }
 
   if (course.dripEnabled) {
-    const modules = await prisma.module.findMany({
-      where: { courseId: course.id },
-      orderBy: { order: 'asc' },
-      select: {
-        lessons: {
-          orderBy: { order: 'asc' },
-          select: { id: true, isPreview: true },
-        },
-      },
-    });
-
-    const globalLessons = modules.flatMap((m) => m.lessons.map((l) => ({ id: l.id, isPreview: l.isPreview })));
+    const sequence = await getCourseLessonSequence(course.id);
+    const globalLessons = sequence.globalLessons.map((lessonRow) => ({
+      id: lessonRow.id,
+      isPreview: lessonRow.isPreview,
+    }));
     const idx = globalLessons.findIndex((l) => l.id === lessonId);
 
     if (idx >= 0 && !lesson.isPreview) {
@@ -850,23 +927,11 @@ import { issueCertificateIfEligible } from '@/modules/certificates/api/service';
 
 // ... (existing code)
 
-function safeParseCourseSettings(content: string | null | undefined) {
-  if (!content) return {};
-  try {
-    const parsed = JSON.parse(content);
-    if (!parsed || typeof parsed !== 'object') return {};
-    return parsed as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-
 const checkAndIssueCertificate = async (userId: string, courseId: string) => {
     try {
-        const settingsPage = await prisma.page.findUnique({ where: { slug: '__course_settings__' }, select: { content: true } });
-        const settings = safeParseCourseSettings(settingsPage?.content);
-        const certificatesEnabled = settings['certificatesEnabled'] !== false;
-        const autoIssue = settings['autoIssueCertificateOnCompletion'] !== false;
+        const settings = await getCourseRuntimeSettings();
+        const certificatesEnabled = settings.certificatesEnabled !== false;
+        const autoIssue = settings.autoIssueCertificateOnCompletion !== false;
         if (!certificatesEnabled || !autoIssue) return;
         await issueCertificateIfEligible(userId, courseId);
     } catch (error) {
@@ -876,10 +941,7 @@ const checkAndIssueCertificate = async (userId: string, courseId: string) => {
 };
 
 export const generateCertificate = async (userId: string, courseId: string) => {
-  const course = (await prisma.course.findUnique({
-    where: { id: courseId },
-    select: ({ id: true, deletedAt: true, certificateEnabled: true } as any),
-  })) as any;
+  const course = (await getCourseCertificateContext(courseId)) as any;
   if (!course || course.deletedAt) throw new Error('Course not found');
   if (course.certificateEnabled === false) throw new Error('Sertifikat dinonaktifkan');
 

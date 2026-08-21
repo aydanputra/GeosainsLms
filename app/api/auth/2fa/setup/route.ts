@@ -5,6 +5,7 @@ import { enforceRateLimit, getClientIp, isSameOrigin } from '@/modules/auth/util
 import { SignJWT } from 'jose';
 import QRCode from 'qrcode';
 import { randomBytes } from 'crypto';
+import { writeRateLimitAuditLog } from '@/utils/audit';
 
 function getSecretKey() {
   const secret = process.env.JWT_SECRET;
@@ -39,6 +40,12 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
     const rl = enforceRateLimit({ key: `auth:2fa:setup:${ip}`, limit: 25, windowMs: 15 * 60 * 1000 });
     if (!rl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        action: 'AUTH_2FA_SETUP_RATE_LIMITED',
+        key: `auth:2fa:setup:${ip}`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      });
       return NextResponse.json(
         { error: 'Terlalu banyak percobaan. Coba lagi nanti.' },
         { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }

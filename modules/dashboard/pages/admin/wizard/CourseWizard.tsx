@@ -168,7 +168,7 @@ export default function CourseWizard({ initialCourseId }: { initialCourseId?: st
         let data = {};
         try {
             if (text) data = JSON.parse(text);
-        } catch (e) {
+        } catch {
             console.error("Invalid JSON response:", text);
         }
 

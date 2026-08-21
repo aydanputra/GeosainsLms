@@ -1,8 +1,7 @@
 "use client";
 
-import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { Edit2, Trash2, MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal } from 'lucide-react';
 
 interface TableColumn {
   header: React.ReactNode;
@@ -21,6 +20,9 @@ interface TableProps {
 }
 
 export default function Table({ columns, data, isLoading, onEdit, onDelete, actions }: TableProps) {
+  void onEdit;
+  void onDelete;
+
   if (isLoading) {
     return (
       <div className="space-y-4">

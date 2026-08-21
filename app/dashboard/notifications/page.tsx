@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { ArrowUpRight, Bell, Check, Loader2 } from 'lucide-react';
@@ -40,7 +40,7 @@ function parseNotificationMessage(message: string): { text: string; href: string
   return { text: kept.join('\n'), href };
 }
 
-export default function NotificationsPage() {
+function NotificationsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -54,7 +54,7 @@ export default function NotificationsPage() {
     return null;
   }, [searchParams]);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setIsLoading(true);
     try {
       const url = kind ? `/api/notifications?kind=${kind}` : '/api/notifications';
@@ -80,11 +80,11 @@ export default function NotificationsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [kind, router]);
 
   useEffect(() => {
-    load();
-  }, [kind]);
+    void load();
+  }, [load]);
 
   const markAllRead = async () => {
     if (isUpdating) return;
@@ -220,5 +220,13 @@ export default function NotificationsPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function NotificationsPage() {
+  return (
+    <Suspense fallback={<div className="p-6" />}>
+      <NotificationsPageContent />
+    </Suspense>
   );
 }

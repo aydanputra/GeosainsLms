@@ -276,6 +276,7 @@ export const createOrder = async (
           },
         };
       } else if (productType === 'RENTAL') {
+        if (Number(product.price || 0) <= 0) throw new Error('Harga sewa belum tersedia. Silakan hubungi admin.');
         const raw = (item as any).meta;
         const rental = raw && typeof raw === 'object' ? (raw as any).rental : null;
         const start = toDate(rental?.start);

@@ -3,22 +3,23 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import Script from 'next/script';
 import { Loader2, Play, FileText, Globe, Check, Award, Tag, Info, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import { normalizeImageUrl, toOptimizedImageUrl } from '@/modules/core/utils/image';
+import { useCourseDetailAccess } from './CourseDetailAccessProvider';
 
 interface CourseCTAProps {
   course: any;
-  isEnrolled: boolean;
-  isLoggedIn: boolean;
   totalLessons: number;
   totalDuration: number;
 }
 
-export default function CourseCTA({ course, isEnrolled, isLoggedIn, totalLessons, totalDuration }: CourseCTAProps) {
+export default function CourseCTA({ course, totalLessons, totalDuration }: CourseCTAProps) {
   const router = useRouter();
+  const access = useCourseDetailAccess();
   const [isLoading, setIsLoading] = useState(false);
-  const [loggedIn, setLoggedIn] = useState(Boolean(isLoggedIn));
   const [authOpen, setAuthOpen] = useState(false);
   const [authTab, setAuthTab] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
   const [authStep, setAuthStep] = useState<'FORM' | 'TOTP'>('FORM');
@@ -35,14 +36,11 @@ export default function CourseCTA({ course, isEnrolled, isLoggedIn, totalLessons
   const [googleReady, setGoogleReady] = useState(false);
   const googleButtonRef = useRef<HTMLDivElement | null>(null);
   const googleInitializedRef = useRef(false);
-  const thumbnailUrl =
-    typeof course?.thumbnailUrl === 'string' && course.thumbnailUrl.trim() && !course.thumbnailUrl.startsWith('blob:')
-      ? course.thumbnailUrl
-      : '/placeholder-course.jpg';
-
-  useEffect(() => {
-    setLoggedIn(Boolean(isLoggedIn));
-  }, [isLoggedIn]);
+  const [imgError, setImgError] = useState(false);
+  const thumbnailUrl = normalizeImageUrl(course?.thumbnailUrl, { fallback: '/placeholder-course.jpg' }) || '/placeholder-course.jpg';
+  const cardImageSrc = imgError
+    ? '/placeholder-course.jpg'
+    : toOptimizedImageUrl(thumbnailUrl, { width: 720, height: 405, fit: 'fill' }) || thumbnailUrl;
 
   useEffect(() => {
     let active = true;
@@ -133,7 +131,7 @@ export default function CourseCTA({ course, isEnrolled, isLoggedIn, totalLessons
       googleInitializedRef.current = true;
     } catch {
     }
-  }, [authOpen, authTab, authStep, googleReady, googleClientId]);
+  }, [authOpen, authTab, authStep, googleReady, googleClientId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const slugifyTag = (raw: string) =>
     raw
@@ -186,7 +184,6 @@ export default function CourseCTA({ course, isEnrolled, isLoggedIn, totalLessons
   };
 
   const completeAuthAndContinue = async () => {
-    setLoggedIn(true);
     setAuthOpen(false);
     setAuthLoading(false);
     setAuthError('');
@@ -283,7 +280,7 @@ export default function CourseCTA({ course, isEnrolled, isLoggedIn, totalLessons
   };
 
   const handleEnroll = async () => {
-    if (!loggedIn) {
+    if (!access.isLoggedIn) {
       openAuth('ENROLL');
       return;
     }
@@ -304,12 +301,19 @@ export default function CourseCTA({ course, isEnrolled, isLoggedIn, totalLessons
           onLoad={() => setGoogleReady(true)}
         />
       ) : null}
-      <div className="aspect-video bg-slate-100">
-        <img src={thumbnailUrl} alt={course.title} className="w-full h-full object-cover" />
+      <div className="aspect-video bg-slate-100 relative">
+        <Image
+          src={cardImageSrc}
+          alt={course.title}
+          fill
+          sizes="(max-width: 1024px) 100vw, 420px"
+          className="object-cover"
+          onError={() => setImgError(true)}
+        />
       </div>
 
       <div className="p-6 space-y-6">
-        {!isEnrolled && typeof course?.prePurchaseNote === 'string' && course.prePurchaseNote.trim() ? (
+        {!access.isEnrolled && typeof course?.prePurchaseNote === 'string' && course.prePurchaseNote.trim() ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
             <div className="flex items-center gap-2 text-amber-900 font-extrabold text-sm">
               <Info className="w-4 h-4" />
@@ -337,7 +341,7 @@ export default function CourseCTA({ course, isEnrolled, isLoggedIn, totalLessons
             </div>
           </div>
           
-          {!isEnrolled && (
+          {!access.isEnrolled && (
              <div className="text-emerald-600 text-sm font-medium flex items-center gap-1.5">
                <Check className="w-4 h-4" /> Akses Penuh Seumur Hidup
              </div>
@@ -345,7 +349,7 @@ export default function CourseCTA({ course, isEnrolled, isLoggedIn, totalLessons
         </div>
 
         <div className="space-y-3">
-          {isEnrolled ? (
+          {access.isEnrolled ? (
             <button 
               onClick={handleContinue}
               className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all shadow-lg shadow-emerald-200 flex items-center justify-center gap-2"
@@ -369,7 +373,7 @@ export default function CourseCTA({ course, isEnrolled, isLoggedIn, totalLessons
             </button>
           )}
 
-          {!isEnrolled && course?.subscriptionEligible ? (
+          {!access.isEnrolled && course?.subscriptionEligible ? (
             <Link
               href="/subscribe"
               className="w-full h-12 bg-white border border-indigo-200 hover:bg-indigo-50 text-indigo-700 font-extrabold rounded-xl transition-colors flex items-center justify-center"
@@ -378,7 +382,7 @@ export default function CourseCTA({ course, isEnrolled, isLoggedIn, totalLessons
             </Link>
           ) : null}
           
-          {!isEnrolled && (
+          {!access.isEnrolled && (
             <button className="w-full h-12 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold rounded-xl transition-colors">
               Tambah ke Wishlist
             </button>

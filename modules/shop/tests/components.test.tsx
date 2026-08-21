@@ -36,6 +36,30 @@ describe('Shop Components', () => {
       expect(useCartStore.getState().items).toHaveLength(1);
       expect(useCartStore.getState().items[0].quantity).toBe(1);
     });
+
+    it('should show chat admin for rental product without price', () => {
+      render(
+        <ProductCard
+          product={{ ...product, type: 'RENTAL', price: 0 }}
+          adminWhatsAppNumber="081234567890"
+        />
+      );
+      expect(screen.getByLabelText('Chat Admin')).toBeDefined();
+    });
+
+    it('should render image from imageUrls fallback', () => {
+      render(
+        <ProductCard
+          product={{
+            ...product,
+            imageUrl: null,
+            imageUrls: ['/uploads/media/test/fallback-product.png'],
+          }}
+        />
+      );
+      const image = screen.getByAltText('Test Product');
+      expect(image).toBeDefined();
+    });
   });
 
   describe('CartList', () => {
@@ -66,7 +90,7 @@ describe('Shop Components', () => {
         items: [{ id: 'line-1', productId: '1', name: 'P1', price: 1000, quantity: 2, type: 'PHYSICAL' }],
       });
       render(<CheckoutSummary />);
-      const totalElements = screen.getAllByText('IDR 2,000');
+      const totalElements = screen.getAllByText((_, node) => node?.textContent === 'IDR 2.000');
       expect(totalElements.length).toBeGreaterThan(0);
     });
   });

@@ -4,6 +4,8 @@ import { isSameOrigin } from '@/modules/auth/utils/security';
 import { createOrder } from '@/modules/shop/api/service';
 import { createPayment } from '@/modules/payment/api/service';
 import { prisma } from '@/utils/prisma';
+import { sendStudentOrderCreatedEmail } from '@/utils/email-notifications';
+import { getAppUrl } from '@/modules/core/utils/appUrl';
 
 function safeParseSettings(content: string | null | undefined) {
   if (!content) return {};
@@ -50,6 +52,16 @@ export async function POST(req: NextRequest) {
     const paymentMethod = methodRaw === 'MIDTRANS' || methodRaw === 'MANUAL' ? methodRaw : 'XENDIT';
 
     if (paymentMethod === 'MANUAL') {
+      if (typeof user.email === 'string' && user.email.trim()) {
+        await sendStudentOrderCreatedEmail({
+          to: user.email.trim(),
+          name: typeof user.name === 'string' ? user.name : null,
+          orderId: String(order.id),
+          total: Number(order.total || 0),
+          manualPayment: true,
+          actionUrl: `${getAppUrl(req.headers)}/dashboard/student/orders?orderId=${encodeURIComponent(String(order.id))}`,
+        });
+      }
       const redirectUrl = `/dashboard/student/orders?orderId=${encodeURIComponent(String(order.id))}`;
       return NextResponse.redirect(new URL(redirectUrl, req.url), 302);
     }
@@ -63,4 +75,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error?.message || 'Gagal membuat langganan' }, { status: 500 });
   }
 }
-

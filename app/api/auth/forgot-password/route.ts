@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { enforceRateLimit, generateOpaqueToken, getClientIp, isSameOrigin, sha256Hex } from '@/modules/auth/utils/security';
 import { sendEmail } from '@/utils/email';
+import { getAppUrl } from '@/modules/core/utils/appUrl';
+import { writeRateLimitAuditLog } from '@/utils/audit';
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,6 +14,12 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
     const rl = enforceRateLimit({ key: `auth:forgot:${ip}`, limit: 8, windowMs: 15 * 60 * 1000 });
     if (!rl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        action: 'AUTH_FORGOT_PASSWORD_RATE_LIMITED',
+        key: `auth:forgot:${ip}`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      });
       return NextResponse.json(
         { error: 'Terlalu banyak permintaan. Coba lagi nanti.' },
         { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
@@ -42,7 +50,7 @@ export async function POST(req: NextRequest) {
       });
     });
 
-    const resetUrl = `${req.nextUrl.origin}/reset-password?token=${encodeURIComponent(rawToken)}`;
+    const resetUrl = `${getAppUrl(req.headers)}/reset-password?token=${encodeURIComponent(rawToken)}`;
     await sendEmail({
       to: email,
       subject: 'Reset Password - Geosains LMS',

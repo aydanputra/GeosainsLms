@@ -37,3 +37,67 @@ export async function writeAuditLog(opts: {
   } catch {
   }
 }
+
+export async function writeRateLimitAuditLog(opts: {
+  req?: NextRequest;
+  actor?: Actor | null;
+  action: string;
+  key: string;
+  retryAfterSeconds: number;
+  entityType?: string;
+  entityId?: string | null;
+  metadata?: Prisma.InputJsonValue | null;
+}) {
+  const metadata =
+    opts.metadata && typeof opts.metadata === 'object' && !Array.isArray(opts.metadata)
+      ? ({
+          ...opts.metadata,
+          rateLimitKey: opts.key,
+          retryAfterSeconds: opts.retryAfterSeconds,
+        } as Prisma.InputJsonValue)
+      : ({
+          rateLimitKey: opts.key,
+          retryAfterSeconds: opts.retryAfterSeconds,
+        } as Prisma.InputJsonValue);
+
+  return writeAuditLog({
+    req: opts.req,
+    actor: opts.actor,
+    action: opts.action,
+    entityType: opts.entityType || 'RateLimit',
+    entityId: opts.entityId,
+    metadata,
+  });
+}
+
+export async function writeAccessDeniedAuditLog(opts: {
+  req?: NextRequest;
+  actor?: Actor | null;
+  action: string;
+  status: 401 | 403;
+  entityType: string;
+  entityId?: string | null;
+  reason: string;
+  metadata?: Prisma.InputJsonValue | null;
+}) {
+  const metadata =
+    opts.metadata && typeof opts.metadata === 'object' && !Array.isArray(opts.metadata)
+      ? ({
+          ...opts.metadata,
+          status: opts.status,
+          reason: opts.reason,
+        } as Prisma.InputJsonValue)
+      : ({
+          status: opts.status,
+          reason: opts.reason,
+        } as Prisma.InputJsonValue);
+
+  return writeAuditLog({
+    req: opts.req,
+    actor: opts.actor,
+    action: opts.action,
+    entityType: opts.entityType,
+    entityId: opts.entityId,
+    metadata,
+  });
+}

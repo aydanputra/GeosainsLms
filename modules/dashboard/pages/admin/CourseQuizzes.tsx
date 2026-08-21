@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Table from '../../components/Tables';
 
 interface Quiz {
@@ -16,7 +14,7 @@ interface CourseQuizzesProps {
 }
 
 export default function CourseQuizzes({ courseId, quizzes }: CourseQuizzesProps) {
-  const router = useRouter();
+  void courseId;
   
   const columns = [
     { header: 'Judul Quiz', accessorKey: 'title' },
@@ -36,7 +34,7 @@ export default function CourseQuizzes({ courseId, quizzes }: CourseQuizzesProps)
         columns={columns} 
         data={quizzes} 
         isLoading={false}
-        actions={(row: Quiz) => (
+        actions={() => (
           <div className="flex space-x-2">
             <button className="text-blue-600 hover:text-blue-800 text-sm">Lihat Soal</button>
             <button className="text-indigo-600 hover:text-indigo-800 text-sm">Edit</button>

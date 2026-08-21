@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { hashPassword } from '@/modules/auth/utils/auth';
 import { enforceRateLimit, getClientIp, isSameOrigin, sha256Hex, validatePasswordStrength } from '@/modules/auth/utils/security';
+import { writeRateLimitAuditLog } from '@/utils/audit';
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,6 +13,12 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
     const rl = enforceRateLimit({ key: `auth:reset:${ip}`, limit: 20, windowMs: 30 * 60 * 1000 });
     if (!rl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        action: 'AUTH_RESET_PASSWORD_RATE_LIMITED',
+        key: `auth:reset:${ip}`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      });
       return NextResponse.json(
         { error: 'Terlalu banyak percobaan. Coba lagi nanti.' },
         { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
@@ -46,7 +53,10 @@ export async function POST(req: NextRequest) {
 
     const hashed = await hashPassword(password);
     await prisma.$transaction(async (tx: any) => {
-      await tx.user.update({ where: { id: row.userId }, data: { password: hashed } });
+      await tx.user.update({
+        where: { id: row.userId },
+        data: { password: hashed, sessionVersion: { increment: 1 } },
+      });
       await tx.passwordResetToken.update({ where: { id: row.id }, data: { usedAt: now } });
       await tx.passwordResetToken.deleteMany({ where: { userId: row.userId, usedAt: null, id: { not: row.id } } });
     });

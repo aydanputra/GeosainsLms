@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createQuiz, submitQuiz } from '@/modules/course/api/service';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
+import { getCourseLessonSequence, getLessonQuizAccessContext } from '@/modules/course/api/performance';
 
 export async function POST(
   req: NextRequest,
@@ -15,10 +16,7 @@ export async function POST(
     const user = await verifyToken(token);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const lesson = await prisma.lesson.findUnique({
-      where: { id: lessonId },
-      include: { module: { include: { course: true } } },
-    });
+    const lesson = await getLessonQuizAccessContext(lessonId);
 
     if (!lesson) {
       return NextResponse.json({ error: 'Lesson not found' }, { status: 404 });
@@ -87,18 +85,11 @@ export async function POST(
 
         const accessStartDate = enrollment?.createdAt || activeSubscription?.startDate || null;
         if (course.dripEnabled) {
-          const modules = await prisma.module.findMany({
-            where: { courseId },
-            orderBy: { order: 'asc' },
-            select: {
-              lessons: {
-                orderBy: { order: 'asc' },
-                select: { id: true, isPreview: true },
-              },
-            },
-          });
-
-          const globalLessons = modules.flatMap((m) => m.lessons.map((l) => ({ id: l.id, isPreview: l.isPreview })));
+          const sequence = await getCourseLessonSequence(courseId);
+          const globalLessons = sequence.globalLessons.map((lessonRow) => ({
+            id: lessonRow.id,
+            isPreview: lessonRow.isPreview,
+          }));
           const idx = globalLessons.findIndex((l) => l.id === lessonId);
 
           if (idx >= 0 && !lesson.isPreview) {

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createProduct, getProducts, ProductSchema } from '@/modules/shop/api/service';
+import { createProduct, ProductSchema } from '@/modules/shop/api/service';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
 
@@ -33,9 +33,17 @@ export async function GET(_req: NextRequest) {
     const url = new URL(_req.url);
     const vendorId = (url.searchParams.get('vendorId') || '').trim();
     const vendorIdsRaw = (url.searchParams.get('vendorIds') || '').trim();
+    const q = (url.searchParams.get('q') || '').trim();
+    const categoryId = (url.searchParams.get('categoryId') || '').trim();
+    const sort = (url.searchParams.get('sort') || 'NEWEST').trim().toUpperCase();
+    const onlyInStock = url.searchParams.get('onlyInStock') === 'true';
+    const paginated = url.searchParams.get('paginated') === '1';
     const takeStr = url.searchParams.get('take');
+    const skipStr = url.searchParams.get('skip');
     const takeRaw = takeStr === null ? null : Number(takeStr);
+    const skipRaw = skipStr === null ? null : Number(skipStr);
     const take = typeof takeRaw === 'number' && Number.isFinite(takeRaw) && takeRaw > 0 ? Math.max(1, Math.min(100, takeRaw)) : undefined;
+    const skip = typeof skipRaw === 'number' && Number.isFinite(skipRaw) && skipRaw >= 0 ? Math.max(0, Math.trunc(skipRaw)) : 0;
 
     const vendorIds = vendorIdsRaw
       ? Array.from(
@@ -48,17 +56,80 @@ export async function GET(_req: NextRequest) {
         )
       : [];
 
-    const where =
-      vendorId || vendorIds.length > 0
-        ? {
-            vendorId: vendorId ? vendorId : { in: vendorIds },
-          }
-        : undefined;
+    const where: any = {};
+
+    if (vendorId || vendorIds.length > 0) {
+      where.vendorId = vendorId ? vendorId : { in: vendorIds };
+    }
+    if (q) {
+      where.name = { contains: q, mode: 'insensitive' };
+    }
+    if (categoryId) {
+      where.OR = [{ categoryId }, { categoryIds: { has: categoryId } }];
+    }
+    if (onlyInStock) {
+      where.stock = { gt: 0 };
+    }
+
+    const orderBy =
+      sort === 'PRICE_ASC'
+        ? { price: 'asc' as const }
+        : sort === 'PRICE_DESC'
+          ? { price: 'desc' as const }
+          : sort === 'NAME_ASC'
+            ? { name: 'asc' as const }
+            : { createdAt: 'desc' as const };
+
+    if (paginated) {
+      const effectiveTake = take ?? 15;
+      const [products, total] = await Promise.all([
+        prisma.product.findMany({
+          where,
+          include: {
+            categoryRef: true,
+            vendor: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+                contactPhone: true,
+                status: true,
+              },
+            },
+          },
+          orderBy,
+          skip,
+          take: effectiveTake,
+        }),
+        prisma.product.count({ where }),
+      ]);
+
+      const nextOffset = skip + products.length;
+      return NextResponse.json({
+        items: products,
+        total,
+        take: effectiveTake,
+        skip,
+        hasMore: nextOffset < total,
+        nextOffset,
+      });
+    }
 
     const products = await prisma.product.findMany({
       where,
-      include: { categoryRef: true, vendor: true },
-      orderBy: { createdAt: 'desc' },
+      include: {
+        categoryRef: true,
+        vendor: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            contactPhone: true,
+            status: true,
+          },
+        },
+      },
+      orderBy,
       ...(take ? { take } : {}),
     });
     return NextResponse.json(products);

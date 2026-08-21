@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { createToken, hashPassword, verifyPassword, verifyToken } from '@/modules/auth/utils/auth';
 import { isSameOrigin, validatePasswordStrength } from '@/modules/auth/utils/security';
+import { clearPasswordSetupCookie, readPasswordSetupCookie } from '@/modules/auth/utils/verificationAutoLogin';
 
 function normalizeMediaUrl(input: string) {
   const v = String(input || '').trim();
@@ -243,6 +244,7 @@ export async function PUT(req: NextRequest) {
         mentorAttachments: true,
         isSuperAdmin: true,
         role: true,
+        sessionVersion: true,
         password: true,
         createdAt: true,
       } as any,
@@ -287,7 +289,7 @@ export async function PUT(req: NextRequest) {
       };
     }
 
-    if (existing.role === 'MENTOR') {
+    if (existing.role === 'MENTOR' || existing.role === 'ADMIN') {
       if (typeof mentorJobTitle === 'string') data.mentorJobTitle = mentorJobTitle ? mentorJobTitle : null;
       if (typeof mentorBio === 'string') data.mentorBio = mentorBio.trim() ? mentorBio : null;
 
@@ -322,8 +324,14 @@ export async function PUT(req: NextRequest) {
     const hasExistingEmail = typeof existing.email === 'string' && existing.email.trim().length > 0;
     const wantsEmailChange = typeof email === 'string' && email && email !== existing.email;
     const wantsPasswordChange = typeof newPassword === 'string' && newPassword.length > 0;
+    const passwordSetup = await readPasswordSetupCookie(req);
+    const canSetInitialPasswordWithoutCurrent =
+      wantsPasswordChange &&
+      !wantsEmailChange &&
+      passwordSetup?.uid === String(existing.id) &&
+      passwordSetup?.source === 'google';
 
-    if ((wantsEmailChange && hasExistingEmail) || wantsPasswordChange) {
+    if ((wantsEmailChange && hasExistingEmail) || (wantsPasswordChange && !canSetInitialPasswordWithoutCurrent)) {
       if (!currentPassword) return NextResponse.json({ error: 'Password saat ini wajib diisi' }, { status: 400 });
       const ok = await verifyPassword(currentPassword, existing.password);
       if (!ok) return NextResponse.json({ error: 'Password saat ini salah' }, { status: 400 });
@@ -341,6 +349,7 @@ export async function PUT(req: NextRequest) {
       const pwCheck = validatePasswordStrength(newPassword, { minLength: isSuperAdmin ? 12 : 8, strict: isSuperAdmin });
       if (!pwCheck.ok) return NextResponse.json({ error: pwCheck.error }, { status: 400 });
       data.password = await hashPassword(newPassword);
+      data.sessionVersion = { increment: 1 };
     }
 
     if (Object.keys(data).length === 0) {
@@ -401,6 +410,7 @@ export async function PUT(req: NextRequest) {
         mentorAttachments: true,
         isSuperAdmin: true,
         totpEnabled: true,
+        sessionVersion: true,
         role: true,
         createdAt: true,
       } as any,
@@ -412,6 +422,7 @@ export async function PUT(req: NextRequest) {
       role: updated.role,
       isSuperAdmin: Boolean((updated as any).isSuperAdmin),
       totpEnabled: Boolean((updated as any).totpEnabled),
+      sessionVersion: Number((updated as any).sessionVersion || 0),
     });
     const res = NextResponse.json({ user: updated }, { status: 200 });
     res.cookies.set('token', newToken, {
@@ -421,6 +432,9 @@ export async function PUT(req: NextRequest) {
       maxAge: 60 * 60 * 24,
       path: '/',
     });
+    if (canSetInitialPasswordWithoutCurrent) {
+      clearPasswordSetupCookie(res);
+    }
     return res;
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Gagal memperbarui profil' }, { status: 500 });

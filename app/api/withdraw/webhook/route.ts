@@ -41,8 +41,15 @@ export async function POST(req: NextRequest) {
     const disbursementId = typeof (body as any)?.id === 'string' ? String((body as any).id).trim() : '';
     const externalId = typeof (body as any)?.external_id === 'string' ? String((body as any).external_id).trim() : '';
     const statusRaw = typeof (body as any)?.status === 'string' ? String((body as any).status).trim() : '';
+    const amountRaw =
+      typeof (body as any)?.amount === 'number'
+        ? (body as any).amount
+        : typeof (body as any)?.amount === 'string'
+          ? Number((body as any).amount)
+          : NaN;
 
     if (!disbursementId && !externalId) return NextResponse.json({ error: 'Missing disbursement id' }, { status: 400 });
+    if (!Number.isFinite(amountRaw)) return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
 
     const linked = await prisma.mentorWithdrawal.findFirst({
       where: disbursementId
@@ -50,9 +57,21 @@ export async function POST(req: NextRequest) {
         : externalId
           ? { externalId }
           : undefined,
-      select: { id: true, status: true, disbursementId: true, externalId: true },
+      select: { id: true, status: true, provider: true, amount: true, disbursementId: true, externalId: true },
     });
     if (!linked) return NextResponse.json({ error: 'MentorWithdrawal not found' }, { status: 404 });
+    if (String(linked.provider || '').toUpperCase() !== 'XENDIT') {
+      return NextResponse.json({ error: 'Provider mismatch' }, { status: 400 });
+    }
+    if (disbursementId && linked.disbursementId && String(linked.disbursementId) !== disbursementId) {
+      return NextResponse.json({ error: 'Disbursement mismatch' }, { status: 400 });
+    }
+    if (externalId && linked.externalId && String(linked.externalId) !== externalId) {
+      return NextResponse.json({ error: 'External id mismatch' }, { status: 400 });
+    }
+    if (Math.abs(Number(linked.amount || 0) - Number(amountRaw)) > 0.01) {
+      return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 });
+    }
 
     const normalized = normalizeXenditDisbursementStatus(statusRaw);
     if (!normalized) return NextResponse.json({ ok: true }, { status: 200 });
@@ -86,7 +105,7 @@ export async function POST(req: NextRequest) {
       action: 'MENTOR_WITHDRAW_WEBHOOK',
       entityType: 'MentorWithdrawal',
       entityId: linked.id,
-      metadata: { disbursementId: disbursementId || null, externalId: externalId || null, status: statusRaw || null, normalized },
+      metadata: { disbursementId: disbursementId || null, externalId: externalId || null, amount: Number(amountRaw), status: statusRaw || null, normalized },
     });
 
     return NextResponse.json({ ok: true }, { status: 200 });

@@ -4,7 +4,9 @@ import { verifyToken } from '@/modules/auth/utils/auth';
 import { createOrder } from '@/modules/shop/api/service';
 import { CourseStatus } from '@prisma/client';
 import { isSameOrigin } from '@/modules/auth/utils/security';
-import { createPayment } from '@/modules/payment/api/service';
+import { createPayment, finalizeOrderPaid } from '@/modules/payment/api/service';
+import { sendStudentOrderCreatedEmail } from '@/utils/email-notifications';
+import { getAppUrl } from '@/modules/core/utils/appUrl';
 
 function safeParse(content: string | null | undefined) {
   if (!content) return {};
@@ -63,10 +65,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     );
 
     if (order.total <= 0) {
-      await prisma.enrollment.createMany({
-        data: courses.map((c) => ({ userId: user.id, courseId: c.id })),
-        skipDuplicates: true,
-      });
+      await finalizeOrderPaid(String(order.id));
       return NextResponse.json(
         {
           message: 'Berhasil mendaftar bundle',
@@ -76,6 +75,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         { status: 200 }
       );
     }
+
+    const buyer = await prisma.user.findUnique({
+      where: { id: String(user.id) },
+      select: { name: true, email: true },
+    });
 
     const settingsPage = await prisma.page.findUnique({ where: { slug: '__site_settings__' }, select: { content: true } });
     const settings = safeParse(settingsPage?.content);
@@ -97,6 +101,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           { status: 200 }
         );
       }
+    }
+
+    if (buyer?.email) {
+      await sendStudentOrderCreatedEmail({
+        to: buyer.email,
+        name: buyer.name || null,
+        orderId: String(order.id),
+        total: Number(order.total || 0),
+        manualPayment: true,
+        actionUrl: `${getAppUrl(req.headers)}/dashboard/student/orders?orderId=${encodeURIComponent(String(order.id))}`,
+      });
     }
 
     return NextResponse.json(

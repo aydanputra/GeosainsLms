@@ -3,6 +3,8 @@ import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { isSameOrigin } from '@/modules/auth/utils/security';
 import { writeAuditLog } from '@/utils/audit';
+import { sendStudentOrderShippedEmail } from '@/utils/email-notifications';
+import { getAppUrl } from '@/modules/core/utils/appUrl';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ orderId: string }> }) {
   try {
@@ -27,7 +29,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ord
 
     const order = await prisma.order.findUnique({
       where: { id },
-      include: { items: { include: { product: { select: { type: true } } } } },
+      include: {
+        items: { include: { product: { select: { type: true } } } },
+        user: { select: { name: true, email: true } },
+      },
     });
     if (!order) return NextResponse.json({ error: 'Order tidak ditemukan' }, { status: 404 });
     if (order.status !== 'PAID') return NextResponse.json({ error: 'Order belum LUNAS' }, { status: 400 });
@@ -53,6 +58,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ord
         read: false,
       },
     });
+
+    if (order.user?.email) {
+      await sendStudentOrderShippedEmail({
+        to: order.user.email,
+        name: order.user.name || null,
+        orderId: id,
+        courier,
+        trackingNumber,
+        actionUrl: `${getAppUrl(req.headers)}/dashboard/student/orders?orderId=${encodeURIComponent(id)}`,
+      });
+    }
 
     await writeAuditLog({
       req,

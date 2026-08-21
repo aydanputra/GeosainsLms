@@ -2,16 +2,46 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { Role } from '@prisma/client';
 import { hashPassword, verifyToken } from '@/modules/auth/utils/auth';
-import { writeAuditLog } from '@/utils/audit';
+import { writeAccessDeniedAuditLog, writeAuditLog } from '@/utils/audit';
 import { isSameOrigin, validatePasswordStrength } from '@/modules/auth/utils/security';
+
+async function auditUsersDenied(
+  request: NextRequest,
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  status: 401 | 403,
+  reason: string,
+  actor?: { id: string; role: Role } | null,
+  entityId?: string | null
+) {
+  await writeAccessDeniedAuditLog({
+    req: request,
+    actor: actor || null,
+    action: 'USER_ADMIN_ROUTE_DENIED',
+    status,
+    entityType: 'User',
+    entityId: entityId || null,
+    reason,
+    metadata: { method },
+  });
+}
 
 export async function GET(request: NextRequest) {
   try {
     const token = request.cookies.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!token) {
+      await auditUsersDenied(request, 'GET', 401, 'missing_token');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const user = await verifyToken(token);
     if (!user || user.role !== 'ADMIN') {
+      await auditUsersDenied(
+        request,
+        'GET',
+        403,
+        user ? 'forbidden' : 'invalid_token',
+        user ? { id: String(user.id), role: user.role } : null
+      );
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -32,20 +62,33 @@ export async function GET(request: NextRequest) {
     });
 
     return NextResponse.json(users);
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    if (!isSameOrigin(request)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!isSameOrigin(request)) {
+      await auditUsersDenied(request, 'POST', 403, 'cross_origin');
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const token = request.cookies.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!token) {
+      await auditUsersDenied(request, 'POST', 401, 'missing_token');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const user = await verifyToken(token);
     if (!user || user.role !== 'ADMIN') {
+      await auditUsersDenied(
+        request,
+        'POST',
+        403,
+        user ? 'forbidden' : 'invalid_token',
+        user ? { id: String(user.id), role: user.role } : null
+      );
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     const actorId = user?.id ? String(user.id) : '';
@@ -72,6 +115,7 @@ export async function POST(request: NextRequest) {
     const role = (allowedRoles.includes(roleInput as Role) ? (roleInput as Role) : 'STUDENT') as Role;
     const isSuperAdmin = Boolean(body.isSuperAdmin) && role === 'ADMIN';
     if (isSuperAdmin && !actorIsSuperAdmin) {
+      await auditUsersDenied(request, 'POST', 403, 'superadmin_required', { id: String(user.id), role: user.role });
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -110,13 +154,26 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    if (!isSameOrigin(request)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!isSameOrigin(request)) {
+      await auditUsersDenied(request, 'PUT', 403, 'cross_origin');
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const token = request.cookies.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!token) {
+      await auditUsersDenied(request, 'PUT', 401, 'missing_token');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const actor = await verifyToken(token);
     if (!actor || actor.role !== 'ADMIN') {
+      await auditUsersDenied(
+        request,
+        'PUT',
+        403,
+        actor ? 'forbidden' : 'invalid_token',
+        actor ? { id: String(actor.id), role: actor.role } : null
+      );
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     const actorId = actor?.id ? String(actor.id) : '';
@@ -157,8 +214,14 @@ export async function PUT(request: NextRequest) {
     }
 
     if (!actorIsSuperAdmin) {
-      if (nextIsSuperAdmin !== null) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      if (existing.isSuperAdmin && nextRole && nextRole !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      if (nextIsSuperAdmin !== null) {
+        await auditUsersDenied(request, 'PUT', 403, 'superadmin_required', { id: String(actor.id), role: actor.role }, id);
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      if (existing.isSuperAdmin && nextRole && nextRole !== 'ADMIN') {
+        await auditUsersDenied(request, 'PUT', 403, 'superadmin_required', { id: String(actor.id), role: actor.role }, id);
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
     }
 
     if (existing.role === 'ADMIN' && nextRole && nextRole !== 'ADMIN') {
@@ -212,13 +275,26 @@ export async function PUT(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    if (!isSameOrigin(request)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!isSameOrigin(request)) {
+      await auditUsersDenied(request, 'PATCH', 403, 'cross_origin');
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const token = request.cookies.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!token) {
+      await auditUsersDenied(request, 'PATCH', 401, 'missing_token');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const actor = await verifyToken(token);
     if (!actor || actor.role !== 'ADMIN') {
+      await auditUsersDenied(
+        request,
+        'PATCH',
+        403,
+        actor ? 'forbidden' : 'invalid_token',
+        actor ? { id: String(actor.id), role: actor.role } : null
+      );
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     const actorId = actor?.id ? String(actor.id) : '';
@@ -236,7 +312,10 @@ export async function PATCH(request: NextRequest) {
     if (!id) return NextResponse.json({ error: 'id wajib diisi' }, { status: 400 });
     const existing = await prisma.user.findUnique({ where: { id }, select: { id: true, email: true, role: true, isSuperAdmin: true } });
     if (!existing) return NextResponse.json({ error: 'User tidak ditemukan' }, { status: 404 });
-    if (Boolean(existing.isSuperAdmin) && !actorIsSuperAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (Boolean(existing.isSuperAdmin) && !actorIsSuperAdmin) {
+      await auditUsersDenied(request, 'PATCH', 403, 'superadmin_required', { id: String(actor.id), role: actor.role }, id);
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const targetIsSuperAdmin = String(existing.role || '') === 'ADMIN' && Boolean((existing as any).isSuperAdmin);
     const pwCheck = validatePasswordStrength(password, { minLength: targetIsSuperAdmin ? 12 : 8, strict: targetIsSuperAdmin });
@@ -244,7 +323,10 @@ export async function PATCH(request: NextRequest) {
 
     const hashed = await hashPassword(password);
     await prisma.$transaction(async (tx: any) => {
-      await tx.user.update({ where: { id }, data: { password: hashed } });
+      await tx.user.update({
+        where: { id },
+        data: { password: hashed, sessionVersion: { increment: 1 } },
+      });
       await tx.passwordResetToken.deleteMany({ where: { userId: id } });
     });
 
@@ -265,13 +347,26 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    if (!isSameOrigin(request)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (!isSameOrigin(request)) {
+      await auditUsersDenied(request, 'DELETE', 403, 'cross_origin');
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const token = request.cookies.get('token')?.value;
-    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!token) {
+      await auditUsersDenied(request, 'DELETE', 401, 'missing_token');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     const actor = await verifyToken(token);
     if (!actor || actor.role !== 'ADMIN') {
+      await auditUsersDenied(
+        request,
+        'DELETE',
+        403,
+        actor ? 'forbidden' : 'invalid_token',
+        actor ? { id: String(actor.id), role: actor.role } : null
+      );
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
     const actorId = actor?.id ? String(actor.id) : '';

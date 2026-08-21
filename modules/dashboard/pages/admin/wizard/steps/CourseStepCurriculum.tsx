@@ -17,7 +17,7 @@ interface CourseStepCurriculumProps {
 
 export default function CourseStepCurriculum({ courseId, onNext, onBack }: CourseStepCurriculumProps) {
   const [modules, setModules] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [, setIsLoading] = useState(true);
   const [newModuleTitle, setNewModuleTitle] = useState('');
   const [newModuleDescription, setNewModuleDescription] = useState('');
   const [isAddingModule, setIsAddingModule] = useState(false);
@@ -158,7 +158,7 @@ export default function CourseStepCurriculum({ courseId, onNext, onBack }: Cours
         const destLessons = Array.from(destModule.lessons || []);
         
         const [movedLesson] = sourceLessons.splice(source.index, 1);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         const updatedLesson: any = { ...(movedLesson as object), moduleId: destModule.id };
         
         destLessons.splice(destination.index, 0, updatedLesson);
@@ -211,7 +211,7 @@ export default function CourseStepCurriculum({ courseId, onNext, onBack }: Cours
         setExpandedModules(prev => [...prev, newModule.id]);
         toast.success('Modul berhasil ditambahkan');
       }
-    } catch (error) {
+    } catch {
       toast.error('Gagal menambah modul');
     }
   };
@@ -259,7 +259,6 @@ export default function CourseStepCurriculum({ courseId, onNext, onBack }: Cours
         ? `/api/courses/${courseId}/lessons/${modalState.data.id}`
         : `/api/courses/${courseId}/lessons`;
       
-      const method = isEdit ? 'PUT' : 'POST';
       const payload = {
         ...data,
         moduleId: modalState.moduleId,

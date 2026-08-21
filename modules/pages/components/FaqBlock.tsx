@@ -17,7 +17,8 @@ type FaqContent = {
 };
 
 export default function FaqBlock({ content }: { content: FaqContent }) {
-  const heading = typeof content?.heading === 'string' ? content.heading : 'Frequently Asked Questions';
+  const rawHeading = typeof content?.heading === 'string' ? content.heading.trim() : '';
+  const heading = !rawHeading || rawHeading === 'Frequently Asked Questions' ? 'Pertanyaan yang Sering Diajukan' : rawHeading;
   const subheading = typeof content?.subheading === 'string' ? content.subheading : '';
   const items = useMemo(() => (Array.isArray(content?.items) ? content.items : []).filter((it) => it?.question || it?.answer), [content]);
   const ctaText = typeof content?.cta?.text === 'string' ? content.cta.text : '';
@@ -76,4 +77,3 @@ export default function FaqBlock({ content }: { content: FaqContent }) {
     </section>
   );
 }
-

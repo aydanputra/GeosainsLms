@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
+import { syncCourseAggregates } from '@/utils/courseAggregates';
 
 export async function PATCH(
   req: NextRequest,
@@ -82,15 +83,16 @@ export async function DELETE(
         }
     }
 
-    const { moduleId: verifiedModuleId } = await params;
+    await prisma.$transaction(async (tx: any) => {
+      await tx.lesson.deleteMany({
+        where: { moduleId },
+      });
 
-    // Delete lessons associated with the module first (though cascade delete might handle this if configured)
-    await prisma.lesson.deleteMany({
-      where: { moduleId: verifiedModuleId },
-    });
+      await tx.module.delete({
+        where: { id: moduleId },
+      });
 
-    await prisma.module.delete({
-      where: { id: verifiedModuleId },
+      await syncCourseAggregates(tx, courseId);
     });
 
     return NextResponse.json({ success: true });

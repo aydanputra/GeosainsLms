@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
@@ -18,6 +19,29 @@ function slugify(input: string) {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)+/g, '');
 }
+
+const vendorProfileSelect = {
+  id: true,
+  ownerId: true,
+  name: true,
+  slug: true,
+  description: true,
+  logoUrl: true,
+  coverUrl: true,
+  status: true,
+  contactEmail: true,
+  contactPhone: true,
+  adminWhatsapp: true,
+  addressLine1: true,
+  addressLine2: true,
+  city: true,
+  province: true,
+  postalCode: true,
+  country: true,
+  idNumber: true,
+  idDocumentUrl: true,
+  verificationNote: true,
+} as const;
 
 export default async function Page({
   searchParams,
@@ -41,35 +65,14 @@ export default async function Page({
   const userId = payload?.id ? String(payload.id) : null;
   if (!userId) redirect('/login?redirect=/dashboard/vendor/profile');
 
-  const vendors = await prisma.shopVendor.findMany({
+  const prismaAny = prisma as any;
+  const vendor = await prismaAny.shopVendor.findFirst({
     where: { OR: [{ ownerId: userId }, { members: { some: { userId } } }] },
     orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      ownerId: true,
-      name: true,
-      slug: true,
-      description: true,
-      logoUrl: true,
-      coverUrl: true,
-      status: true,
-      contactEmail: true,
-      contactPhone: true,
-      addressLine1: true,
-      addressLine2: true,
-      city: true,
-      province: true,
-      postalCode: true,
-      country: true,
-      idNumber: true,
-      idDocumentUrl: true,
-      verificationNote: true,
-    },
+    select: vendorProfileSelect,
   });
 
-  if (vendors.length === 0) redirect('/dashboard/vendor');
-
-  const vendor = vendors[0];
+  if (!vendor) redirect('/dashboard/vendor');
   const canEdit = String(vendor.ownerId || '') === userId;
 
   const missing: string[] = [];
@@ -95,17 +98,27 @@ export default async function Page({
     const vendorId = String(formData.get('vendorId') || '');
     if (!vendorId) return;
 
-    const membership = await prisma.shopVendor.findFirst({
-      where: {
-        id: vendorId,
-        OR: [{ ownerId: userId }, { members: { some: { userId } } }],
-      },
+    const isAdmin = payload?.role === 'ADMIN';
+    const accessVendor = await prisma.shopVendor.findUnique({
+      where: { id: vendorId },
       select: { id: true, ownerId: true },
     });
+    if (!accessVendor) return;
 
-    const isAdmin = payload?.role === 'ADMIN';
-    if (!membership && !isAdmin) return;
-    const isOwner = Boolean(membership?.ownerId && String(membership.ownerId) === userId);
+    const isOwner = Boolean(accessVendor.ownerId && String(accessVendor.ownerId) === userId);
+    const isMember =
+      !isAdmin && !isOwner
+        ? Boolean(
+            await prisma.shopVendor.findFirst({
+              where: {
+                id: vendorId,
+                members: { some: { userId } },
+              },
+              select: { id: true },
+            })
+          )
+        : false;
+    if (!isAdmin && !isOwner && !isMember) return;
 
     const data: any = {};
     const name = normalizeString(formData.get('name'));
@@ -115,6 +128,7 @@ export default async function Page({
     const coverUrl = normalizeString(formData.get('coverUrl'));
     const contactEmail = normalizeString(formData.get('contactEmail'));
     const contactPhone = normalizeString(formData.get('contactPhone'));
+    const adminWhatsapp = normalizeString(formData.get('adminWhatsapp'));
     const addressLine1 = normalizeString(formData.get('addressLine1'));
     const addressLine2 = normalizeString(formData.get('addressLine2'));
     const city = normalizeString(formData.get('city'));
@@ -133,6 +147,7 @@ export default async function Page({
     if (typeof formData.get('coverUrl') === 'string') data.coverUrl = coverUrl || null;
     if (typeof formData.get('contactEmail') === 'string') data.contactEmail = contactEmail || null;
     if (typeof formData.get('contactPhone') === 'string') data.contactPhone = contactPhone || null;
+    if (typeof formData.get('adminWhatsapp') === 'string') data.adminWhatsapp = adminWhatsapp || null;
     if (typeof formData.get('addressLine1') === 'string') data.addressLine1 = addressLine1 || null;
     if (typeof formData.get('addressLine2') === 'string') data.addressLine2 = addressLine2 || null;
     if (typeof formData.get('city') === 'string') data.city = city || null;
@@ -143,7 +158,8 @@ export default async function Page({
     if (typeof formData.get('idDocumentUrl') === 'string') data.idDocumentUrl = idDocumentUrl || null;
 
     if (Object.keys(data).length === 0) return;
-    await prisma.shopVendor.update({ where: { id: vendorId }, data });
+    await prismaAny.shopVendor.update({ where: { id: vendorId }, data });
+    revalidatePath('/dashboard/vendor/profile');
   };
 
   const statusLabel =
@@ -340,14 +356,21 @@ export default async function Page({
                 <div className={cardClass}>
                   <div className="text-sm font-extrabold text-slate-900">Kontak</div>
                   <div className="text-xs text-slate-500 mt-1">Informasi ini tampil untuk pembeli yang membutuhkan bantuan.</div>
-                  <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="mt-5 space-y-4">
                     <div className="space-y-1.5">
                       <label className="text-xs font-bold text-slate-600">Email Kontak</label>
                       <input name="contactEmail" defaultValue={vendor.contactEmail || ''} className={inputClass} placeholder="toko@email.com" />
                     </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-600">Telepon/WhatsApp</label>
-                      <input name="contactPhone" defaultValue={vendor.contactPhone || ''} className={inputClass} placeholder="08xxxx" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-600">Telepon/WhatsApp</label>
+                        <input name="contactPhone" defaultValue={vendor.contactPhone || ''} className={inputClass} placeholder="08xxxx" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-slate-600">Nomor Admin WhatsApp</label>
+                        <input name="adminWhatsapp" defaultValue={(vendor as any).adminWhatsapp || ''} className={inputClass} placeholder="08xxxx" />
+                        <div className="text-[11px] text-slate-500">Dipakai untuk tombol Chat Admin pada produk sewa tanpa harga.</div>
+                      </div>
                     </div>
                   </div>
                 </div>

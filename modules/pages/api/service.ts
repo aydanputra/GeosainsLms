@@ -1,5 +1,6 @@
 import { prisma } from '@/utils/prisma';
 import { z } from 'zod';
+import { sanitizePageBlocks } from '@/modules/core/utils/sanitizeHtml';
 
 function slugify(text: string): string {
   return text
@@ -41,13 +42,14 @@ export const createPage = async (data: z.infer<typeof PageSchema>) => {
 
   // Separate blocks from page data
   const { blocks, ...pageData } = data;
+  const sanitizedBlocks = sanitizePageBlocks(blocks);
 
   return prisma.page.create({
     data: {
       ...pageData,
       slug: uniqueSlug,
       blocks: {
-        create: blocks,
+        create: sanitizedBlocks,
       },
     },
     include: { blocks: { orderBy: { order: 'asc' } } },
@@ -58,10 +60,12 @@ export const updatePage = async (id: string, data: Partial<z.infer<typeof PageSc
   // If blocks are provided, we replace all existing blocks (simple strategy)
   // A better strategy would be to diff and update/create/delete
   
-  if (data.blocks) {
+  const sanitizedBlocks = data.blocks ? sanitizePageBlocks(data.blocks) : undefined;
+
+  if (sanitizedBlocks) {
     await prisma.pageBlock.deleteMany({ where: { pageId: id } });
     await prisma.pageBlock.createMany({
-      data: data.blocks.map(b => ({ ...b, pageId: id })),
+      data: sanitizedBlocks.map((b) => ({ ...b, pageId: id })),
     });
   }
 
@@ -84,8 +88,16 @@ export const getPageBySlug = async (slug: string) => {
   });
 };
 
-export const getPages = async () => {
+export const getPublishedPageBySlug = async (slug: string) => {
+  return prisma.page.findFirst({
+    where: { slug, published: true },
+    include: { blocks: { orderBy: { order: 'asc' } } },
+  });
+};
+
+export const getPages = async (publishedOnly = false) => {
   return prisma.page.findMany({
+    where: publishedOnly ? { published: true } : undefined,
     orderBy: { updatedAt: 'desc' },
   });
 };

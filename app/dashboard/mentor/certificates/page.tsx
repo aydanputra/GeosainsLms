@@ -1,9 +1,11 @@
+/* eslint-disable @next/next/no-img-element */
 import { cookies } from 'next/headers';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
-import { Award, Loader2, PenLine, Trash2 } from 'lucide-react';
+import { Award, PenLine, Trash2 } from 'lucide-react';
+import MentorCertificatesTabs from './MentorCertificatesTabs';
 
 const COURSE_CERTIFICATE_PREFIX = '__course_certificate__';
 
@@ -69,7 +71,7 @@ const renderTemplateThumb = (template: any) => {
   };
   return (
     <div className="relative w-full h-full bg-white overflow-hidden" style={{ aspectRatio: `${dims.widthMm} / ${dims.heightMm}` }}>
-      {bg ? <img src={bg} className="absolute inset-0 w-full h-full object-cover" /> : null}
+      {bg ? <img alt="" src={bg} className="absolute inset-0 w-full h-full object-cover" /> : null}
       <div className="absolute inset-0">
         {sorted.map((el: any, idx: number) => {
           const x = Number(el?.x || 0);
@@ -85,7 +87,7 @@ const renderTemplateThumb = (template: any) => {
             const src = typeof el?.src === 'string' ? el.src : '';
             return (
               <div key={String(el?.id || idx)} className="absolute" style={{ left, top, width, height, opacity }}>
-                {src ? <img src={src} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-100" />}
+                {src ? <img alt="" src={src} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-100" />}
               </div>
             );
           }
@@ -255,26 +257,12 @@ export default async function MentorCertificatesPage({
             <Award className="w-10 h-10" />
           </div>
         </div>
-        <div className="px-6 border-t border-slate-100">
-          <div className="flex items-center gap-6 text-sm font-extrabold">
-            <Link
-              href="/dashboard/mentor/certificates?tab=all"
-              className={tab === 'ALL' ? 'py-4 border-b-2 border-indigo-600 text-indigo-700' : 'py-4 text-slate-700 hover:text-slate-900'}
-            >
-              Semua Sertifikat
-            </Link>
-            <Link
-              href="/dashboard/mentor/certificates?tab=policy"
-              className={tab === 'POLICY' ? 'py-4 border-b-2 border-indigo-600 text-indigo-700' : 'py-4 text-slate-700 hover:text-slate-900'}
-            >
-              Kebijakan Sertifikat
-            </Link>
-          </div>
-        </div>
       </div>
 
-      {tab === 'ALL' ? (
-        <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+      <MentorCertificatesTabs
+        initialTab={tab}
+        allContent={
+          <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100">
             <div className="text-sm font-extrabold text-slate-900">Sertifikat Dipublikasikan (Per Kursus)</div>
             <div className="text-xs text-slate-500 mt-0.5">Desain yang sudah disimpan ke kursus tertentu</div>
@@ -348,9 +336,10 @@ export default async function MentorCertificatesPage({
                 .filter(Boolean)
             )}
           </div>
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-slate-200 bg-white p-6">
+          </div>
+        }
+        policyContent={
+          <div className="rounded-2xl border border-slate-200 bg-white p-6">
           <div className="text-sm font-extrabold text-slate-900">Kebijakan Sertifikat</div>
           <div className="mt-2 text-sm text-slate-600">
             Pengaturan kebijakan sertifikat bersifat global dan mengikuti konfigurasi Admin.
@@ -358,8 +347,9 @@ export default async function MentorCertificatesPage({
           <div className="mt-4 text-sm text-slate-700">
             Jika Anda perlu mengubah kebijakan (misalnya aturan unduh PDF, auto issue, QR/serial), silakan minta Admin untuk mengubahnya di menu Sertifikat.
           </div>
-        </div>
-      )}
+          </div>
+        }
+      />
     </div>
   );
 }

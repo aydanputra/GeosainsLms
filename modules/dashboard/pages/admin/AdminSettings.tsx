@@ -15,6 +15,7 @@ export default function AdminSettings({ isSuperAdmin }: { isSuperAdmin: boolean 
   const [siteName, setSiteName] = useState('GeoSains LMS');
   const [siteDescription, setSiteDescription] = useState('Platform pembelajaran geosains terdepan.');
   const [contactEmail, setContactEmail] = useState('admin@geosains.id');
+  const [contactPhone, setContactPhone] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
   const [faviconUrl, setFaviconUrl] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'XENDIT' | 'MIDTRANS' | 'MANUAL'>('XENDIT');
@@ -108,6 +109,7 @@ export default function AdminSettings({ isSuperAdmin }: { isSuperAdmin: boolean 
         if (typeof data?.siteName === 'string' && data.siteName.trim()) setSiteName(data.siteName.trim());
         if (typeof data?.siteDescription === 'string' && data.siteDescription.trim()) setSiteDescription(data.siteDescription.trim());
         if (typeof data?.contactEmail === 'string' && data.contactEmail.trim()) setContactEmail(data.contactEmail.trim());
+        if (typeof data?.contactPhone === 'string') setContactPhone(data.contactPhone);
         if (typeof data?.logoUrl === 'string') setLogoUrl(data.logoUrl);
         if (typeof data?.faviconUrl === 'string') setFaviconUrl(data.faviconUrl);
         if (data?.paymentMethod === 'XENDIT' || data?.paymentMethod === 'MIDTRANS' || data?.paymentMethod === 'MANUAL') {
@@ -148,7 +150,7 @@ export default function AdminSettings({ isSuperAdmin }: { isSuperAdmin: boolean 
       const res = await fetch('/api/site-settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ siteName, siteDescription, contactEmail, logoUrl, faviconUrl }),
+        body: JSON.stringify({ siteName, siteDescription, contactEmail, contactPhone, logoUrl, faviconUrl }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Gagal menyimpan');
@@ -290,6 +292,17 @@ export default function AdminSettings({ isSuperAdmin }: { isSuperAdmin: boolean 
                   className={inputControlClass}
                   value={contactEmail}
                   onChange={(e) => setContactEmail(e.target.value)}
+                  disabled={isLoading}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-900 mb-1.5">Telepon / WhatsApp</label>
+                <input
+                  type="text"
+                  className={inputControlClass}
+                  value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)}
+                  placeholder="Contoh: 081234567890"
                   disabled={isLoading}
                 />
               </div>

@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import type { Metadata } from "next";
 import { Geist_Mono, Poppins } from "next/font/google";
 import "./globals.css";
@@ -7,8 +8,38 @@ import SiteHeader from '@/modules/layout/components/SiteHeader';
 import SiteFooter from '@/modules/layout/components/SiteFooter';
 import { prisma } from '@/utils/prisma';
 import PublicSupportChat from '@/modules/layout/components/PublicSupportChat';
+import { getAppUrl } from '@/modules/core/utils/appUrl';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 300;
+
+type LayoutSiteSettings = {
+  siteName?: string;
+  siteDescription?: string;
+  logoUrl?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+};
+
+type LayoutCategory = {
+  id: string;
+  name: string;
+  slug: string;
+};
+
+function safeParse(content: string | null | undefined) {
+  if (!content) return {};
+  try {
+    const parsed = JSON.parse(content);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function pickString(source: Record<string, unknown>, key: string) {
+  const value = source[key];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
 
 const poppins = Poppins({
   variable: "--font-sans",
@@ -41,6 +72,7 @@ export async function generateMetadata(): Promise<Metadata> {
     const logoVersioned = withVersion(logoUrl);
 
     return {
+      metadataBase: new URL(getAppUrl()),
       title: siteName,
       description: siteDescription,
       ...(faviconUrl || logoUrl
@@ -59,6 +91,7 @@ export async function generateMetadata(): Promise<Metadata> {
     };
   } catch {
     return {
+      metadataBase: new URL(getAppUrl()),
       title: 'GeoSains LMS',
       description: 'Platform pembelajaran geosains.',
     };
@@ -70,27 +103,49 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const supportAdmin =
-    (await prisma.user.findFirst({
-      where: { role: 'ADMIN', isSuperAdmin: false },
-      orderBy: [{ createdAt: 'asc' }],
-      select: { id: true, name: true, email: true },
-    })) ||
-    (await prisma.user.findFirst({
+  const [supportAdmin, siteSettingsPage, categories] = await Promise.all([
+    prisma.user.findFirst({
       where: { role: 'ADMIN' },
       orderBy: [{ isSuperAdmin: 'asc' }, { createdAt: 'asc' }],
       select: { id: true, name: true, email: true },
-    }));
+    }),
+    prisma.page.findUnique({
+      where: { slug: '__site_settings__' },
+      select: { content: true },
+    }),
+    prisma.category.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, slug: true },
+    }),
+  ]);
+
+  const parsedSiteSettings = safeParse(siteSettingsPage?.content);
+  const initialSiteSettings: LayoutSiteSettings = {
+    siteName: pickString(parsedSiteSettings, 'siteName'),
+    siteDescription: pickString(parsedSiteSettings, 'siteDescription'),
+    logoUrl: pickString(parsedSiteSettings, 'logoUrl'),
+    contactEmail: pickString(parsedSiteSettings, 'contactEmail'),
+    contactPhone: pickString(parsedSiteSettings, 'contactPhone'),
+  };
+  const initialCategories: LayoutCategory[] = categories.map((category) => ({
+    id: String(category.id),
+    name: String(category.name),
+    slug: String(category.slug),
+  }));
 
   return (
-    <html lang="en">
+    <html lang="id">
       <body
         className={`${poppins.variable} ${geistMono.variable} font-sans antialiased`}
       >
         <Providers>
-          <SiteHeader />
+          <Suspense fallback={null}>
+            <SiteHeader initialCategories={initialCategories} initialSiteSettings={initialSiteSettings} />
+          </Suspense>
           {children}
-          <SiteFooter />
+          <Suspense fallback={null}>
+            <SiteFooter initialSiteSettings={initialSiteSettings} />
+          </Suspense>
           <PublicSupportChat
             adminId={supportAdmin?.id ? String(supportAdmin.id) : null}
             adminLabel={supportAdmin?.name ? String(supportAdmin.name) : supportAdmin?.email ? String(supportAdmin.email) : null}

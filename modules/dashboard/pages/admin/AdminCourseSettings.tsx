@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -7,12 +8,10 @@ import {
   DollarSign,
   Loader2,
   PenLine,
-  Redo2,
   RotateCcw,
   Save,
   Settings2,
   Trash2,
-  Undo2,
 } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
 import { toast } from 'sonner';
@@ -204,7 +203,7 @@ export default function AdminCourseSettings() {
   const [certificatesEnabled, setCertificatesEnabled] = useState(true);
   const [certificateDownloadPolicy, setCertificateDownloadPolicy] = useState<CertificateDownloadPolicy>('OWNER_ONLY');
   const [certificateTemplate, setCertificateTemplate] = useState<CertificateTemplate>('CUSTOM');
-  const [certificateBackgroundImageUrl, setCertificateBackgroundImageUrl] = useState<string>('');
+  const [, setCertificateBackgroundImageUrl] = useState<string>('');
   const [courseCertificateDesigns, setCourseCertificateDesigns] = useState<any[]>([]);
   const [isLoadingCourseCertificateDesigns, setIsLoadingCourseCertificateDesigns] = useState(false);
   const [isDeletingCourseCertificate, setIsDeletingCourseCertificate] = useState<string | null>(null);
@@ -556,7 +555,7 @@ export default function AdminCourseSettings() {
     };
     return (
       <div className="relative w-full bg-white overflow-hidden" style={{ aspectRatio: `${dims.widthMm} / ${dims.heightMm}` }}>
-        {bg ? <img src={bg} className="absolute inset-0 w-full h-full object-cover" /> : null}
+        {bg ? <img alt="" src={bg} className="absolute inset-0 w-full h-full object-cover" /> : null}
         <div className="absolute inset-0">
           {sorted.map((el: any, idx: number) => {
             const x = Number(el?.x || 0);
@@ -575,7 +574,7 @@ export default function AdminCourseSettings() {
               const src = typeof el?.src === 'string' ? el.src : '';
               return (
                 <div key={String(el?.id || idx)} className="absolute" style={{ left, top, width, height, opacity }}>
-                  {src ? <img src={src} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-100" />}
+                  {src ? <img alt="" src={src} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-100" />}
                 </div>
               );
             }
@@ -1608,3 +1607,4 @@ export default function AdminCourseSettings() {
     </div>
   );
 }
+

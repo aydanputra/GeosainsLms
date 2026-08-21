@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { CourseStatus } from '@prisma/client';
+import { getCourseAccessContext, getCourseMessagingContext } from '@/modules/course/api/performance';
 
 function toInt(value: string | null): number | null {
   if (!value) return null;
@@ -23,10 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const user = await verifyToken(token);
     if (!user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const course = await prisma.course.findUnique({
-      where: { id: courseId },
-      select: { id: true, title: true, slug: true, instructorId: true, deletedAt: true, status: true },
-    });
+    const course = await getCourseAccessContext(courseId);
     if (!course || course.deletedAt) return NextResponse.json({ error: 'Course not found' }, { status: 404 });
     if (course.status !== CourseStatus.PUBLISHED) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
@@ -115,18 +113,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (comment.length < 2) return NextResponse.json({ error: 'Komentar minimal 2 karakter' }, { status: 400 });
     if (comment.length > 2000) return NextResponse.json({ error: 'Komentar terlalu panjang' }, { status: 400 });
 
-    const course = await prisma.course.findUnique({
-      where: { id: courseId },
-      select: {
-        id: true,
-        title: true,
-        slug: true,
-        instructorId: true,
-        deletedAt: true,
-        status: true,
-        coInstructors: { select: { userId: true } },
-      },
-    });
+    const course = await getCourseMessagingContext(courseId);
     if (!course || course.deletedAt) return NextResponse.json({ error: 'Course not found' }, { status: 404 });
     if (course.status !== CourseStatus.PUBLISHED) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 

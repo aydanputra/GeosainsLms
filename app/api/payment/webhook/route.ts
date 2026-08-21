@@ -165,13 +165,30 @@ export async function POST(req: NextRequest) {
 
     const externalId = typeof body?.externalId === 'string' ? body.externalId : null;
     const statusRaw = typeof body?.status === 'string' ? body.status : null;
+    const providerRaw = typeof body?.provider === 'string' ? body.provider.trim().toUpperCase() : '';
+    const amountRaw =
+      typeof body?.amount === 'number' ? body.amount : typeof body?.amount === 'string' ? Number(body.amount) : NaN;
 
-    if (!externalId || !statusRaw) {
+    if (!externalId || !statusRaw || !providerRaw || !Number.isFinite(amountRaw)) {
       return NextResponse.json({ error: 'Invalid webhook payload' }, { status: 400 });
     }
 
     if (statusRaw !== 'SUCCESS' && statusRaw !== 'FAILED') {
       return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+    }
+
+    const linkedPayment = await prisma.payment.findFirst({
+      where: { externalId },
+      select: { id: true, provider: true, amount: true, orderId: true },
+    });
+    if (!linkedPayment) {
+      return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
+    }
+    if (String(linkedPayment.provider || '').toUpperCase() !== providerRaw) {
+      return NextResponse.json({ error: 'Provider mismatch' }, { status: 400 });
+    }
+    if (Math.abs(Number(linkedPayment.amount || 0) - Number(amountRaw)) > 0.01) {
+      return NextResponse.json({ error: 'Amount mismatch' }, { status: 400 });
     }
 
     const payment = await handlePaymentWebhook(externalId, statusRaw);
@@ -181,7 +198,13 @@ export async function POST(req: NextRequest) {
       action: 'PAYMENT_WEBHOOK',
       entityType: 'Payment',
       entityId: (payment as any)?.id ? String((payment as any).id) : null,
-      metadata: { externalId, status: statusRaw, orderId: (payment as any)?.orderId || null },
+      metadata: {
+        externalId,
+        provider: providerRaw,
+        amount: Number(amountRaw),
+        status: statusRaw,
+        orderId: (payment as any)?.orderId || linkedPayment.orderId || null,
+      },
     });
     return NextResponse.json(payment);
   } catch (error: any) {

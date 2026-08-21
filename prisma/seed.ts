@@ -1,4 +1,4 @@
-import { PrismaClient, Role, CourseStatus, CourseLevel, LessonType } from '@prisma/client';
+import { PrismaClient, CourseStatus, CourseLevel, LessonType } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();

@@ -2,6 +2,11 @@ import { prisma } from '@/utils/prisma';
 import { z } from 'zod';
 import { PaymentProvider } from '@prisma/client';
 import { getAppUrl } from '@/modules/core/utils/appUrl';
+import {
+  sendStudentOrderCreatedEmail,
+  sendStudentPaymentConfirmedEmail,
+  sendStudentPaymentFailedEmail,
+} from '@/utils/email-notifications';
 
 const SITE_SETTINGS_SLUG = '__site_settings__';
 
@@ -260,6 +265,17 @@ export const createPayment = async (data: z.infer<typeof CreatePaymentSchema>) =
 
     const latest = await prisma.payment.findUnique({ where: { id: result.payment.id } });
     if (!latest) throw new Error('Payment not found');
+    if (updated.count > 0 && result.order.user?.email) {
+      await sendStudentOrderCreatedEmail({
+        to: result.order.user.email,
+        name: result.order.user.name || null,
+        orderId: String(result.order.id),
+        total: Number(result.order.total || 0),
+        paymentUrl,
+        manualPayment: false,
+        actionUrl: `${getAppUrl()}/dashboard/student/orders?orderId=${encodeURIComponent(String(result.order.id))}`,
+      });
+    }
     return latest;
   }
 
@@ -284,6 +300,17 @@ export const createPayment = async (data: z.infer<typeof CreatePaymentSchema>) =
 
     const latest = await prisma.payment.findUnique({ where: { id: result.payment.id } });
     if (!latest) throw new Error('Payment not found');
+    if (updated.count > 0 && result.order.user?.email) {
+      await sendStudentOrderCreatedEmail({
+        to: result.order.user.email,
+        name: result.order.user.name || null,
+        orderId: String(result.order.id),
+        total: Number(result.order.total || 0),
+        paymentUrl,
+        manualPayment: false,
+        actionUrl: `${getAppUrl()}/dashboard/student/orders?orderId=${encodeURIComponent(String(result.order.id))}`,
+      });
+    }
     return latest;
   }
 
@@ -300,7 +327,9 @@ async function finalizeOrderPaidTx(tx: typeof prisma, orderId: string) {
   });
   if (!order) throw new Error('Order not found');
 
-  if (order.status === 'PAID') return order;
+  if (order.status === 'PAID') {
+    return { order, successEmail: null as null | { to: string; name?: string | null; orderId: string; total: number; actionUrl: string } };
+  }
   if (order.status === 'CANCELLED') throw new Error('Order cancelled');
   if (order.status !== 'PENDING') throw new Error('Order is not payable');
 
@@ -311,7 +340,9 @@ async function finalizeOrderPaidTx(tx: typeof prisma, orderId: string) {
   if (updated.count === 0) {
     const latest = await tx.order.findUnique({ where: { id: orderId } });
     if (!latest) throw new Error('Order not found');
-    if (latest.status === 'PAID') return latest;
+    if (latest.status === 'PAID') {
+      return { order: latest, successEmail: null as null | { to: string; name?: string | null; orderId: string; total: number; actionUrl: string } };
+    }
     throw new Error('Order is not payable');
   }
 
@@ -472,6 +503,7 @@ async function finalizeOrderPaidTx(tx: typeof prisma, orderId: string) {
     });
     const vendorById = new Map(vendors.map((v) => [v.id, v] as const));
     const byRecipientVendor = new Map<string, Map<string, Set<string>>>();
+    const vendorBuyerPaidById = new Map<string, number>();
 
     for (const it of orderItems) {
       const vendorId = it.product?.vendorId;
@@ -480,6 +512,15 @@ async function finalizeOrderPaidTx(tx: typeof prisma, orderId: string) {
       if (!vendor) continue;
       const productName = it.product?.name || it.productId || '';
       if (!productName) continue;
+      const quantity = Number(it.quantity || 0);
+      const lineSubtotal = Math.max(0, Number(it.price || 0) * quantity);
+      const discountStore = Math.max(0, Number((it as any).discountStoreAmount || 0));
+      const discountMarketplace = Math.max(0, Number((it as any).discountMarketplaceAmount || 0));
+      const fallbackDiscount = Math.max(0, Number((it as any).discountAmount || 0));
+      const totalDiscount = discountStore === 0 && discountMarketplace === 0 ? fallbackDiscount : discountStore + discountMarketplace;
+      const refund = Math.max(0, Number((it as any).refundAmount || 0));
+      const buyerPaid = Math.max(0, lineSubtotal - totalDiscount - refund);
+      vendorBuyerPaidById.set(String(vendorId), Number(vendorBuyerPaidById.get(String(vendorId)) || 0) + buyerPaid);
 
       const recipients = new Set<string>();
       if (vendor.ownerId) recipients.add(String(vendor.ownerId));
@@ -500,12 +541,13 @@ async function finalizeOrderPaidTx(tx: typeof prisma, orderId: string) {
         return Array.from(vendorMap.entries()).map(([vendorId, namesSet]) => {
           const vendor = vendorById.get(vendorId);
           const names = Array.from(namesSet.values());
+          const vendorBuyerPaid = Math.max(0, Number(vendorBuyerPaidById.get(String(vendorId)) || 0));
           const lines = [
             `Pembeli: ${buyerName}${buyerEmail ? ` (${buyerEmail})` : ''}`,
             vendor?.name ? `Vendor: ${vendor.name}` : '',
             `Produk: ${names.join(', ')}`,
             `Order: ${orderId}`,
-            `Total: IDR ${Number(order.total || 0).toLocaleString('id-ID')}`,
+            `Total: IDR ${vendorBuyerPaid.toLocaleString('id-ID')}`,
             `LINK:${href}`,
           ].filter(Boolean);
           return {
@@ -695,24 +737,51 @@ async function finalizeOrderPaidTx(tx: typeof prisma, orderId: string) {
 
   const final = await tx.order.findUnique({ where: { id: orderId } });
   if (!final) throw new Error('Order not found');
-  return final;
+  return {
+    order: final,
+    successEmail: order.user?.email
+      ? {
+          to: order.user.email,
+          name: order.user.name || null,
+          orderId,
+          total: Number(order.total || 0),
+          actionUrl: `${getAppUrl()}/dashboard/student/orders?orderId=${encodeURIComponent(orderId)}`,
+        }
+      : null,
+  };
 }
 
 export const finalizeOrderPaid = async (orderId: string) => {
-  return prisma.$transaction(async (tx) => finalizeOrderPaidTx(tx as any, orderId));
+  const result = await prisma.$transaction(async (tx) => finalizeOrderPaidTx(tx as any, orderId));
+  if (result.successEmail) {
+    await sendStudentPaymentConfirmedEmail(result.successEmail);
+  }
+  return result.order;
 };
 
 export const handlePaymentWebhook = async (externalId: string, status: 'SUCCESS' | 'FAILED') => {
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const payment = await tx.payment.findFirst({
       where: { externalId },
-      include: { order: true },
+      include: {
+        order: {
+          include: {
+            user: {
+              select: { name: true, email: true },
+            },
+          },
+        },
+      },
     });
 
     if (!payment) throw new Error('Payment not found');
 
-    if (payment.status === status) return payment;
-    if (payment.status === 'SUCCESS' || payment.status === 'FAILED') return payment;
+    if (payment.status === status) {
+      return { payment, successEmail: null as null | { to: string; name?: string | null; orderId: string; total: number; actionUrl: string }, failureEmail: null as null | { to: string; name?: string | null; orderId: string; total: number; actionUrl: string } };
+    }
+    if (payment.status === 'SUCCESS' || payment.status === 'FAILED') {
+      return { payment, successEmail: null as null | { to: string; name?: string | null; orderId: string; total: number; actionUrl: string }, failureEmail: null as null | { to: string; name?: string | null; orderId: string; total: number; actionUrl: string } };
+    }
 
     const updated = await tx.payment.updateMany({
       where: { id: payment.id, status: 'PENDING' },
@@ -722,14 +791,18 @@ export const handlePaymentWebhook = async (externalId: string, status: 'SUCCESS'
     if (updated.count === 0) {
       const latest = await tx.payment.findUnique({ where: { id: payment.id } });
       if (!latest) throw new Error('Payment not found');
-      return latest;
+      return { payment: latest, successEmail: null as null | { to: string; name?: string | null; orderId: string; total: number; actionUrl: string }, failureEmail: null as null | { to: string; name?: string | null; orderId: string; total: number; actionUrl: string } };
     }
+
+    let successEmail: null | { to: string; name?: string | null; orderId: string; total: number; actionUrl: string } = null;
+    let failureEmail: null | { to: string; name?: string | null; orderId: string; total: number; actionUrl: string } = null;
 
     if (status === 'SUCCESS') {
       const latestOrder = await tx.order.findUnique({ where: { id: payment.orderId }, select: { id: true, status: true } });
       if (!latestOrder) throw new Error('Order not found');
       if (latestOrder.status === 'PENDING') {
-        await finalizeOrderPaidTx(tx as any, payment.orderId);
+        const finalized = await finalizeOrderPaidTx(tx as any, payment.orderId);
+        successEmail = finalized.successEmail;
       } else {
         const admins = await tx.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
         if (admins.length > 0) {
@@ -745,12 +818,27 @@ export const handlePaymentWebhook = async (externalId: string, status: 'SUCCESS'
           });
         }
       }
+    } else if (payment.order?.user?.email) {
+      failureEmail = {
+        to: payment.order.user.email,
+        name: payment.order.user.name || null,
+        orderId: String(payment.orderId),
+        total: Number(payment.order?.total || 0),
+        actionUrl: `${getAppUrl()}/dashboard/student/orders?orderId=${encodeURIComponent(String(payment.orderId))}`,
+      };
     }
 
     const final = await tx.payment.findUnique({ where: { id: payment.id } });
     if (!final) throw new Error('Payment not found');
-    return final;
+    return { payment: final, successEmail, failureEmail };
   });
+  if (result.successEmail) {
+    await sendStudentPaymentConfirmedEmail(result.successEmail);
+  }
+  if (result.failureEmail) {
+    await sendStudentPaymentFailedEmail(result.failureEmail);
+  }
+  return result.payment;
 };
 
 export const RefundOrderSchema = z.object({

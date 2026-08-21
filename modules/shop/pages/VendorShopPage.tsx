@@ -1,12 +1,12 @@
 "use client";
 
-import { useQuery } from '@tanstack/react-query';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import ProductCard from '../components/ProductCard';
 import { CheckCircle2, Mail, MapPin, Phone, Plus, Star } from 'lucide-react';
 import { toast } from 'sonner';
+import { normalizeImageUrl } from '@/modules/core/utils/image';
 
 type CategoryOption = { id: string; name: string };
 
@@ -19,6 +19,7 @@ type VendorProduct = {
   stock?: number | null;
   type?: 'PHYSICAL' | 'SERVICE' | 'RENTAL';
   imageUrl?: string | null;
+  imageUrls?: string[] | null;
   categoryId?: string | null;
   categoryRef?: { id: string; name: string } | null;
   createdAt?: string | null;
@@ -45,31 +46,20 @@ type VendorPublic = {
   products: VendorProduct[];
 };
 
-export default function VendorShopPage({ slug }: { slug: string }) {
+export default function VendorShopPage({
+  initialVendor,
+  initialCategories = [],
+}: {
+  slug: string;
+  initialVendor: VendorPublic | null;
+  initialCategories?: CategoryOption[];
+}) {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string>('ALL');
   const [sort, setSort] = useState<'NEWEST' | 'NAME_ASC'>('NEWEST');
   const [onlyInStock, setOnlyInStock] = useState(false);
-
-  const { data: vendor, isLoading, error } = useQuery<VendorPublic>({
-    queryKey: ['vendor-public', slug],
-    queryFn: async ({ signal }) => {
-      const res = await fetch(`/api/shop/vendors/public/${slug}`, { signal });
-      if (!res.ok) throw new Error('Failed to fetch vendor');
-      return res.json();
-    },
-  });
-
-  const { data: categoriesData } = useQuery<CategoryOption[]>({
-    queryKey: ['shop-categories-public'],
-    queryFn: async ({ signal }) => {
-      const res = await fetch('/api/shop/categories/public', { signal });
-      if (!res.ok) return [];
-      const data = await res.json().catch(() => []);
-      return Array.isArray(data) ? data : [];
-    },
-    staleTime: 60_000,
-  });
+  const vendor = initialVendor;
+  const categoriesData = initialCategories;
 
   const products = useMemo(() => (Array.isArray(vendor?.products) ? vendor.products : []), [vendor]);
 
@@ -108,22 +98,7 @@ export default function VendorShopPage({ slug }: { slug: string }) {
     return list;
   }, [products, search, category, onlyInStock, sort]);
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-6">
-          <div className="h-40 bg-white border border-slate-200 rounded-2xl animate-pulse" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-80 bg-white border border-slate-200 rounded-2xl animate-pulse" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
+  if (!vendor) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
         <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center">
@@ -137,8 +112,8 @@ export default function VendorShopPage({ slug }: { slug: string }) {
     );
   }
 
-  const coverUrl = typeof vendor?.coverUrl === 'string' && vendor.coverUrl.trim() ? vendor.coverUrl : '';
-  const logoUrl = typeof vendor?.logoUrl === 'string' && vendor.logoUrl.trim() ? vendor.logoUrl : '';
+  const coverUrl = normalizeImageUrl(vendor?.coverUrl, { fallback: '' }) || '';
+  const logoUrl = normalizeImageUrl(vendor?.logoUrl, { fallback: '' }) || '';
 
   const ratingAvg = typeof vendor?.ratingAvg === 'number' && Number.isFinite(vendor.ratingAvg) ? vendor.ratingAvg : 0;
   const ratingCount = typeof vendor?.ratingCount === 'number' && Number.isFinite(vendor.ratingCount) ? vendor.ratingCount : 0;
@@ -160,7 +135,17 @@ export default function VendorShopPage({ slug }: { slug: string }) {
     <div className="min-h-screen bg-slate-50">
       <div className="relative">
         <div className="h-56 sm:h-96 bg-slate-200 relative overflow-hidden">
-          {coverUrl ? <Image src={coverUrl} alt={vendor?.name || 'Vendor'} fill unoptimized className="object-cover" /> : null}
+          {coverUrl ? (
+            <Image
+              src={coverUrl}
+              alt={vendor?.name || 'Vendor'}
+              fill
+              priority
+              sizes="100vw"
+              quality={70}
+              className="object-cover"
+            />
+          ) : null}
           <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/10 to-slate-50" />
         </div>
 
@@ -171,7 +156,7 @@ export default function VendorShopPage({ slug }: { slug: string }) {
                 <div className="flex flex-col lg:flex-row lg:items-start gap-5">
                   <div className="flex items-start gap-4 min-w-0 flex-1">
                     <div className="w-20 h-20 rounded-full bg-white border border-slate-200 overflow-hidden relative shrink-0">
-                      {logoUrl ? <Image src={logoUrl} alt={vendor?.name || 'Vendor'} fill unoptimized className="object-cover" /> : null}
+                      {logoUrl ? <Image src={logoUrl} alt={vendor?.name || 'Vendor'} fill sizes="80px" quality={60} className="object-cover" /> : null}
                     </div>
 
                     <div className="min-w-0 flex-1">
@@ -349,7 +334,7 @@ export default function VendorShopPage({ slug }: { slug: string }) {
         ) : filteredProducts.length > 0 ? (
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {filteredProducts.map((p) => (
-              <ProductCard key={p.id} product={p} />
+              <ProductCard key={p.id} product={p} adminWhatsAppNumber={contactPhone} />
             ))}
           </div>
         ) : (

@@ -111,8 +111,8 @@ export default function AdminInstructors() {
   };
 
   useEffect(() => {
-    fetchInstructors({ reset: true });
-  }, []);
+    void fetchInstructors({ reset: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleAllOnPage = () => {
     const allIds = rows.map((r) => r.id);

@@ -4,6 +4,8 @@ import { verifyToken } from '@/modules/auth/utils/auth';
 import { readLessonAttachmentFile } from '@/utils/lessonAttachmentStorage';
 import path from 'path';
 import { DripType } from '@prisma/client';
+import { writeAccessDeniedAuditLog } from '@/utils/audit';
+import { getCourseLessonSequence, getLessonAttachmentAccessContext } from '@/modules/course/api/performance';
 
 export const runtime = 'nodejs';
 
@@ -17,29 +19,34 @@ export async function GET(
     // 1. Auth Check (Mandatory for all downloads)
     const token = req.cookies.get('token')?.value;
     if (!token) {
+      await writeAccessDeniedAuditLog({
+        req,
+        action: 'LESSON_ATTACHMENT_DOWNLOAD_DENIED',
+        status: 401,
+        entityType: 'LessonAttachment',
+        entityId: attachmentId,
+        reason: 'missing_token',
+        metadata: { lessonId },
+      });
       return NextResponse.json({ error: 'Unauthorized: Login required' }, { status: 401 });
     }
 
     const user = await verifyToken(token);
     if (!user) {
+      await writeAccessDeniedAuditLog({
+        req,
+        action: 'LESSON_ATTACHMENT_DOWNLOAD_DENIED',
+        status: 401,
+        entityType: 'LessonAttachment',
+        entityId: attachmentId,
+        reason: 'invalid_token',
+        metadata: { lessonId },
+      });
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
     // 2. Fetch Attachment & Lesson Context
-    const attachment = await prisma.lessonAttachment.findUnique({
-      where: { id: attachmentId },
-      include: {
-        lesson: {
-          include: {
-            module: {
-              include: {
-                course: true
-              }
-            }
-          }
-        }
-      }
-    });
+    const attachment = await getLessonAttachmentAccessContext(attachmentId);
 
     if (!attachment || !attachment.lesson) {
       return NextResponse.json({ error: 'Attachment not found' }, { status: 404 });
@@ -81,6 +88,16 @@ export async function GET(
 
       if (!enrollment && !activeSubscription) {
         if (!lesson.isPreview) {
+          await writeAccessDeniedAuditLog({
+            req,
+            actor: { id: String(user.id), role: user.role },
+            action: 'LESSON_ATTACHMENT_DOWNLOAD_DENIED',
+            status: 403,
+            entityType: 'LessonAttachment',
+            entityId: attachmentId,
+            reason: 'enrollment_required',
+            metadata: { lessonId, courseId: course.id },
+          });
           return NextResponse.json({ error: 'Enrollment required' }, { status: 403 });
         }
       }
@@ -91,6 +108,16 @@ export async function GET(
           const expiresAt = new Date(enrollment.createdAt);
           expiresAt.setDate(expiresAt.getDate() + validityDays);
           if (new Date() > expiresAt) {
+            await writeAccessDeniedAuditLog({
+              req,
+              actor: { id: String(user.id), role: user.role },
+              action: 'LESSON_ATTACHMENT_DOWNLOAD_DENIED',
+              status: 403,
+              entityType: 'LessonAttachment',
+              entityId: attachmentId,
+              reason: 'enrollment_expired',
+              metadata: { lessonId, courseId: course.id },
+            });
             return NextResponse.json({ error: 'Enrollment expired' }, { status: 403 });
           }
         }
@@ -99,18 +126,8 @@ export async function GET(
       const accessStartDate = enrollment?.createdAt || activeSubscription?.startDate || null;
 
       if (accessStartDate && course.dripEnabled) {
-        const modules = await prisma.module.findMany({
-          where: { courseId: course.id },
-          orderBy: { order: 'asc' },
-          select: {
-            lessons: {
-              orderBy: { order: 'asc' },
-              select: { id: true, isPreview: true },
-            },
-          },
-        });
-
-        const globalLessons = modules.flatMap((m) => m.lessons.map((l) => ({ id: l.id, isPreview: l.isPreview })));
+        const sequence = await getCourseLessonSequence(course.id);
+        const globalLessons = sequence.globalLessons;
         const lessonIndexById = new Map(globalLessons.map((l, idx) => [l.id, idx]));
         const idx = lessonIndexById.get(lesson.id) ?? 0;
 
@@ -118,6 +135,16 @@ export async function GET(
           const unlockDate = new Date(accessStartDate);
           unlockDate.setDate(unlockDate.getDate() + idx * course.dripDays);
           if (now < unlockDate) {
+            await writeAccessDeniedAuditLog({
+              req,
+              actor: { id: String(user.id), role: user.role },
+              action: 'LESSON_ATTACHMENT_DOWNLOAD_DENIED',
+              status: 403,
+              entityType: 'LessonAttachment',
+              entityId: attachmentId,
+              reason: 'drip_locked_after_enrollment',
+              metadata: { lessonId, courseId: course.id },
+            });
             return NextResponse.json({ error: 'Lesson content is locked' }, { status: 403 });
           }
         }
@@ -127,6 +154,16 @@ export async function GET(
           const unlockDate = new Date(base);
           unlockDate.setDate(unlockDate.getDate() + idx * course.dripDays);
           if (now < unlockDate) {
+            await writeAccessDeniedAuditLog({
+              req,
+              actor: { id: String(user.id), role: user.role },
+              action: 'LESSON_ATTACHMENT_DOWNLOAD_DENIED',
+              status: 403,
+              entityType: 'LessonAttachment',
+              entityId: attachmentId,
+              reason: 'drip_locked_schedule',
+              metadata: { lessonId, courseId: course.id },
+            });
             return NextResponse.json({ error: 'Lesson content is locked' }, { status: 403 });
           }
         }
@@ -141,6 +178,16 @@ export async function GET(
             const prev = globalLessons[i];
             if (prev.isPreview) continue;
             if (!completedSet.has(prev.id)) {
+              await writeAccessDeniedAuditLog({
+                req,
+                actor: { id: String(user.id), role: user.role },
+                action: 'LESSON_ATTACHMENT_DOWNLOAD_DENIED',
+                status: 403,
+                entityType: 'LessonAttachment',
+                entityId: attachmentId,
+                reason: 'drip_locked_sequential',
+                metadata: { lessonId, courseId: course.id },
+              });
               return NextResponse.json({ error: 'Lesson content is locked' }, { status: 403 });
             }
           }
@@ -174,8 +221,8 @@ export async function GET(
           'Content-Type': storedFile.contentType || attachment.type || 'application/octet-stream',
           'Content-Length': storedFile.size.toString(),
           'Content-Disposition': `inline; filename="${attachment.name}"`,
-          // Cache Control: private, max-age=3600
-          'Cache-Control': 'private, max-age=3600' 
+          'Cache-Control': 'private, no-store',
+          'X-Robots-Tag': 'noindex, nofollow',
         }
       });
     } catch (err) {

@@ -2,15 +2,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { generateReferralCode, trackClick, processCommission, requestWithdrawal } from '../api/service';
 import { prisma } from '@/utils/prisma';
 
-vi.mock('@/utils/prisma', () => ({
-  prisma: {
+const prismaMock: any = vi.hoisted(() => ({
+    page: {
+      findUnique: vi.fn(),
+    },
     affiliateProfile: {
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    affiliateLink: {
+      findFirst: vi.fn(),
     },
     referral: {
+      findFirst: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
       updateMany: vi.fn(),
     },
     order: {
@@ -19,17 +27,28 @@ vi.mock('@/utils/prisma', () => ({
     commission: {
       findUnique: vi.fn(),
       create: vi.fn(),
+      aggregate: vi.fn(),
+      updateMany: vi.fn(),
     },
     withdrawal: {
       create: vi.fn(),
     },
-    $transaction: vi.fn((callback) => callback),
-  },
+    $transaction: vi.fn(async (input: any) => {
+      if (typeof input === 'function') return input(prismaMock);
+      if (Array.isArray(input)) return Promise.all(input);
+      return input;
+    }),
+}));
+
+vi.mock('@/utils/prisma', () => ({
+  prisma: prismaMock,
 }));
 
 describe('Affiliate Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (prisma.page.findUnique as any).mockResolvedValue(null);
+    (prisma.commission.aggregate as any).mockResolvedValue({ _sum: { amount: 0 } });
   });
 
   describe('generateReferralCode', () => {
@@ -48,10 +67,9 @@ describe('Affiliate Service', () => {
     it('should increment clicks and record referral', async () => {
       const mockProfile = { id: 'p1' };
       (prisma.affiliateProfile.findUnique as any).mockResolvedValue(mockProfile);
-      (prisma.$transaction as any).mockResolvedValue([
-        { clicks: 1 },
-        { id: 'r1' }
-      ]);
+      (prisma.referral.findFirst as any).mockResolvedValue(null);
+      (prisma.affiliateProfile.update as any).mockResolvedValue({ clicks: 1 });
+      (prisma.referral.create as any).mockResolvedValue({ id: 'r1' });
 
       await trackClick('ABC12345', '127.0.0.1');
 
@@ -75,6 +93,9 @@ describe('Affiliate Service', () => {
       (prisma.order.findUnique as any).mockResolvedValue(mockOrder);
       (prisma.affiliateProfile.findUnique as any).mockResolvedValue(mockProfile);
       (prisma.commission.findUnique as any).mockResolvedValue(null);
+      (prisma.commission.create as any).mockResolvedValue({ id: 'c1' });
+      (prisma.affiliateProfile.update as any).mockResolvedValue({ id: 'p1' });
+      (prisma.referral.updateMany as any).mockResolvedValue({ count: 0 });
 
       await processCommission('o1', 'ABC12345');
 
@@ -85,7 +106,7 @@ describe('Affiliate Service', () => {
       expect(prisma.affiliateProfile.update).toHaveBeenCalledWith({
         where: { id: 'p1' },
         data: {
-          balance: { increment: 10000 },
+          pendingBalance: { increment: 10000 },
           conversions: { increment: 1 },
         },
       });
@@ -94,21 +115,26 @@ describe('Affiliate Service', () => {
 
   describe('requestWithdrawal', () => {
     it('should create withdrawal request if balance sufficient', async () => {
-      const mockProfile = { id: 'p1', balance: 100000 };
-      (prisma.affiliateProfile.findUnique as any).mockResolvedValue(mockProfile);
+      (prisma.affiliateProfile.findUnique as any)
+        .mockResolvedValueOnce({ id: 'p1', pendingBalance: 0 })
+        .mockResolvedValueOnce({ id: 'p1', balance: 100000 });
+      (prisma.affiliateProfile.updateMany as any).mockResolvedValue({ count: 1 });
+      (prisma.withdrawal.create as any).mockResolvedValue({ id: 'w1' });
 
       await requestWithdrawal('user-1', 50000);
 
       expect(prisma.withdrawal.create).toHaveBeenCalled();
-      expect(prisma.affiliateProfile.update).toHaveBeenCalledWith({
-        where: { id: 'p1' },
+      expect(prisma.affiliateProfile.updateMany).toHaveBeenCalledWith({
+        where: { id: 'p1', balance: { gte: 50000 } },
         data: { balance: { decrement: 50000 } },
       });
     });
 
     it('should throw error if balance insufficient', async () => {
-      const mockProfile = { id: 'p1', balance: 10000 };
-      (prisma.affiliateProfile.findUnique as any).mockResolvedValue(mockProfile);
+      (prisma.affiliateProfile.findUnique as any)
+        .mockResolvedValueOnce({ id: 'p1', pendingBalance: 0 })
+        .mockResolvedValueOnce({ id: 'p1', balance: 10000 });
+      (prisma.affiliateProfile.updateMany as any).mockResolvedValue({ count: 0 });
 
       await expect(requestWithdrawal('user-1', 50000)).rejects.toThrow('Insufficient balance');
     });

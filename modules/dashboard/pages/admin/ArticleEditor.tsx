@@ -86,8 +86,8 @@ export default function ArticleEditor({
   const [categoryPickerQuery, setCategoryPickerQuery] = useState('');
   const categoryPickerRef = useRef<HTMLDivElement | null>(null);
 
-  const categoriesState = Array.isArray(categories) ? categories : [];
-  const tagsState = Array.isArray(tags) ? tags : [];
+  const categoriesState = useMemo(() => (Array.isArray(categories) ? categories : []), [categories]);
+  const tagsState = useMemo(() => (Array.isArray(tags) ? tags : []), [tags]);
 
   const filteredCategories = useMemo(() => {
     const q = categoryPickerQuery.trim().toLowerCase();

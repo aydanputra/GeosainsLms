@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useMemo, useState } from 'react';
 import { Upload, X, Image as ImageIcon } from 'lucide-react';
 import MediaPickerModal from '@/modules/media/components/MediaPickerModal';

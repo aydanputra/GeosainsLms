@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
+import { getCourseAccessContext } from '@/modules/course/api/performance';
 
 const COURSE_CERTIFICATE_PREFIX = '__course_certificate__';
 
@@ -33,10 +34,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (user.role !== 'ADMIN' && user.role !== 'MENTOR') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-    const course = await prisma.course.findUnique({
-      where: { id: courseId },
-      select: { id: true, instructorId: true, deletedAt: true },
-    });
+    const course = await getCourseAccessContext(courseId);
     if (!course || course.deletedAt) return NextResponse.json({ error: 'Course not found' }, { status: 404 });
 
     const isAdmin = user.role === 'ADMIN';
@@ -67,10 +65,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (user.role !== 'ADMIN' && user.role !== 'MENTOR') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-    const course = await prisma.course.findUnique({
-      where: { id: courseId },
-      select: { id: true, instructorId: true, deletedAt: true, title: true },
-    });
+    const course = await getCourseAccessContext(courseId);
     if (!course || course.deletedAt) return NextResponse.json({ error: 'Course not found' }, { status: 404 });
 
     const isAdmin = user.role === 'ADMIN';
@@ -113,10 +108,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (user.role !== 'ADMIN' && user.role !== 'MENTOR') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-    const course = await prisma.course.findUnique({
-      where: { id: courseId },
-      select: { id: true, instructorId: true, deletedAt: true },
-    });
+    const course = await getCourseAccessContext(courseId);
     if (!course || course.deletedAt) return NextResponse.json({ error: 'Course not found' }, { status: 404 });
 
     const isAdmin = user.role === 'ADMIN';

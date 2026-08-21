@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
 import { CourseStatus } from '@prisma/client';
+import { getCourseLessonSequence, getCourseRuntimeSettings } from '@/modules/course/api/performance';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -21,15 +22,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         instructorId: true,
         validityDays: true,
         subscriptionEligible: true,
-        modules: {
-          orderBy: { order: 'asc' },
-          select: {
-            lessons: {
-              orderBy: { order: 'asc' },
-              select: { id: true },
-            },
-          },
-        },
       },
     });
 
@@ -37,9 +29,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Course not found' }, { status: 404 });
     }
 
-    const settingsPage = await prisma.page.findUnique({ where: { slug: '__course_settings__' }, select: { content: true } });
-    const settings = settingsPage?.content ? (JSON.parse(settingsPage.content) as Record<string, unknown>) : {};
-    const allowStaffView = settings['allowStaffViewCourseContentWithoutEnrolling'] !== false;
+    const settings = await getCourseRuntimeSettings();
+    const allowStaffView = settings.allowStaffViewCourseContentWithoutEnrolling !== false;
 
     const isAdmin = user.role === 'ADMIN';
     const isInstructor = user.id === course.instructorId;
@@ -94,7 +85,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     }
 
-    const lessonIds = course.modules.flatMap((m) => m.lessons.map((l) => l.id));
+    const sequence = await getCourseLessonSequence(course.id);
+    const lessonIds = sequence.globalLessons.map((lesson) => lesson.id);
 
     if (lessonIds.length === 0) {
       return NextResponse.json({ completedLessonIds: [], totalLessons: 0 }, { status: 200 });

@@ -5,7 +5,6 @@ import RichContentRenderer from './RichContentRenderer';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import LessonAttachmentModal from '@/modules/media/components/LessonAttachmentModal';
-import { useQueryClient } from '@tanstack/react-query';
 
 function hasMeaningfulText(value: any): boolean {
   if (!value) return false;
@@ -73,12 +72,9 @@ interface LessonViewerProps {
     assignment?: Assignment | null;
   };
   onComplete: () => void;
-  courseId: string;
-  courseSlug: string;
 }
 
-export default function LessonViewer({ lesson, onComplete, courseId, courseSlug }: LessonViewerProps) {
-  const queryClient = useQueryClient();
+export default function LessonViewer({ lesson, onComplete }: LessonViewerProps) {
   const assignment = lesson.assignment || null;
   const [submission, setSubmission] = useState<AssignmentSubmission | null>(null);
   const [isLoadingSubmission, setIsLoadingSubmission] = useState(false);
@@ -124,17 +120,6 @@ export default function LessonViewer({ lesson, onComplete, courseId, courseSlug 
       cancelled = true;
     };
   }, [assignment?.id]);
-
-  useEffect(() => {
-    if (!assignment) return;
-    if (!submission) return;
-    if (submission.status !== 'GRADED') return;
-    if (typeof submission.grade !== 'number') return;
-    const passing = typeof assignment.passingGrade === 'number' ? assignment.passingGrade : 0;
-    if (submission.grade < passing) return;
-    queryClient.invalidateQueries({ queryKey: ['courseProgress', courseId] });
-    queryClient.invalidateQueries({ queryKey: ['courseOutline', courseSlug] });
-  }, [assignment, courseId, courseSlug, queryClient, submission]);
 
   const handleSubmitAssignment = async () => {
     if (!assignment?.id) return;

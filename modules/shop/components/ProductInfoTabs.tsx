@@ -22,6 +22,8 @@ type MoreProduct = {
   description: string | null;
   price: number;
   imageUrl: string | null;
+  imageUrls?: string[] | null;
+  type?: 'PHYSICAL' | 'SERVICE' | 'RENTAL';
 };
 
 type TabId = 'DETAIL' | 'REVIEWS' | 'VENDOR' | 'MORE';
@@ -32,12 +34,14 @@ export default function ProductInfoTabs({
   productDescription,
   vendor,
   moreProducts,
+  adminWhatsAppNumber,
 }: {
   categoryName: string;
   productName: string;
   productDescription: string | null;
   vendor: VendorInfo | null;
   moreProducts: MoreProduct[];
+  adminWhatsAppNumber?: string | null;
 }) {
   const [active, setActive] = useState<TabId>('DETAIL');
 
@@ -156,7 +160,7 @@ export default function ProductInfoTabs({
           {moreProducts.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 min-w-0">
               {moreProducts.map((p) => (
-                <ProductCard key={p.id} product={p} addToCartVariant="icon" />
+                <ProductCard key={p.id} product={p} addToCartVariant="icon" adminWhatsAppNumber={adminWhatsAppNumber} />
               ))}
             </div>
           ) : (

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createPost, getPosts, PostSchema } from '@/modules/blog/api/service';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { writeAuditLog } from '@/utils/audit';
+import { sanitizeRichHtml } from '@/modules/core/utils/sanitizeHtml';
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,13 +11,21 @@ export async function GET(req: NextRequest) {
     const authorId = searchParams.get('authorId') || undefined;
     const category = searchParams.get('category') || undefined;
     const tag = searchParams.get('tag') || undefined;
-    // By default show only published posts for public API, unless user is admin? 
-    // For now, let's assume this is public endpoint, so publishedOnly=true by default.
-    // If we want admin to see all, we might need a separate check.
-    const publishedOnly = searchParams.get('publishedOnly') !== 'false';
+    const wantsDraftAccess = searchParams.get('publishedOnly') === 'false';
+    const token = req.cookies.get('token')?.value;
+    const user = token ? await verifyToken(token) : null;
+    const canViewDrafts =
+      Boolean(user?.role === 'ADMIN') ||
+      Boolean(user?.role === 'MENTOR' && authorId && String(authorId) === String(user.id));
+    const publishedOnly = wantsDraftAccess ? !canViewDrafts : true;
 
     const posts = await getPosts({ publishedOnly, search, authorId, categorySlug: category, tagSlug: tag });
-    return NextResponse.json(posts);
+    return NextResponse.json(
+      posts.map((post) => ({
+        ...post,
+        content: sanitizeRichHtml(post.content),
+      }))
+    );
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

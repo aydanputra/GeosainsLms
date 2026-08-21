@@ -12,8 +12,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const scope = (req.nextUrl.searchParams.get('scope') || '').trim().toLowerCase();
     const courses = await prisma.course.findMany({
-      where: user.role === 'MENTOR' ? { instructorId: user.id, deletedAt: null } : { deletedAt: null },
+      where:
+        user.role === 'MENTOR' || scope === 'self'
+          ? { instructorId: user.id, deletedAt: null }
+          : { deletedAt: null },
       include: {
         _count: {
           select: { enrollments: true }

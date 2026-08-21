@@ -1,13 +1,10 @@
 "use client";
 
+import Image from 'next/image';
 import { useMemo, useState } from 'react';
 import { Play } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
-
-function normalizeThumbnailUrl(value: string) {
-  const v = String(value || '').trim();
-  return v || '/placeholder-course.jpg';
-}
+import { normalizeImageUrl, toOptimizedImageUrl } from '@/modules/core/utils/image';
 
 function withAutoplay(embedUrl: string) {
   const url = embedUrl.trim();
@@ -38,7 +35,11 @@ export default function CourseHeroMedia({
   const [imgError, setImgError] = useState(false);
 
   const canPlay = Boolean(embedUrl && String(embedUrl).trim());
-  const poster = useMemo(() => (imgError ? '/placeholder-course.jpg' : normalizeThumbnailUrl(thumbnailUrl)), [imgError, thumbnailUrl]);
+  const poster = useMemo(() => {
+    const safeUrl = normalizeImageUrl(thumbnailUrl, { fallback: '/placeholder-course.jpg' }) || '/placeholder-course.jpg';
+    if (imgError) return '/placeholder-course.jpg';
+    return toOptimizedImageUrl(safeUrl, { width: 1280, height: 720, fit: 'fill' }) || safeUrl;
+  }, [imgError, thumbnailUrl]);
   const src = useMemo(() => (canPlay ? withAutoplay(toPrivacyEmbed(String(embedUrl))) : null), [canPlay, embedUrl]);
 
   return (
@@ -54,10 +55,12 @@ export default function CourseHeroMedia({
           />
         ) : (
           <>
-            <img
+            <Image
               src={poster}
               alt={title}
-              className="w-full h-full object-cover"
+              fill
+              sizes="(max-width: 1024px) 100vw, 960px"
+              className="object-cover"
               onError={() => setImgError(true)}
             />
             {canPlay ? (
@@ -81,4 +84,3 @@ export default function CourseHeroMedia({
     </div>
   );
 }
-

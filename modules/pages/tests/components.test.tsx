@@ -1,7 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import PageRenderer from '../components/PageRenderer';
-import HeroBlock from '../components/HeroBlock';
 
 // Mock child components to simplify testing
 vi.mock('../components/HeroBlock', () => ({

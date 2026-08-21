@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useForm, useFieldArray, Control, UseFormRegister } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Book, AlignLeft, BarChart, Hash, Plus, Trash2, HelpCircle, Globe, Lock, Users, Calendar, Clock, Layers, ChevronDown, Check, ArrowRight, Loader2, X } from 'lucide-react';
+import { Book, AlignLeft, BarChart, Hash, Plus, Trash2, HelpCircle, Globe, Lock, Users, Clock, Layers, ChevronDown, Check, ArrowRight, Loader2, X } from 'lucide-react';
 import RichTextEditor from '@/components/RichTextEditor';
 import { twMerge } from 'tailwind-merge';
 import { useAutosave } from '@/hooks/useAutosave';
@@ -625,7 +625,7 @@ export default function CourseStepBasic({ initialData, onNext, courseId }: Cours
         if (!dirtyFields.dripDays && (typeof json?.dripDays === 'number' || json?.dripDays === null)) setValue('dripDays', json.dripDays, { shouldDirty: false });
       })
       .catch(() => {});
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!requirementsOpen) return;

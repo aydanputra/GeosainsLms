@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, ShoppingCart, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -17,22 +17,48 @@ export default function BundleCTA({
   courseCount,
   subtotal,
   price,
-  isLoggedIn,
-  enrolledCount,
 }: {
   bundleId: string;
   bundleSlug: string;
   courseCount: number;
   subtotal: number;
   price: number;
-  isLoggedIn: boolean;
-  enrolledCount: number;
 }) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [enrolledCount, setEnrolledCount] = useState(0);
 
   const discount = useMemo(() => Math.max(0, Math.round((Number(subtotal || 0) - Number(price || 0)) * 100) / 100), [subtotal, price]);
   const alreadyOwnedAll = courseCount > 0 && enrolledCount >= courseCount;
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadAccess = async () => {
+      try {
+        const res = await fetch(`/api/course-bundles/${bundleId}/access`, {
+          cache: 'no-store',
+          credentials: 'include',
+        });
+        if (!res.ok) return;
+
+        const data = (await res.json().catch(() => null)) as { isLoggedIn?: unknown; enrolledCount?: unknown } | null;
+        if (!isMounted || !data) return;
+
+        setIsLoggedIn(data.isLoggedIn === true);
+        setEnrolledCount(typeof data.enrolledCount === 'number' && Number.isFinite(data.enrolledCount) ? data.enrolledCount : 0);
+      } catch {
+        // Keep the default guest state when the personalized CTA payload fails.
+      }
+    };
+
+    void loadAccess();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [bundleId]);
 
   const handleBuy = async () => {
     if (!isLoggedIn) {

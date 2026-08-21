@@ -4,6 +4,14 @@ import { verifyToken } from '@/modules/auth/utils/auth';
 
 export async function GET(req: NextRequest) {
   try {
+    const token = req.cookies.get('token')?.value;
+    if (!token) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const user = await verifyToken(token);
+    if (!user || user.role !== 'ADMIN') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const pages = await getPages();
     return NextResponse.json(pages);
   } catch (error: any) {

@@ -3,6 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import LessonViewer from '../components/LessonViewer';
 import QuizPlayer from '../components/QuizPlayer';
 import ProgressTracker from '../components/ProgressTracker';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 
 vi.mock('sonner', () => ({
   toast: {
@@ -12,6 +14,15 @@ vi.mock('sonner', () => ({
 }));
 
 describe('Course Player Components', () => {
+  const renderWithQuery = (ui: ReactNode) => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    });
+    return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+  };
+
   beforeEach(() => {
     vi.restoreAllMocks();
     global.fetch = vi.fn().mockResolvedValue({
@@ -29,7 +40,7 @@ describe('Course Player Components', () => {
         content: null,
         videoId: '123',
       };
-      render(<LessonViewer lesson={lesson} onComplete={vi.fn()} />);
+      renderWithQuery(<LessonViewer lesson={lesson} onComplete={vi.fn()} />);
       const iframe = screen.getByTitle('Intro Video');
       expect(iframe).toBeDefined();
       expect(iframe.getAttribute('src')).toContain('embed/123');
@@ -43,7 +54,7 @@ describe('Course Player Components', () => {
         content: '<p>Hello World</p>',
         videoId: null,
       };
-      render(<LessonViewer lesson={lesson} onComplete={vi.fn()} />);
+      renderWithQuery(<LessonViewer lesson={lesson} onComplete={vi.fn()} />);
       expect(screen.getByText('Hello World')).toBeDefined();
     });
   });
@@ -107,8 +118,8 @@ describe('Course Player Components', () => {
 
       render(<QuizPlayer courseId="c1" quiz={multiQuiz as any} onComplete={onComplete} />);
 
-      fireEvent.click(screen.getByText('A'));
-      fireEvent.click(screen.getByText('C'));
+      fireEvent.click(screen.getAllByRole('button', { name: /A/ })[0]);
+      fireEvent.click(screen.getAllByRole('button', { name: /C/ })[0]);
       fireEvent.click(screen.getByText('Submit Quiz'));
 
       await waitFor(() => {

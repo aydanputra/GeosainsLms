@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { getPageBySlug } from '@/modules/pages/api/service';
 import PageRenderer from '@/modules/pages/components/PageRenderer';
+import { sanitizePageBlocks } from '@/modules/core/utils/sanitizeHtml';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,7 +21,7 @@ export default async function PagePreview({ params }: { params: Promise<{ slug: 
   const page = await getPageBySlug(slug);
   if (!page) return <div className="p-10">Halaman tidak ditemukan</div>;
 
-  const blocks = (page.blocks || []).map((b: any) => ({
+  const blocks = sanitizePageBlocks(page.blocks || []).map((b: any) => ({
     id: b.id,
     type: b.type,
     content: typeof b.content === 'string' ? b.content : JSON.stringify(b.content ?? {}),

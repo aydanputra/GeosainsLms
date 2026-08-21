@@ -1,10 +1,9 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import Table from '../../components/Tables';
 import EmptyState from '../../components/EmptyState';
 import { Plus, Search, Edit2, Trash2, Tag } from 'lucide-react';
-import { twMerge } from 'tailwind-merge';
 import { toast } from 'sonner';
 import ConfirmDialog from '../../components/ConfirmDialog';
 
@@ -48,7 +47,7 @@ export default function AdminCategories({ categories: initialCategories }: Admin
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  const toggleAllVisible = () => {
+  const toggleAllVisible = useCallback(() => {
     setSelectedIds((prev) => {
       const prevSet = new Set(prev);
       const allSelected = visibleIds.length > 0 && visibleIds.every((id) => prevSet.has(id));
@@ -56,7 +55,7 @@ export default function AdminCategories({ categories: initialCategories }: Admin
       for (const id of visibleIds) prevSet.add(id);
       return Array.from(prevSet);
     });
-  };
+  }, [visibleIds]);
 
   const columns = useMemo(() => {
     return [

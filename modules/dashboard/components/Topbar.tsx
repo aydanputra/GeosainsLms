@@ -18,6 +18,15 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 
+type DashboardUser = {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string | null;
+  role: 'ADMIN' | 'MENTOR' | 'STUDENT' | 'VENDOR';
+  isSuperAdmin?: boolean;
+};
+
 function formatBadgeCount(value: number) {
   if (!value || value <= 0) return '';
   if (value > 99) return '99+';
@@ -69,15 +78,19 @@ function formatTime(value: string) {
 
 export default function Topbar({
   role,
+  currentUser = null,
   qaUnansweredCount = 0,
   notificationUnreadCount = 0,
 }: {
   role: 'ADMIN' | 'MENTOR' | 'STUDENT' | 'VENDOR';
+  currentUser?: DashboardUser | null;
   qaUnansweredCount?: number;
   notificationUnreadCount?: number;
 }) {
-  const { user, clearUser, toggleSidebar, toggleSidebarCollapse, sidebarCollapsed, startNavigation } = useDashboardStore();
+  void role;
+  const { clearUser, toggleSidebar, toggleSidebarCollapse, sidebarCollapsed, startNavigation } = useDashboardStore();
   const router = useRouter();
+  const user = currentUser;
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -91,6 +104,8 @@ export default function Topbar({
   const [notifications, setNotifications] = useState<NotificationPreviewItem[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
+  const messagesLoadedAtRef = useRef<number>(0);
+  const notificationsLoadedAtRef = useRef<number>(0);
 
   useEffect(() => {
     if (!isProfileOpen && !isMessagesOpen && !isNotificationsOpen) return;
@@ -103,6 +118,12 @@ export default function Topbar({
     window.addEventListener('mousedown', handler);
     return () => window.removeEventListener('mousedown', handler);
   }, [isProfileOpen, isMessagesOpen, isNotificationsOpen]);
+
+  const shouldReloadPreview = (kind: 'messages' | 'alerts') => {
+    const now = Date.now();
+    const loadedAt = kind === 'messages' ? messagesLoadedAtRef.current : notificationsLoadedAtRef.current;
+    return !loadedAt || now - loadedAt > 30_000;
+  };
 
   const loadPreview = async (kind: 'messages' | 'alerts') => {
     if (kind === 'messages') setIsLoadingMessages(true);
@@ -145,6 +166,7 @@ export default function Topbar({
 
         setMessages(mappedNotif);
         setDmThreads(mappedDm);
+        messagesLoadedAtRef.current = Date.now();
       } else {
         const res = await fetch(`/api/notifications?kind=alerts&limit=5`, { cache: 'no-store' });
         const data = await res.json().catch(() => null);
@@ -163,6 +185,7 @@ export default function Topbar({
           createdAt: typeof n.createdAt === 'string' ? n.createdAt : new Date(n.createdAt).toISOString(),
         }));
         setNotifications(mapped);
+        notificationsLoadedAtRef.current = Date.now();
       }
     } finally {
       if (kind === 'messages') setIsLoadingMessages(false);
@@ -271,7 +294,7 @@ export default function Topbar({
               setIsMessagesOpen(next);
               setIsNotificationsOpen(false);
               setIsProfileOpen(false);
-              if (next) loadPreview('messages');
+              if (next && shouldReloadPreview('messages')) loadPreview('messages');
             }}
             className="p-2 rounded-full hover:bg-slate-100 text-slate-500 hover:text-indigo-600 transition-colors relative"
           >
@@ -380,7 +403,7 @@ export default function Topbar({
               setIsNotificationsOpen(next);
               setIsMessagesOpen(false);
               setIsProfileOpen(false);
-              if (next) loadPreview('alerts');
+              if (next && shouldReloadPreview('alerts')) loadPreview('alerts');
             }}
             className="p-2 rounded-full hover:bg-slate-100 text-slate-500 hover:text-indigo-600 transition-colors relative"
           >

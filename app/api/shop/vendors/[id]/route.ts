@@ -27,17 +27,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     });
     if (!before) return NextResponse.json({ error: 'Vendor tidak ditemukan' }, { status: 404 });
 
-    const canManage =
-      isAdmin ||
-      Boolean(
-        await prisma.shopVendor.findFirst({
-          where: {
-            id,
-            OR: [{ ownerId: String(user.id) }, { members: { some: { userId: String(user.id) } } }],
-          },
-          select: { id: true },
-        })
-      );
+    const isOwner = Boolean(before.ownerId && String(before.ownerId) === String(user.id));
+    const isMember =
+      !isAdmin && !isOwner
+        ? Boolean(
+            await prisma.shopVendor.findFirst({
+              where: {
+                id,
+                members: { some: { userId: String(user.id) } },
+              },
+              select: { id: true },
+            })
+          )
+        : false;
+    const canManage = isAdmin || isOwner || isMember;
 
     if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
@@ -51,6 +54,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       coverUrl?: unknown;
       contactEmail?: unknown;
       contactPhone?: unknown;
+      adminWhatsapp?: unknown;
       addressLine1?: unknown;
       addressLine2?: unknown;
       city?: unknown;
@@ -73,6 +77,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const coverUrl = typeof body.coverUrl === 'string' ? body.coverUrl.trim() : '';
     const contactEmail = typeof body.contactEmail === 'string' ? body.contactEmail.trim() : '';
     const contactPhone = typeof body.contactPhone === 'string' ? body.contactPhone.trim() : '';
+    const adminWhatsapp = typeof body.adminWhatsapp === 'string' ? body.adminWhatsapp.trim() : '';
     const addressLine1 = typeof body.addressLine1 === 'string' ? body.addressLine1.trim() : '';
     const addressLine2 = typeof body.addressLine2 === 'string' ? body.addressLine2.trim() : '';
     const city = typeof body.city === 'string' ? body.city.trim() : '';
@@ -94,6 +99,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (typeof body.coverUrl === 'string') data.coverUrl = coverUrl || null;
     if (typeof body.contactEmail === 'string') data.contactEmail = contactEmail || null;
     if (typeof body.contactPhone === 'string') data.contactPhone = contactPhone || null;
+    if (typeof body.adminWhatsapp === 'string') data.adminWhatsapp = adminWhatsapp || null;
     if (typeof body.addressLine1 === 'string') data.addressLine1 = addressLine1 || null;
     if (typeof body.addressLine2 === 'string') data.addressLine2 = addressLine2 || null;
     if (typeof body.city === 'string') data.city = city || null;

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createPost, updatePost, getPosts, getPostBySlug } from '../api/service';
+import { createPost, updatePost, getPosts } from '../api/service';
 import { prisma } from '@/utils/prisma';
 
 vi.mock('@/utils/prisma', () => ({
@@ -9,6 +9,7 @@ vi.mock('@/utils/prisma', () => ({
       update: vi.fn(),
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       delete: vi.fn(),
     },
   },
@@ -17,11 +18,12 @@ vi.mock('@/utils/prisma', () => ({
 describe('Blog Service', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (prisma.post.findFirst as any).mockResolvedValue(null);
   });
 
   describe('createPost', () => {
     it('should create a post with generated slug', async () => {
-      const mockPost = { title: 'Test Post', content: 'Content here' };
+      const mockPost = { title: 'Test Post', content: '<p>Content here</p><script>alert(1)</script>' };
       (prisma.post.create as any).mockResolvedValue({ id: '1', slug: 'test-post-123', ...mockPost });
 
       const result = await createPost('user-1', { ...mockPost, published: false });
@@ -30,7 +32,8 @@ describe('Blog Service', () => {
         data: expect.objectContaining({
           title: 'Test Post',
           slug: expect.stringContaining('test-post'),
-          authorId: 'user-1',
+          author: { connect: { id: 'user-1' } },
+          content: '<p>Content here</p>',
         }),
       }));
       expect(result).toHaveProperty('slug');
@@ -51,6 +54,11 @@ describe('Blog Service', () => {
           slug: expect.stringContaining('new-title'),
         }),
       }));
+    });
+
+    it('should reject content that becomes empty after sanitization', async () => {
+      await expect(updatePost('1', { content: '<script>alert(1)</script>' })).rejects.toThrow('Konten artikel tidak valid');
+      expect(prisma.post.update).not.toHaveBeenCalled();
     });
   });
 

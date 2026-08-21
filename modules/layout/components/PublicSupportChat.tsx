@@ -280,7 +280,7 @@ export default function PublicSupportChat(props: { adminId: string | null; admin
     loadThreadMessages(threadId);
     startPolling(threadId);
     return () => stopPolling();
-  }, [adminId, hidden, open, threadId, me?.id]);
+  }, [adminId, hidden, open, threadId, me?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (hidden || !adminId) return;

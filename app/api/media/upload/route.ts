@@ -1,17 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
-import { isSameOrigin } from '@/modules/auth/utils/security';
-import { mkdir, writeFile } from 'fs/promises';
+import { enforceRateLimit, getClientIp, isSameOrigin } from '@/modules/auth/utils/security';
+import { writeRateLimitAuditLog } from '@/utils/audit';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { writeAuditLog } from '@/utils/audit';
 import { createHash } from 'crypto';
+import { optimizeUploadedMedia } from '@/utils/mediaStorage';
 
 export const runtime = 'nodejs';
 
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml']);
 const MAX_SIZE = 10 * 1024 * 1024;
+const SVG_CERTIFICATE_ALT_PREFIX = 'certificate-library-svg:';
+const SVG_DISALLOWED_PATTERN =
+  /<\s*(script|foreignobject|iframe|frame|object|embed|audio|video|use|image|link|style|animate|set|animatemotion|animatetransform)\b|on[a-z]+\s*=|(?:xlink:href|href|src)\s*=|<!doctype|<!entity|<\?xml-stylesheet|javascript:|data:text\/html|data:application\/xml|vbscript:/i;
 
 function sanitizeSegment(value: string) {
   return value.replace(/[^a-zA-Z0-9-_]/g, '_');
@@ -19,6 +24,31 @@ function sanitizeSegment(value: string) {
 
 function sanitizeFilename(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+function canUploadSvg(userRole: string, alt: unknown) {
+  const normalizedAlt = typeof alt === 'string' ? alt.trim().toLowerCase() : '';
+  const normalizedRole = String(userRole || '').toUpperCase();
+  const isCertificateSvg = normalizedAlt.startsWith(SVG_CERTIFICATE_ALT_PREFIX);
+  const isPrivilegedUser = normalizedRole === 'ADMIN' || normalizedRole === 'MENTOR';
+  return isCertificateSvg && isPrivilegedUser;
+}
+
+function sanitizeSvgMarkup(raw: string) {
+  const normalized = raw
+    .replace(/\uFEFF/g, '')
+    .replace(/<!--([\s\S]*?)-->/g, '')
+    .trim();
+
+  if (!normalized.toLowerCase().includes('<svg')) {
+    throw new Error('SVG tidak valid');
+  }
+
+  if (SVG_DISALLOWED_PATTERN.test(normalized)) {
+    throw new Error('SVG mengandung elemen atau atribut yang tidak diizinkan');
+  }
+
+  return normalized;
 }
 
 function getCloudinaryConfig() {
@@ -30,8 +60,8 @@ function getCloudinaryConfig() {
 }
 
 async function uploadToCloudinary(opts: {
-  file: File;
   buffer: Buffer;
+  mimeType: string;
   safeUserId: string;
   originalFilename: string;
 }) {
@@ -45,7 +75,7 @@ async function uploadToCloudinary(opts: {
 
   const form = new FormData();
   const bytes = new Uint8Array(opts.buffer);
-  form.set('file', new Blob([bytes], { type: opts.file.type }), opts.originalFilename);
+  form.set('file', new Blob([bytes], { type: opts.mimeType }), opts.originalFilename);
   form.set('api_key', cfg.apiKey);
   form.set('timestamp', String(timestamp));
   form.set('folder', folder);
@@ -81,6 +111,40 @@ export async function POST(req: NextRequest) {
     const user = await verifyToken(token);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+    const ip = getClientIp(req);
+    const ipRl = enforceRateLimit({ key: `media:upload:ip:${ip}`, limit: 40, windowMs: 15 * 60 * 1000 });
+    if (!ipRl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        actor: { id: String(user.id), role: user.role },
+        action: 'MEDIA_UPLOAD_RATE_LIMITED',
+        key: `media:upload:ip:${ip}`,
+        retryAfterSeconds: ipRl.retryAfterSeconds,
+        entityType: 'MediaAsset',
+        metadata: { scope: 'ip' },
+      });
+      return NextResponse.json(
+        { error: 'Terlalu banyak upload. Coba lagi nanti.' },
+        { status: 429, headers: { 'Retry-After': String(ipRl.retryAfterSeconds) } }
+      );
+    }
+    const userRl = enforceRateLimit({ key: `media:upload:user:${String(user.id)}`, limit: 60, windowMs: 15 * 60 * 1000 });
+    if (!userRl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        actor: { id: String(user.id), role: user.role },
+        action: 'MEDIA_UPLOAD_RATE_LIMITED',
+        key: `media:upload:user:${String(user.id)}`,
+        retryAfterSeconds: userRl.retryAfterSeconds,
+        entityType: 'MediaAsset',
+        metadata: { scope: 'user' },
+      });
+      return NextResponse.json(
+        { error: 'Terlalu banyak upload untuk akun ini. Coba lagi nanti.' },
+        { status: 429, headers: { 'Retry-After': String(userRl.retryAfterSeconds) } }
+      );
+    }
+
     const formData = await req.formData();
     const file = formData.get('file');
     const alt = formData.get('alt');
@@ -100,23 +164,40 @@ export async function POST(req: NextRequest) {
     let buffer = Buffer.from(await file.arrayBuffer());
 
     if (file.type === 'image/svg+xml') {
-      const raw = buffer.toString('utf8');
-      const stripped = raw
-        .replace(/\uFEFF/g, '')
-        .replace(/<script[\s\S]*?<\/script>/gi, '')
-        .replace(/\son[a-z]+\s*=\s*(['"]).*?\1/gi, '')
-        .replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, '')
-        .replace(/javascript:/gi, '');
-      const normalized = stripped.trim();
-      if (!normalized.toLowerCase().includes('<svg')) {
-        return NextResponse.json({ error: 'SVG tidak valid' }, { status: 400 });
+      if (!canUploadSvg(user.role, alt)) {
+        return NextResponse.json(
+          { error: 'Upload SVG hanya diizinkan untuk library sertifikat oleh admin atau mentor' },
+          { status: 400 }
+        );
       }
-      buffer = Buffer.from(normalized, 'utf8');
+
+      const raw = buffer.toString('utf8');
+      let sanitizedSvg = '';
+      try {
+        sanitizedSvg = sanitizeSvgMarkup(raw);
+      } catch (error: any) {
+        return NextResponse.json({ error: error?.message || 'SVG tidak valid' }, { status: 400 });
+      }
+      buffer = Buffer.from(sanitizedSvg, 'utf8');
     }
 
     const safeUserId = sanitizeSegment(String(user.id));
     const safeName = sanitizeFilename(file.name);
-    const cloud = await uploadToCloudinary({ file, buffer, safeUserId, originalFilename: safeName });
+    const optimized = await optimizeUploadedMedia({
+      buffer,
+      mimeType: file.type,
+      filename: safeName,
+    });
+    const storedBuffer = optimized.buffer;
+    const storedMimeType = optimized.mimeType;
+    const storedFilename = optimized.filename;
+
+    const cloud = await uploadToCloudinary({
+      buffer: storedBuffer,
+      mimeType: storedMimeType,
+      safeUserId,
+      originalFilename: storedFilename,
+    });
 
     let storagePath: string | null = null;
     let url = '';
@@ -138,9 +219,9 @@ export async function POST(req: NextRequest) {
       await mkdir(uploadDir, { recursive: true });
 
       const timestamp = Date.now();
-      const filename = `${timestamp}-${uuidv4().slice(0, 8)}-${safeName}`;
+      const filename = `${timestamp}-${uuidv4().slice(0, 8)}-${storedFilename}`;
       const absolutePath = path.join(uploadDir, filename);
-      await writeFile(absolutePath, buffer);
+      await writeFile(absolutePath, storedBuffer);
 
       storagePath = path.join('public', 'uploads', 'media', safeUserId, filename);
       url = `/uploads/media/${safeUserId}/${filename}`;
@@ -152,8 +233,8 @@ export async function POST(req: NextRequest) {
         url,
         storagePath,
         filename: file.name,
-        mimeType: file.type,
-        size: file.size,
+        mimeType: storedMimeType,
+        size: storedBuffer.length,
         alt: typeof alt === 'string' && alt.trim() ? alt.trim() : null,
       },
       include: { user: { select: { id: true, name: true, email: true } } },
@@ -165,7 +246,7 @@ export async function POST(req: NextRequest) {
       action: 'MEDIA_UPLOAD',
       entityType: 'MediaAsset',
       entityId: created.id,
-      metadata: { url: created.url, mimeType: created.mimeType, size: created.size },
+      metadata: { url: created.url, mimeType: created.mimeType, size: created.size, originalSize: file.size },
     });
 
     return NextResponse.json(created, { status: 201 });

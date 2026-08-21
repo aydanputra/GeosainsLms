@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const BLOB_PREFIX = 'blob:';
 const CLOUDINARY_RAW_PREFIX = 'cloudinary-raw:';
+const LOCAL_LESSON_STORAGE_DIR = path.resolve(process.cwd(), 'storage', 'lessons');
 
 function getCloudinaryConfig() {
   const cloudName = (process.env.CLOUDINARY_CLOUD_NAME || '').trim();
@@ -102,6 +103,23 @@ function buildSafeAttachmentName(originalName: string) {
     safeName,
     timestamp,
   };
+}
+
+function resolveLocalLessonAttachmentPath(storagePath: string) {
+  const raw = String(storagePath || '').trim();
+  if (!raw) return null;
+
+  const absolutePath = path.resolve(process.cwd(), raw);
+  const relativeFromBase = path.relative(LOCAL_LESSON_STORAGE_DIR, absolutePath);
+  if (
+    relativeFromBase.startsWith('..') ||
+    path.isAbsolute(relativeFromBase) ||
+    !absolutePath.startsWith(LOCAL_LESSON_STORAGE_DIR)
+  ) {
+    return null;
+  }
+
+  return absolutePath;
 }
 
 export async function saveLessonAttachmentFile(args: {
@@ -241,9 +259,10 @@ export async function readLessonAttachmentFile(storagePath: string) {
     };
   }
 
-  const absolutePath = path.isAbsolute(storagePath)
-    ? storagePath
-    : path.join(process.cwd(), storagePath);
+  const absolutePath = resolveLocalLessonAttachmentPath(storagePath);
+  if (!absolutePath) {
+    return null;
+  }
   const stats = await stat(absolutePath);
   const fileBuffer = await readFile(absolutePath);
 
@@ -289,8 +308,7 @@ export async function deleteLessonAttachmentFile(storagePath?: string | null) {
     return;
   }
 
-  const absolutePath = path.isAbsolute(storagePath)
-    ? storagePath
-    : path.join(process.cwd(), storagePath);
+  const absolutePath = resolveLocalLessonAttachmentPath(storagePath);
+  if (!absolutePath) return;
   await unlink(absolutePath);
 }

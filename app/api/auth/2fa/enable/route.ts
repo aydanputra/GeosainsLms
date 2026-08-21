@@ -4,7 +4,7 @@ import { createToken, verifyToken } from '@/modules/auth/utils/auth';
 import { enforceRateLimit, getClientIp, isSameOrigin } from '@/modules/auth/utils/security';
 import { jwtVerify } from 'jose';
 import { createCipheriv, createHash, createHmac, randomBytes } from 'crypto';
-import { writeAuditLog } from '@/utils/audit';
+import { writeAuditLog, writeRateLimitAuditLog } from '@/utils/audit';
 
 function getJwtKey() {
   const secret = process.env.JWT_SECRET;
@@ -88,6 +88,12 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
     const rl = enforceRateLimit({ key: `auth:2fa:enable:${ip}`, limit: 25, windowMs: 15 * 60 * 1000 });
     if (!rl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        action: 'AUTH_2FA_ENABLE_RATE_LIMITED',
+        key: `auth:2fa:enable:${ip}`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      });
       return NextResponse.json(
         { error: 'Terlalu banyak percobaan. Coba lagi nanti.' },
         { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
@@ -118,9 +124,15 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     if (user.totpEnabled) return NextResponse.json({ error: 'Verifikasi 2 langkah sudah aktif' }, { status: 400 });
 
-    await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: uid },
-      data: { totpEnabled: true, totpSecretEnc: encryptSecret(secret), totpVerifiedAt: new Date() },
+      data: {
+        totpEnabled: true,
+        totpSecretEnc: encryptSecret(secret),
+        totpVerifiedAt: new Date(),
+        sessionVersion: { increment: 1 },
+      },
+      select: { id: true, email: true, role: true, isSuperAdmin: true, sessionVersion: true },
     });
 
     const actorRoleRaw = typeof (payload as any)?.role === 'string' ? String((payload as any).role).toUpperCase() : '';
@@ -137,10 +149,11 @@ export async function POST(req: NextRequest) {
 
     const authToken = await createToken({
       id: uid,
-      email: String(user.email || ''),
+      email: String(updatedUser.email || ''),
       role: actorRole,
-      isSuperAdmin: Boolean((user as any)?.isSuperAdmin),
+      isSuperAdmin: Boolean((updatedUser as any)?.isSuperAdmin),
       totpEnabled: true,
+      sessionVersion: Number((updatedUser as any)?.sessionVersion || 0),
     });
 
     const res = NextResponse.json({ ok: true }, { status: 200 });

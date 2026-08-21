@@ -23,5 +23,5 @@ export default async function Page() {
     }
   });
 
-  return <StudentAffiliate stats={stats} />;
+  return <StudentAffiliate stats={stats} isMentor={role === 'MENTOR'} />;
 }

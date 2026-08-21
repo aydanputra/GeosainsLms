@@ -3,6 +3,7 @@ import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { mkdir, unlink, writeFile } from 'fs/promises';
 import path from 'path';
+import { getAssignmentAccessContext, getCourseLessonSequence } from '@/modules/course/api/performance';
 
 export const runtime = 'nodejs';
 
@@ -51,16 +52,41 @@ function parseStoredFiles(fileUrl: string): { files: Array<{ path: string; name?
   return { files: normalized };
 }
 
+function resolveAssignmentStoragePath(relativePath: string) {
+  const normalizedRelative = path.normalize(String(relativePath || '').trim());
+  if (!normalizedRelative) return null;
+
+  const baseDir = path.resolve(process.cwd(), 'storage', 'assignments');
+  const absolutePath = path.resolve(process.cwd(), normalizedRelative);
+  const relativeFromBase = path.relative(baseDir, absolutePath);
+
+  if (
+    relativeFromBase.startsWith('..') ||
+    path.isAbsolute(relativeFromBase) ||
+    !absolutePath.startsWith(baseDir)
+  ) {
+    return null;
+  }
+
+  return absolutePath;
+}
+
 async function deleteStoredFiles(fileUrl: string) {
   const manifest = parseStoredFiles(fileUrl);
   if (manifest) {
     await Promise.all(
-      manifest.files.map((f) => unlink(path.join(process.cwd(), f.path)).catch(() => undefined))
+      manifest.files.map((f) => {
+        const absolutePath = resolveAssignmentStoragePath(f.path);
+        if (!absolutePath) return Promise.resolve(undefined);
+        return unlink(absolutePath).catch(() => undefined);
+      })
     );
     return;
   }
   if (fileUrl && fileUrl !== 'PENDING') {
-    await unlink(path.join(process.cwd(), fileUrl)).catch(() => undefined);
+    const absolutePath = resolveAssignmentStoragePath(fileUrl);
+    if (!absolutePath) return;
+    await unlink(absolutePath).catch(() => undefined);
   }
 }
 
@@ -99,20 +125,8 @@ async function checkStudentAccess(args: {
   }
 
   if (course.dripEnabled) {
-    const modules = await prisma.module.findMany({
-      where: { courseId: course.id },
-      orderBy: { order: 'asc' },
-      select: {
-        lessons: {
-          orderBy: { order: 'asc' },
-          select: { id: true, isPreview: true },
-        },
-      },
-    });
-
-    const globalLessons = modules.flatMap((m: { lessons: { id: string; isPreview: boolean }[] }) =>
-      m.lessons.map((l) => ({ id: l.id, isPreview: l.isPreview }))
-    );
+    const sequence = await getCourseLessonSequence(course.id);
+    const globalLessons = sequence.globalLessons;
     const idx = globalLessons.findIndex((l: { id: string }) => l.id === lessonId);
     const now = new Date();
 
@@ -170,10 +184,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ assi
     const user = await verifyToken(token);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const assignment = await prisma.assignment.findUnique({
-      where: { id: assignmentId },
-      include: { lesson: { include: { module: { include: { course: true } } } } },
-    });
+    const assignment = await getAssignmentAccessContext(assignmentId);
 
     if (!assignment) return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
 
@@ -210,25 +221,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ assi
       if (accessError) return NextResponse.json(accessError.body, { status: accessError.status });
 
       const settings = getAssignmentSettings(assignment.lesson?.content as any);
-      const attemptsUsed = settings.allowResubmission
-        ? await prisma.assignmentSubmission.count({ where: { assignmentId, userId: String(user.id) } })
-        : await prisma.assignmentSubmission.count({ where: { assignmentId, userId: String(user.id) } });
+      const [attemptsUsed, submission] = await Promise.all([
+        prisma.assignmentSubmission.count({ where: { assignmentId, userId: String(user.id) } }),
+        prisma.assignmentSubmission.findFirst({
+          where: { assignmentId, userId: user.id },
+          orderBy: { submittedAt: 'desc' },
+          select: {
+            id: true,
+            notes: true,
+            grade: true,
+            feedback: true,
+            status: true,
+            submittedAt: true,
+            gradedAt: true,
+            fileUrl: true,
+          },
+        }),
+      ]);
       const attemptsLeft = settings.allowResubmission ? Math.max(0, settings.maxResubmissionAttempts - attemptsUsed) : 0;
-
-      const submission = await prisma.assignmentSubmission.findFirst({
-        where: { assignmentId, userId: user.id },
-        orderBy: { submittedAt: 'desc' },
-        select: {
-          id: true,
-          notes: true,
-          grade: true,
-          feedback: true,
-          status: true,
-          submittedAt: true,
-          gradedAt: true,
-          fileUrl: true,
-        },
-      });
 
       const downloadUrls =
         submission && typeof submission.fileUrl === 'string'
@@ -325,10 +335,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ass
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
-    const assignment = await prisma.assignment.findUnique({
-      where: { id: assignmentId },
-      include: { lesson: { include: { module: { include: { course: true } } } } },
-    });
+    const assignment = await getAssignmentAccessContext(assignmentId);
 
     if (!assignment) return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
 

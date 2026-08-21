@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowRight, BookOpen, Loader2, Star } from 'lucide-react';
+import { ArrowRight, BookOpen, Star } from 'lucide-react';
+import { normalizeImageUrl, toOptimizedImageUrl } from '@/modules/core/utils/image';
 
 type CoursesContent = {
   heading?: string;
@@ -25,23 +26,17 @@ type PublicCourse = {
   level?: string | null;
   ratingAvg?: number | null;
   ratingCount?: number | null;
+  isPublic?: boolean | null;
 };
 
-export default function CoursesBlock({ content }: { content: CoursesContent }) {
-  const heading = typeof content?.heading === 'string' ? content.heading : 'Kursus';
-  const subheading = typeof content?.subheading === 'string' ? content.subheading : '';
-  const limit = typeof content?.limit === 'number' ? content.limit : 6;
-  const publicOnly = typeof content?.publicOnly === 'boolean' ? content.publicOnly : false;
-  const ctaText = typeof content?.cta?.text === 'string' ? content.cta.text : '';
-  const ctaHref = typeof content?.cta?.href === 'string' ? content.cta.href : '/courses';
-
-  const query = useMemo(() => {
-    const params = new URLSearchParams({ published: 'true' });
-    if (publicOnly) params.set('publicOnly', 'true');
-    return params.toString();
-  }, [publicOnly]);
-  const [courses, setCourses] = useState<PublicCourse[] | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+function CourseBlockCard({
+  course,
+  index,
+}: {
+  course: PublicCourse;
+  index: number;
+}) {
+  const [imgError, setImgError] = useState(false);
 
   const getLevelBars = (level?: string | null) => {
     if (level === 'ADVANCED') return 3;
@@ -49,38 +44,135 @@ export default function CoursesBlock({ content }: { content: CoursesContent }) {
     return 1;
   };
 
-  const resolveThumbnail = (value: string | null | undefined) => {
-    if (!value) return null;
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (trimmed.startsWith('blob:')) return null;
-    if (trimmed.startsWith('/') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
-    return null;
-  };
+  const thumb = normalizeImageUrl(course.thumbnailUrl);
+  const optimizedThumb = toOptimizedImageUrl(thumb, { width: 720, height: 405, fit: 'fill' });
+  const canShowImage = Boolean(optimizedThumb && !imgError);
+  const shouldPrioritize = index < 3;
 
-  useEffect(() => {
-    let isMounted = true;
+  return (
+    <Link
+      href={course.slug ? `/courses/${course.slug}` : '/courses'}
+      className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow group flex flex-col"
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '320px' }}
+    >
+      <div className="aspect-video bg-slate-100 relative overflow-hidden">
+        {canShowImage ? (
+          <Image
+            src={optimizedThumb!}
+            alt={course.title || 'Kursus'}
+            fill
+            sizes="(max-width: 640px) calc(100vw - 2rem), (max-width: 1024px) calc(50vw - 2rem), 360px"
+            priority={shouldPrioritize}
+            className="object-cover group-hover:scale-[1.02] transition-transform"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-slate-300">
+            <BookOpen className="w-10 h-10" />
+          </div>
+        )}
+      </div>
+      <div className="p-4 flex-1 flex flex-col gap-2">
+        <h3 className="font-[700] text-slate-900 line-clamp-2 text-base leading-[27px] transition-colors group-hover:text-blue-800">
+          {course.title}
+        </h3>
 
-    (async () => {
-      try {
-        const res = await fetch(`/api/courses?${query}`);
-        if (!res.ok) throw new Error('Gagal memuat kursus');
-        const data = await res.json();
-        if (!isMounted) return;
-        setCourses(Array.isArray(data) ? (data as PublicCourse[]) : []);
-      } catch {
-        if (!isMounted) return;
-        setCourses([]);
-      } finally {
-        if (!isMounted) return;
-        setIsLoading(false);
-      }
-    })();
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-xs text-slate-500 truncate">{course.instructor?.name || course.instructor?.email || ''}</div>
+          {(() => {
+            const price = typeof course.price === 'number' && Number.isFinite(course.price) ? course.price : Number(course.price || 0) || 0;
+            const normalPrice =
+              typeof course.normalPrice === 'number' && Number.isFinite(course.normalPrice)
+                ? course.normalPrice
+                : course.normalPrice
+                  ? Number(course.normalPrice)
+                  : 0;
+            const showDiscountPrice = price > 0;
+            const showNormalPrice = normalPrice > 0 && (!showDiscountPrice || normalPrice > price);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [query]);
+            if (!showDiscountPrice && !showNormalPrice) return null;
+
+            return (
+              <div className="flex items-baseline justify-end gap-2 shrink-0">
+                {showNormalPrice ? (
+                  <span className="text-sm font-semibold text-rose-500 line-through price-blink">
+                    Rp {Math.round(normalPrice).toLocaleString('id-ID')}
+                  </span>
+                ) : null}
+                <span className={showDiscountPrice ? 'text-sm font-extrabold text-slate-600' : 'text-sm font-extrabold text-emerald-600'}>
+                  {showDiscountPrice ? `Rp ${Math.round(price).toLocaleString('id-ID')}` : 'Gratis'}
+                </span>
+              </div>
+            );
+          })()}
+        </div>
+
+        <div className="mt-auto flex items-end justify-between gap-3 pt-1">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {(() => {
+              const ratingAvg =
+                typeof course.ratingAvg === 'number' && Number.isFinite(course.ratingAvg) ? course.ratingAvg : 0;
+              const ratingCount =
+                typeof course.ratingCount === 'number' && Number.isFinite(course.ratingCount) ? course.ratingCount : 0;
+              const filled = Math.max(0, Math.min(5, Math.round(ratingAvg)));
+              return (
+                <>
+                  <div className="flex items-center gap-0.5">
+                    {Array.from({ length: 5 }).map((_, i) => {
+                      const active = i < filled;
+                      return (
+                        <Star
+                          key={i}
+                          className={`w-4 h-4 ${active ? 'text-amber-500' : 'text-slate-300'}`}
+                          fill={active ? 'currentColor' : 'none'}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div className="text-xs text-slate-500">({ratingCount})</div>
+                </>
+              );
+            })()}
+          </div>
+
+          <div className="flex items-end gap-1">
+            {Array.from({ length: 3 }).map((_, idx) => {
+              const active = idx < getLevelBars(course.level);
+              const heightClass = idx === 0 ? 'h-2.5' : idx === 1 ? 'h-4' : 'h-6';
+              return (
+                <div
+                  key={idx}
+                  className={`w-2 rounded-full ${heightClass} ${active ? 'bg-indigo-600' : 'bg-indigo-200'}`}
+                />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+export default function CoursesBlock({
+  content,
+  initialCourses = [],
+}: {
+  content: CoursesContent;
+  initialCourses?: PublicCourse[];
+  hydratedFromServer?: boolean;
+}) {
+  const heading = typeof content?.heading === 'string' ? content.heading : 'Kursus';
+  const subheading = typeof content?.subheading === 'string' ? content.subheading : '';
+  const limit = typeof content?.limit === 'number' ? content.limit : 6;
+  const publicOnly = typeof content?.publicOnly === 'boolean' ? content.publicOnly : false;
+  const ctaText = typeof content?.cta?.text === 'string' ? content.cta.text : '';
+  const ctaHref = typeof content?.cta?.href === 'string' ? content.cta.href : '/courses';
+  const [courses] = useState<PublicCourse[] | null>(Array.isArray(initialCourses) ? initialCourses : []);
+
+  const visibleCourses = useMemo(() => {
+    const list = Array.isArray(courses) ? courses : [];
+    return publicOnly ? list.filter((course) => course.isPublic === true) : list;
+  }, [courses, publicOnly]);
 
   return (
     <section className="w-full bg-slate-50">
@@ -101,117 +193,11 @@ export default function CoursesBlock({ content }: { content: CoursesContent }) {
         </div>
 
         <div className="mt-6 sm:mt-8">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-10 text-slate-500 gap-3">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span className="font-medium">Memuat kursus...</span>
-            </div>
-          ) : courses && courses.length > 0 ? (
+          {visibleCourses.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-              {courses.slice(0, limit).map((course) => {
-                const thumb = resolveThumbnail(course.thumbnailUrl);
-                return (
-                  <Link
-                    key={course.id}
-                    href={course.slug ? `/courses/${course.slug}` : '/courses'}
-                    className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow group flex flex-col"
-                  >
-                    <div className="aspect-video bg-slate-100 relative overflow-hidden">
-                      {thumb ? (
-                        <Image
-                          src={thumb}
-                          alt={course.title || 'Kursus'}
-                          fill
-                          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                          unoptimized
-                          className="object-cover group-hover:scale-[1.02] transition-transform"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-slate-300">
-                          <BookOpen className="w-10 h-10" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-4 flex-1 flex flex-col gap-2">
-                      <h3 className="font-[700] text-slate-900 line-clamp-2 text-base leading-[27px] transition-colors group-hover:text-blue-800">
-                        {course.title}
-                      </h3>
-
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-xs text-slate-500 truncate">{course.instructor?.name || course.instructor?.email || ''}</div>
-                        {(() => {
-                          const price = typeof course.price === 'number' && Number.isFinite(course.price) ? course.price : Number(course.price || 0) || 0;
-                          const normalPrice =
-                            typeof course.normalPrice === 'number' && Number.isFinite(course.normalPrice)
-                              ? course.normalPrice
-                              : course.normalPrice
-                                ? Number(course.normalPrice)
-                                : 0;
-                          const showDiscountPrice = price > 0;
-                          const showNormalPrice = normalPrice > 0 && (!showDiscountPrice || normalPrice > price);
-
-                          if (!showDiscountPrice && !showNormalPrice) return null;
-
-                          return (
-                            <div className="flex items-baseline justify-end gap-2 shrink-0">
-                              {showNormalPrice ? (
-                                <span className="text-sm font-semibold text-rose-500 line-through price-blink">
-                                  Rp {Math.round(normalPrice).toLocaleString('id-ID')}
-                                </span>
-                              ) : null}
-                              <span className={showDiscountPrice ? 'text-sm font-extrabold text-slate-600' : 'text-sm font-extrabold text-emerald-600'}>
-                                {showDiscountPrice ? `Rp ${Math.round(price).toLocaleString('id-ID')}` : 'Gratis'}
-                              </span>
-                            </div>
-                          );
-                        })()}
-                      </div>
-
-                      <div className="mt-auto flex items-end justify-between gap-3 pt-1">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          {(() => {
-                            const ratingAvg =
-                              typeof course.ratingAvg === 'number' && Number.isFinite(course.ratingAvg) ? course.ratingAvg : 0;
-                            const ratingCount =
-                              typeof course.ratingCount === 'number' && Number.isFinite(course.ratingCount) ? course.ratingCount : 0;
-                            const filled = Math.max(0, Math.min(5, Math.round(ratingAvg)));
-                            return (
-                              <>
-                                <div className="flex items-center gap-0.5">
-                                  {Array.from({ length: 5 }).map((_, i) => {
-                                    const active = i < filled;
-                                    return (
-                                      <Star
-                                        key={i}
-                                        className={`w-4 h-4 ${active ? 'text-amber-500' : 'text-slate-300'}`}
-                                        fill={active ? 'currentColor' : 'none'}
-                                      />
-                                    );
-                                  })}
-                                </div>
-                                <div className="text-xs text-slate-500">({ratingCount})</div>
-                              </>
-                            );
-                          })()}
-                        </div>
-
-                        <div className="flex items-end gap-1">
-                          {Array.from({ length: 3 }).map((_, idx) => {
-                            const active = idx < getLevelBars(course.level);
-                            const heightClass = idx === 0 ? 'h-2.5' : idx === 1 ? 'h-4' : 'h-6';
-                            return (
-                              <div
-                                key={idx}
-                                className={`w-2 rounded-full ${heightClass} ${active ? 'bg-indigo-600' : 'bg-indigo-200'}`}
-                              />
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
+              {visibleCourses.slice(0, limit).map((course, index) => (
+                <CourseBlockCard key={course.id} course={course} index={index} />
+              ))}
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center">

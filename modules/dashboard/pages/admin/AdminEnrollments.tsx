@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Loader2, Plus, RotateCcw, Search, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
@@ -26,13 +26,6 @@ function toIsoStart(dateValue: string) {
 
 function toIsoEnd(dateValue: string) {
   return new Date(`${dateValue}T23:59:59.999Z`).toISOString();
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) return '-';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '-';
-  return d.toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function clampPercent(value: number) {
@@ -72,7 +65,7 @@ export default function AdminEnrollments({ courses }: { courses: CourseOption[] 
     return students.filter((s) => (s.name || s.email).toLowerCase().includes(q) || s.email.toLowerCase().includes(q));
   }, [students, studentsSearch]);
 
-  const fetchEnrollments = async (args: { reset: boolean }) => {
+  const fetchEnrollments = useCallback(async (args: { reset: boolean }) => {
     if (isLoading) return;
     setIsLoading(true);
     setError(null);
@@ -106,11 +99,11 @@ export default function AdminEnrollments({ courses }: { courses: CourseOption[] 
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [courseId, fromDate, isLoading, nextCursor, search, toDate]);
 
   useEffect(() => {
-    fetchEnrollments({ reset: true });
-  }, []);
+    void fetchEnrollments({ reset: true });
+  }, [fetchEnrollments]);
 
   const toggleAllOnPage = () => {
     const allIds = rows.map((r) => r.id);
@@ -177,12 +170,12 @@ export default function AdminEnrollments({ courses }: { courses: CourseOption[] 
     try {
       if (bulkAction === 'RESET_PROGRESS') {
         for (const id of ids) {
-          // eslint-disable-next-line no-await-in-loop
+           
           await resetProgress(id);
         }
       } else {
         for (const id of ids) {
-          // eslint-disable-next-line no-await-in-loop
+           
           await unenroll(id);
         }
       }

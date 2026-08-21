@@ -9,6 +9,8 @@ type SiteSettings = {
   siteName?: string;
   siteDescription?: string;
   contactEmail?: string;
+  contactPhone?: string;
+  adminWhatsapp?: string;
   logoUrl?: string;
   faviconUrl?: string;
   paymentMethod?: 'XENDIT' | 'MIDTRANS' | 'MANUAL';
@@ -40,6 +42,8 @@ function toSettings(obj: Record<string, unknown>): SiteSettings {
   const siteName = v('siteName');
   const siteDescription = v('siteDescription');
   const contactEmail = v('contactEmail');
+  const contactPhone = v('contactPhone');
+  const adminWhatsapp = v('adminWhatsapp');
   const logoUrl = v('logoUrl');
   const faviconUrl = v('faviconUrl');
   const paymentMethodRaw = v('paymentMethod').toUpperCase();
@@ -55,6 +59,8 @@ function toSettings(obj: Record<string, unknown>): SiteSettings {
     ...(siteName ? { siteName } : {}),
     ...(siteDescription ? { siteDescription } : {}),
     ...(contactEmail ? { contactEmail } : {}),
+    ...(contactPhone ? { contactPhone } : {}),
+    ...(adminWhatsapp ? { adminWhatsapp } : {}),
     ...(logoUrl ? { logoUrl } : {}),
     ...(faviconUrl ? { faviconUrl } : {}),
     ...(paymentMethod ? { paymentMethod: paymentMethod as any } : {}),
@@ -115,6 +121,9 @@ export async function PUT(req: NextRequest) {
     const existing = safeParse(existingPage?.content);
     const patch = toSettings(body);
     const merged = { ...(existing || {}), ...(patch || {}) } as Record<string, unknown>;
+    if (Object.prototype.hasOwnProperty.call(body, 'adminWhatsapp') && !('adminWhatsapp' in patch)) {
+      delete merged.adminWhatsapp;
+    }
     const next = merged;
 
     const saved = await prisma.page.upsert({

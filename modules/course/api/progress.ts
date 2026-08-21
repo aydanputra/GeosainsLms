@@ -9,6 +9,8 @@ export const useCourseProgress = (courseId: string) => {
       return res.json();
     },
     enabled: !!courseId,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
   });
 };
 
@@ -29,8 +31,31 @@ export const useUpdateLessonProgress = (courseId: string) => {
       }
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['courseProgress', courseId] });
+    onSuccess: (_data, variables) => {
+      queryClient.setQueryData(
+        ['courseProgress', courseId],
+        (previous:
+          | {
+              completedLessonIds?: string[];
+              totalLessons?: number;
+              completedLessons?: number;
+            }
+          | undefined) => {
+          if (!previous) return previous;
+          const currentCompleted = Array.isArray(previous.completedLessonIds) ? previous.completedLessonIds : [];
+          if (currentCompleted.includes(variables.lessonId)) return previous;
+
+          const completedLessonIds = [...currentCompleted, variables.lessonId];
+          return {
+            ...previous,
+            completedLessonIds,
+            completedLessons:
+              typeof previous.totalLessons === 'number'
+                ? Math.min(completedLessonIds.length, previous.totalLessons)
+                : completedLessonIds.length,
+          };
+        }
+      );
     },
   });
 };

@@ -4,7 +4,7 @@ import Cards from '../../components/Cards';
 import Table from '../../components/Tables';
 import ReferralDashboard from '../../../affiliate/components/ReferralDashboard';
 import { useStudentStats, useStudentCourses } from '../../api/service';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 
 interface StudentDashboardProps {
@@ -15,31 +15,18 @@ interface StudentDashboardProps {
   };
   courses: any[];
   affiliateStats?: any;
+  becomeInstructorEnabled?: boolean;
 }
 
-export default function StudentDashboard({ stats: initialStats, courses: initialCourses, affiliateStats }: StudentDashboardProps) {
-  const { data: stats, isLoading: statsLoading } = useStudentStats();
-  const { data: courses, isLoading: coursesLoading } = useStudentCourses();
-  const [becomeInstructorEnabled, setBecomeInstructorEnabled] = useState(false);
+export default function StudentDashboard({
+  stats: initialStats,
+  courses: initialCourses,
+  affiliateStats,
+  becomeInstructorEnabled = false,
+}: StudentDashboardProps) {
+  const { data: stats, isLoading: statsLoading } = useStudentStats(initialStats);
+  const { data: courses, isLoading: coursesLoading } = useStudentCourses(initialCourses);
   const [isRequesting, setIsRequesting] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const res = await fetch('/api/course-settings', { cache: 'no-store' });
-        const data = await res.json().catch(() => ({}));
-        if (!active) return;
-        setBecomeInstructorEnabled(Boolean(data?.becomeInstructorButtonEnabled));
-      } catch {
-        if (!active) return;
-        setBecomeInstructorEnabled(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const displayedStats = stats || initialStats;
   const displayedCourses = courses || initialCourses;
@@ -115,7 +102,7 @@ export default function StudentDashboard({ stats: initialStats, courses: initial
           columns={courseColumns} 
           data={displayedCourses || []} 
           isLoading={coursesLoading}
-          actions={(row) => (
+          actions={() => (
             <button className="text-indigo-700 hover:text-indigo-900 text-sm font-bold">Lanjutkan</button>
           )}
         />

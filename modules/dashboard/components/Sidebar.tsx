@@ -20,7 +20,6 @@ import {
   Eye,
   ChevronDown,
   ChevronRight,
-  Book,
   ClipboardList,
   Megaphone,
   MessageSquare,
@@ -31,21 +30,39 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import Image from 'next/image';
 
+type DashboardUser = {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string | null;
+  role: 'ADMIN' | 'MENTOR' | 'STUDENT' | 'VENDOR';
+  isSuperAdmin?: boolean;
+};
+
 interface SidebarProps {
   role: 'ADMIN' | 'MENTOR' | 'STUDENT' | 'VENDOR';
+  currentUser?: DashboardUser | null;
+  initialVendorMenu?: {
+    mode: 'NONE' | 'PENDING' | 'ACTIVE';
+    isOwner: boolean;
+  };
+  initialSiteLogoUrl?: string;
   qaUnansweredCount?: number;
 }
 
-export default function Sidebar({ role, qaUnansweredCount = 0 }: SidebarProps) {
+export default function Sidebar({ role, currentUser = null, initialVendorMenu, initialSiteLogoUrl = '', qaUnansweredCount = 0 }: SidebarProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { sidebarCollapsed, toggleSidebarCollapse, setSidebarOpen, startNavigation, user } = useDashboardStore();
+  const { sidebarCollapsed, toggleSidebarCollapse, setSidebarOpen, startNavigation } = useDashboardStore();
+  const user = currentUser;
   const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
-  const [siteLogoUrl, setSiteLogoUrl] = useState<string>('');
-  const [vendorMenu, setVendorMenu] = useState<{ mode: 'NONE' | 'PENDING' | 'ACTIVE'; isOwner: boolean }>({
-    mode: 'NONE',
-    isOwner: false,
-  });
+  const [siteLogoUrl, setSiteLogoUrl] = useState<string>(initialSiteLogoUrl);
+  const [vendorMenu, setVendorMenu] = useState<{ mode: 'NONE' | 'PENDING' | 'ACTIVE'; isOwner: boolean }>(
+    initialVendorMenu || {
+      mode: 'NONE',
+      isOwner: false,
+    }
+  );
 
   // Close mobile sidebar on route change
   if (typeof window !== 'undefined') {
@@ -67,8 +84,35 @@ export default function Sidebar({ role, qaUnansweredCount = 0 }: SidebarProps) {
     ? [
         { href: '/dashboard/admin', label: 'Beranda', icon: LayoutDashboard },
         { href: '/dashboard/admin/inbox', label: 'Pesan & Notifikasi', icon: MessageSquare },
-        { href: '/dashboard/admin/courses/settings', label: 'Pengaturan Kursus', icon: BookOpen },
-        { href: '/dashboard/admin/shop/vendors', label: 'Pengaturan Vendor', icon: ShoppingBag },
+        {
+          label: 'Manajemen Kursus',
+          icon: BookOpen,
+          submenu: [
+            { href: '/dashboard/admin/courses', label: 'Daftar Kursus' },
+            { href: '/dashboard/admin/courses/new', label: 'Tambah Kursus' },
+            { href: '/dashboard/admin/courses/students', label: 'Siswa' },
+            { href: '/dashboard/admin/assignments', label: 'Tugas' },
+            { href: '/dashboard/admin/enrollments', label: 'Pendaftaran' },
+            { href: '/dashboard/admin/quiz-attempts', label: 'Percobaan Kuis' },
+            { href: '/dashboard/admin/instructors', label: 'Instruktur' },
+            { href: '/dashboard/admin/course-reports', label: 'Laporan' },
+            { href: '/dashboard/admin/courses/categories', label: 'Kategori Kursus' },
+            { href: '/dashboard/admin/courses/announcements', label: 'Pengumuman' },
+            { href: '/dashboard/admin/courses/qa', label: 'Tanya Jawab' },
+            { href: '/dashboard/admin/gradebook', label: 'Buku Nilai' },
+            { href: '/dashboard/admin/evaluations', label: 'Evaluasi' },
+            { href: '/dashboard/admin/courses/settings', label: 'Pengaturan Kursus' },
+          ],
+        },
+        {
+          label: 'Manajemen Toko',
+          icon: ShoppingBag,
+          submenu: [
+            { href: '/dashboard/admin/shop', label: 'Kelola Produk' },
+            { href: '/dashboard/admin/shop/categories', label: 'Kategori Produk' },
+            { href: '/dashboard/admin/shop/vendors', label: 'Manajemen Vendor' },
+          ],
+        },
         {
           label: 'Operasional',
           icon: BarChart2,
@@ -78,7 +122,18 @@ export default function Sidebar({ role, qaUnansweredCount = 0 }: SidebarProps) {
             { href: '/dashboard/admin/sales/withdraw', label: 'Withdraw' },
           ],
         },
+        {
+          label: 'Artikel',
+          icon: FileText,
+          submenu: [
+            { href: '/dashboard/admin/blog', label: 'Semua Artikel' },
+            { href: '/dashboard/admin/blog/new', label: 'Tambah Artikel' },
+            { href: '/dashboard/admin/blog/categories', label: 'Kategori Artikel' },
+            { href: '/dashboard/admin/blog/tags', label: 'Tag Artikel' },
+          ],
+        },
         { href: '/dashboard/admin/affiliate', label: 'Affiliate', icon: Megaphone },
+        { href: '/dashboard/admin/pages', label: 'Halaman / Situs', icon: Globe },
         { href: '/dashboard/admin/reports', label: 'Laporan & Analitik', icon: ClipboardList },
         { href: '/dashboard/admin/audit', label: 'Audit Log', icon: Eye },
         { href: '/dashboard/admin/settings', label: 'Pengaturan Platform', icon: Settings },
@@ -87,6 +142,7 @@ export default function Sidebar({ role, qaUnansweredCount = 0 }: SidebarProps) {
           label: 'User',
           icon: CircleUser,
           submenu: [
+            { href: '/dashboard/profile', label: 'Profil Saya' },
             { href: '/dashboard/settings', label: 'Pengaturan' },
             { href: '/dashboard/admin/users', label: 'Manajemen User' },
           ],
@@ -193,6 +249,22 @@ export default function Sidebar({ role, qaUnansweredCount = 0 }: SidebarProps) {
         ],
       },
 
+      { type: 'section', label: 'Pembelajaran Saya' },
+      {
+        id: 'MENTOR_STUDENT_GROUP',
+        label: 'Siswa',
+        icon: BookOpen,
+        submenu: [
+          { href: '/dashboard/student', label: 'Dashboard Belajar' },
+          { href: '/dashboard/student/analytics', label: 'Progress Belajar' },
+          { href: '/dashboard/student/courses', label: 'Kursus Diikuti' },
+          { href: '/dashboard/student/orders', label: 'Riwayat Pembelian' },
+          { href: '/dashboard/student/quizzes', label: 'Kuis Saya' },
+          { href: '/dashboard/student/certificates', label: 'Sertifikat Saya' },
+          { href: '/dashboard/student/affiliate', label: 'Affiliate Saya' },
+        ],
+      },
+
       { type: 'section', label: 'Vendor' },
       {
         id: 'VENDOR_GROUP',
@@ -222,7 +294,7 @@ export default function Sidebar({ role, qaUnansweredCount = 0 }: SidebarProps) {
         submenu: [
           { href: '/dashboard/mentor/marketing/coupons?view=discounts', label: 'Diskon' },
           { href: '/dashboard/mentor/marketing/coupons?view=coupons', label: 'Kupon' },
-          { href: '/dashboard/student/affiliate', label: 'Affiliate' },
+          { href: '/dashboard/mentor/marketing/affiliate', label: 'Affiliate' },
         ],
       },
 
@@ -358,50 +430,21 @@ export default function Sidebar({ role, qaUnansweredCount = 0 }: SidebarProps) {
   };
 
   useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const res = await fetch('/api/site-settings');
-        const data = await res.json().catch(() => ({}));
-        if (!active) return;
-        const logoUrl = typeof data?.logoUrl === 'string' ? data.logoUrl : '';
-        setSiteLogoUrl(logoUrl);
-      } catch {
-        if (!active) return;
-        setSiteLogoUrl('');
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
+    setSiteLogoUrl(initialSiteLogoUrl || '');
+  }, [initialSiteLogoUrl]);
 
   useEffect(() => {
-    if (role === 'ADMIN' || role === 'VENDOR') return;
-    if (!user?.id) return;
-    let active = true;
-    (async () => {
-      try {
-        const res = await fetch('/api/shop/vendors', { cache: 'no-store' });
-        const data = await res.json().catch(() => []);
-        if (!active) return;
-        if (!res.ok) {
-          setVendorMenu({ mode: 'NONE', isOwner: false });
-          return;
-        }
-        const list = Array.isArray(data) ? data : [];
-        const mode = list.length === 0 ? 'NONE' : list.some((v: any) => String(v?.status || '') === 'APPROVED') ? 'ACTIVE' : 'PENDING';
-        const isOwner = list.length > 0 ? list.some((v: any) => String(v?.ownerId || '') === String(user.id)) : false;
-        setVendorMenu({ mode, isOwner });
-      } catch {
-        if (!active) return;
-        setVendorMenu({ mode: 'NONE', isOwner: false });
+    if (role === 'ADMIN' || role === 'VENDOR') {
+      setVendorMenu({ mode: 'NONE', isOwner: false });
+      return;
+    }
+    setVendorMenu(
+      initialVendorMenu || {
+        mode: 'NONE',
+        isOwner: false,
       }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [role, user?.id]);
+    );
+  }, [initialVendorMenu, role]);
 
   return (
     <aside 
@@ -562,7 +605,7 @@ export default function Sidebar({ role, qaUnansweredCount = 0 }: SidebarProps) {
         {/* Footer User Profile */}
         <div className="p-4 border-t border-slate-800 bg-slate-900/50 backdrop-blur-sm sticky bottom-0">
           {(() => {
-            const profileHref = role === 'ADMIN' ? '/dashboard/admin/profile' : '/dashboard/profile';
+            const profileHref = '/dashboard/profile';
             return (
           <Link
             href={profileHref}

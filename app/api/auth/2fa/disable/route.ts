@@ -3,7 +3,7 @@ import { prisma } from '@/utils/prisma';
 import { createToken, verifyPassword, verifyToken } from '@/modules/auth/utils/auth';
 import { enforceRateLimit, getClientIp, isSameOrigin } from '@/modules/auth/utils/security';
 import { createDecipheriv, createHash, createHmac } from 'crypto';
-import { writeAuditLog } from '@/utils/audit';
+import { writeAuditLog, writeRateLimitAuditLog } from '@/utils/audit';
 
 function getEncKey() {
   const secret = process.env.JWT_SECRET;
@@ -85,6 +85,12 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
     const rl = enforceRateLimit({ key: `auth:2fa:disable:${ip}`, limit: 25, windowMs: 15 * 60 * 1000 });
     if (!rl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        action: 'AUTH_2FA_DISABLE_RATE_LIMITED',
+        key: `auth:2fa:disable:${ip}`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      });
       return NextResponse.json(
         { error: 'Terlalu banyak percobaan. Coba lagi nanti.' },
         { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
@@ -117,9 +123,15 @@ export async function POST(req: NextRequest) {
     if (!secret) return NextResponse.json({ error: 'Tidak bisa memverifikasi 2FA' }, { status: 400 });
     if (!verifyTotp(secret, code, 1)) return NextResponse.json({ error: 'Kode verifikasi tidak valid' }, { status: 400 });
 
-    await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: uid },
-      data: { totpEnabled: false, totpSecretEnc: null, totpVerifiedAt: null },
+      data: {
+        totpEnabled: false,
+        totpSecretEnc: null,
+        totpVerifiedAt: null,
+        sessionVersion: { increment: 1 },
+      },
+      select: { id: true, email: true, role: true, isSuperAdmin: true, sessionVersion: true },
     });
 
     const actorRoleRaw = typeof (payload as any)?.role === 'string' ? String((payload as any).role).toUpperCase() : '';
@@ -136,10 +148,11 @@ export async function POST(req: NextRequest) {
 
     const authToken = await createToken({
       id: uid,
-      email: String(user.email || ''),
+      email: String(updatedUser.email || ''),
       role: actorRole,
-      isSuperAdmin: Boolean((user as any)?.isSuperAdmin),
+      isSuperAdmin: Boolean((updatedUser as any)?.isSuperAdmin),
       totpEnabled: false,
+      sessionVersion: Number((updatedUser as any)?.sessionVersion || 0),
     });
 
     const res = NextResponse.json({ ok: true }, { status: 200 });

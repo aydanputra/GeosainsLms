@@ -177,8 +177,8 @@ export default function AdminAssignments({ courses }: { courses: CourseOption[] 
   };
 
   useEffect(() => {
-    fetchAssignments({ reset: true });
-  }, []);
+    void fetchAssignments({ reset: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openGradeModal = (s: AssignmentSubmissionRow) => {
     setGradingSubmission(s);

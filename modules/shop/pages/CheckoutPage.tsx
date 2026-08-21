@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 
 export default function CheckoutPage() {
-  const { items, getTotal, clearCart, updateMeta } = useCartStore();
+  const { items, clearCart, updateMeta } = useCartStore();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [couponCode, setCouponCode] = useState('');

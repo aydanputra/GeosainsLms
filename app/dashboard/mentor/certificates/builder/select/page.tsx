@@ -1,11 +1,12 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Plus, ChevronLeft, Loader2, Layout } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function MentorTemplateSelectPage() {
+function MentorTemplateSelectPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const courseId = searchParams.get('courseId');
@@ -85,7 +86,7 @@ export default function MentorTemplateSelectPage() {
     };
     return (
       <div className="relative w-full h-full bg-white overflow-hidden" style={{ aspectRatio: `${dims.widthMm} / ${dims.heightMm}` }}>
-        {bg ? <img src={bg} className="absolute inset-0 w-full h-full object-cover" /> : null}
+        {bg ? <img alt="" src={bg} className="absolute inset-0 w-full h-full object-cover" /> : null}
         <div className="absolute inset-0">
           {sorted.map((el: any, idx: number) => {
             const x = Number(el?.x || 0);
@@ -101,7 +102,7 @@ export default function MentorTemplateSelectPage() {
               const src = typeof el?.src === 'string' ? el.src : '';
               return (
                 <div key={String(el?.id || idx)} className="absolute" style={{ left, top, width, height, opacity }}>
-                  {src ? <img src={src} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-100" />}
+                  {src ? <img alt="" src={src} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-100" />}
                 </div>
               );
             }
@@ -225,5 +226,13 @@ export default function MentorTemplateSelectPage() {
         ) : null}
       </main>
     </div>
+  );
+}
+
+export default function MentorTemplateSelectPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50" />}>
+      <MentorTemplateSelectPageContent />
+    </Suspense>
   );
 }

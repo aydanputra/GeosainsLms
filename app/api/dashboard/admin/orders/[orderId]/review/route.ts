@@ -4,6 +4,8 @@ import { verifyToken } from '@/modules/auth/utils/auth';
 import { isSameOrigin } from '@/modules/auth/utils/security';
 import { finalizeOrderPaid } from '@/modules/payment/api/service';
 import { writeAuditLog } from '@/utils/audit';
+import { sendStudentManualPaymentReviewEmail } from '@/utils/email-notifications';
+import { getAppUrl } from '@/modules/core/utils/appUrl';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ orderId: string }> }) {
   try {
@@ -33,10 +35,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ord
         userId: true,
         total: true,
         manualPaymentProofUrl: true,
+        manualPaymentProofMediaId: true,
         manualPaymentStatus: true,
+        user: { select: { name: true, email: true } },
       },
     });
     if (!order) return NextResponse.json({ error: 'Order tidak ditemukan' }, { status: 404 });
+    if (String(order.status || '').toUpperCase() !== 'PENDING') {
+      return NextResponse.json({ error: 'Order sudah tidak bisa direview' }, { status: 400 });
+    }
+    if (String(order.manualPaymentStatus || '').toUpperCase() !== 'SUBMITTED') {
+      return NextResponse.json({ error: 'Bukti pembayaran belum diajukan atau sudah diproses' }, { status: 400 });
+    }
+    if (!order.manualPaymentProofMediaId && !order.manualPaymentProofUrl) {
+      return NextResponse.json({ error: 'Bukti pembayaran tidak ditemukan' }, { status: 400 });
+    }
 
     const now = new Date();
 
@@ -61,6 +74,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ord
           read: false,
         },
       });
+
+      if (order.user?.email) {
+        await sendStudentManualPaymentReviewEmail({
+          to: order.user.email,
+          name: order.user.name || null,
+          orderId: id,
+          total: Number(order.total || 0),
+          approved: false,
+          note: note || null,
+          actionUrl: `${getAppUrl(req.headers)}/dashboard/student/orders?orderId=${encodeURIComponent(id)}`,
+        });
+      }
 
       await writeAuditLog({
         req,
@@ -96,13 +121,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ord
       },
     });
 
+    if (order.user?.email) {
+      await sendStudentManualPaymentReviewEmail({
+        to: order.user.email,
+        name: order.user.name || null,
+        orderId: id,
+        total: Number(order.total || 0),
+        approved: true,
+        note: note || null,
+        actionUrl: `${getAppUrl(req.headers)}/dashboard/student/orders?orderId=${encodeURIComponent(id)}`,
+      });
+    }
+
     await writeAuditLog({
       req,
       actor: { id: String(admin.id), role: admin.role },
       action: 'ORDER_MANUAL_PAYMENT_APPROVE',
       entityType: 'Order',
       entityId: id,
-      metadata: { proofUrl: order.manualPaymentProofUrl || null, note: note || null },
+      metadata: { proofMediaId: order.manualPaymentProofMediaId || null, note: note || null },
     });
 
     return NextResponse.json({ ok: true, order: updated }, { status: 200 });

@@ -10,7 +10,7 @@ async function requireAdmin(req: NextRequest) {
   return user;
 }
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const templates = await prisma.certificateTemplate.findMany({
       orderBy: { createdAt: 'desc' },

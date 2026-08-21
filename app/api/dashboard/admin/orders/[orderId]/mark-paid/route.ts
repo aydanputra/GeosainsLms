@@ -18,6 +18,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ord
 
     const { orderId } = await params;
     const id = String(orderId || '').trim();
+    if (!id) return NextResponse.json({ error: 'Order tidak valid' }, { status: 400 });
+
+    const existing = await prisma.order.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        status: true,
+        manualPaymentStatus: true,
+        manualPaymentProofUrl: true,
+        manualPaymentProofMediaId: true,
+        payment: { select: { status: true } },
+      },
+    });
+    if (!existing) return NextResponse.json({ error: 'Order tidak ditemukan' }, { status: 404 });
+    if (String(existing.status || '').toUpperCase() !== 'PENDING') {
+      return NextResponse.json({ error: 'Order sudah tidak bisa dikonfirmasi' }, { status: 400 });
+    }
+    if (String(existing.payment?.status || '').toUpperCase() === 'SUCCESS') {
+      return NextResponse.json({ error: 'Payment online sudah tercatat sukses' }, { status: 400 });
+    }
+    if (String(existing.manualPaymentStatus || '').toUpperCase() !== 'SUBMITTED') {
+      return NextResponse.json({ error: 'Bukti pembayaran belum diajukan atau sudah diproses' }, { status: 400 });
+    }
+    if (!existing.manualPaymentProofMediaId && !existing.manualPaymentProofUrl) {
+      return NextResponse.json({ error: 'Bukti pembayaran tidak ditemukan' }, { status: 400 });
+    }
+
     const order = await finalizeOrderPaid(id);
     await prisma.order.update({
       where: { id },
@@ -34,7 +61,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ ord
       action: 'ORDER_MARK_PAID',
       entityType: 'Order',
       entityId: id,
-      metadata: { orderId: id },
+      metadata: { orderId: id, proofMediaId: existing.manualPaymentProofMediaId || null },
     });
 
     return NextResponse.json({ ok: true, order }, { status: 200 });

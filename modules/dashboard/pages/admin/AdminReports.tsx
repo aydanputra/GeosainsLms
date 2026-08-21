@@ -1299,7 +1299,7 @@ export default function AdminReports({ mode = 'reports' }: AdminReportsProps) {
         trend: totals && prev ? trend(Number(totals.newStudents) || 0, Number(prev.newStudents) || 0) : undefined,
       },
     ];
-  }, [analytics, analyticsRange, rangeLabel]);
+  }, [analytics, rangeLabel]);
 
   const dailyChart = useMemo(() => {
     const list = Array.isArray(analytics?.daily) ? analytics!.daily : [];

@@ -35,6 +35,7 @@ model User {
   totpSecretEnc         String?
   totpVerifiedAt        DateTime?
   emailVerifiedAt       DateTime?
+  sessionVersion        Int                    @default(0)
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
   affiliateProfile      AffiliateProfile?
@@ -536,6 +537,7 @@ model ShopVendor {
 
   contactEmail String?
   contactPhone String?
+  adminWhatsapp String?
 
   addressLine1 String?
   addressLine2 String?

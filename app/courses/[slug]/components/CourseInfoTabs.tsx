@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
@@ -26,7 +27,9 @@ import {
   Loader2,
 } from 'lucide-react';
 import { twMerge } from 'tailwind-merge';
+import { normalizeImageUrl } from '@/modules/core/utils/image';
 import CourseRatingWidget from './CourseRatingWidget';
+import { useCourseDetailAccess } from './CourseDetailAccessProvider';
 
 type CurriculumLesson = {
   id: string;
@@ -89,8 +92,6 @@ export default function CourseInfoTabs({
   slug,
   courseId,
   price,
-  isEnrolled,
-  isLoggedIn,
   subtitle,
   descriptionHtml,
   learningOutcomes,
@@ -101,19 +102,12 @@ export default function CourseInfoTabs({
   ratingAvg,
   ratingCount,
   recentReviews,
-  canRate,
-  canViewQa,
   qaEnabled,
-  qaThreads,
   mentor,
-  viewer,
-  enrollmentExpired,
 }: {
   slug: string;
   courseId: string;
   price: number;
-  isEnrolled: boolean;
-  isLoggedIn: boolean;
   subtitle: string | null;
   descriptionHtml: string;
   learningOutcomes: string[];
@@ -124,10 +118,7 @@ export default function CourseInfoTabs({
   ratingAvg: number;
   ratingCount: number;
   recentReviews: ReviewItem[];
-  canRate: boolean;
-  canViewQa: boolean;
   qaEnabled: boolean;
-  qaThreads: QaThreadItem[];
   mentor: {
     id: string;
     name: string;
@@ -147,9 +138,8 @@ export default function CourseInfoTabs({
     mentorExperiences?: unknown;
     mentorAttachments?: unknown;
   };
-  viewer: { id: string | null; role: string | null };
-  enrollmentExpired: boolean;
 }) {
+  const access = useCourseDetailAccess();
   const normalizeAvatarUrl = (value: unknown): string | null => {
     if (typeof value !== 'string') return null;
     const v = value.trim();
@@ -176,13 +166,21 @@ export default function CourseInfoTabs({
   const [followersCount, setFollowersCount] = useState<number>(0);
   const [isFollowing, setIsFollowing] = useState(false);
   const [isLoadingFollow, setIsLoadingFollow] = useState(false);
+  const [hasLoadedFollow, setHasLoadedFollow] = useState(false);
   const [isTogglingFollow, setIsTogglingFollow] = useState(false);
   const [isDmModalOpen, setIsDmModalOpen] = useState(false);
   const [dmModalDraft, setDmModalDraft] = useState('');
   const [isSendingDmModal, setIsSendingDmModal] = useState(false);
+  const effectiveModules = access.modules ?? modules;
+  const isLoggedIn = access.isLoggedIn;
+  const isEnrolled = access.isEnrolled;
+  const canRate = access.canRate;
+  const canViewQa = access.canViewQa;
+  const qaThreads = access.qaThreads;
+  const viewer = access.viewer;
+  const enrollmentExpired = access.enrollmentExpired;
 
   const isLoadingCommentsRef = useRef(false);
-  const isPollingCommentsRef = useRef(false);
 
   const tabs = useMemo(() => {
     const items: Array<{ id: TabId; label: string }> = [
@@ -206,12 +204,12 @@ export default function CourseInfoTabs({
   useEffect(() => {
     setOpenModules((prev) => {
       const next = { ...prev };
-      for (const m of modules) {
+      for (const m of effectiveModules) {
         if (typeof next[m.id] !== 'boolean') next[m.id] = true;
       }
       return next;
     });
-  }, [modules]);
+  }, [effectiveModules]);
 
   useEffect(() => {
     const raw = searchParams.get('tab');
@@ -231,7 +229,7 @@ export default function CourseInfoTabs({
     };
     const next = map[normalized];
     if (next && next !== active) setActive(next);
-  }, [searchParams]);
+  }, [active, searchParams]);
 
   const loadComments = async (args: { reset: boolean; silent?: boolean }) => {
     if (!isLoggedIn) return;
@@ -275,36 +273,13 @@ export default function CourseInfoTabs({
     if (!isLoggedIn) return;
     if (hasLoadedComments) return;
     loadComments({ reset: true });
-  }, [active, hasLoadedComments, isLoggedIn]);
-
-  useEffect(() => {
-    if (active !== 'COMMENTS') return;
-    if (!isLoggedIn) return;
-    let cancelled = false;
-    const tick = async () => {
-      if (cancelled) return;
-      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      if (isPollingCommentsRef.current) return;
-      isPollingCommentsRef.current = true;
-      try {
-        await loadComments({ reset: true, silent: true });
-      } finally {
-        isPollingCommentsRef.current = false;
-      }
-    };
-
-    tick();
-    const id = window.setInterval(tick, 3500);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [active, courseId, isLoggedIn]);
+  }, [active, hasLoadedComments, isLoggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (active !== 'MENTOR') return;
     const mentorId = String(mentor.id || '').trim();
     if (!mentorId) return;
+    if (hasLoadedFollow) return;
     if (isLoadingFollow) return;
     setIsLoadingFollow(true);
     fetch(`/api/users/${encodeURIComponent(mentorId)}/follow`, { cache: 'no-store', credentials: 'include' })
@@ -313,10 +288,11 @@ export default function CourseInfoTabs({
         if (!ok) return;
         setFollowersCount(Number(data?.followersCount || 0) || 0);
         setIsFollowing(Boolean(data?.isFollowing));
+        setHasLoadedFollow(true);
       })
       .catch(() => {})
       .finally(() => setIsLoadingFollow(false));
-  }, [active, mentor.id]);
+  }, [active, hasLoadedFollow, isLoadingFollow, mentor.id]);
 
   const handlePostComment = async () => {
     if (!isLoggedIn) {
@@ -340,9 +316,25 @@ export default function CourseInfoTabs({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || 'Gagal mengirim komentar');
+      const created = (data as any)?.comment;
+      if (created?.id) {
+        const nextComment: CommentItem = {
+          id: String(created.id),
+          body: String(created.body || msg),
+          createdAtLabel: created.createdAt
+            ? new Date(created.createdAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
+            : new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }),
+          userName: String(created.user?.name || created.user?.email || 'User'),
+          userAvatarUrl: normalizeAvatarUrl(created.user?.avatarUrl),
+          replies: [],
+        };
+        setComments((prev) => [nextComment, ...prev]);
+        setHasLoadedComments(true);
+      } else {
+        setHasLoadedComments(false);
+      }
       setCommentDraft('');
       toast.success('Komentar terkirim');
-      setHasLoadedComments(false);
       setActive('COMMENTS');
     } catch (e: any) {
       toast.error(e?.message || 'Gagal mengirim komentar');
@@ -373,10 +365,33 @@ export default function CourseInfoTabs({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || 'Gagal mengirim balasan');
+      const createdReply = (data as any)?.reply;
+      if (createdReply?.id) {
+        const nextReply = {
+          id: String(createdReply.id),
+          body: String(createdReply.body || msg),
+          createdAtLabel: createdReply.createdAt
+            ? new Date(createdReply.createdAt).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })
+            : new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }),
+          userName: String(viewer.id === mentor.id ? mentor.name : 'Anda'),
+          userAvatarUrl: viewer.id === mentor.id ? normalizeAvatarUrl(mentor.avatarUrl) : null,
+          role: viewer.role || '',
+        };
+        setComments((prev) =>
+          prev.map((comment) =>
+            comment.id === commentId
+              ? {
+                  ...comment,
+                  replies: [...comment.replies, nextReply],
+                }
+              : comment
+          )
+        );
+        setHasLoadedComments(true);
+      }
       setReplyDraft('');
       setReplyToCommentId(null);
       toast.success('Balasan terkirim');
-      await loadComments({ reset: true });
     } catch (e: any) {
       toast.error(e?.message || 'Gagal mengirim balasan');
     } finally {
@@ -633,7 +648,7 @@ export default function CourseInfoTabs({
               </div>
             </div>
             <div className="space-y-3">
-              {modules.map((module) => (
+              {effectiveModules.map((module) => (
                 <div key={module.id} className="border border-slate-200 rounded-xl overflow-hidden bg-white">
                   <button
                     type="button"
@@ -751,7 +766,7 @@ export default function CourseInfoTabs({
           </div>
 
           {canRate ? (
-            <CourseRatingWidget courseId={courseId} />
+            <CourseRatingWidget courseId={courseId} initialRatingAvg={ratingAvg} initialRatingCount={ratingCount} />
           ) : (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-700">
               {enrollmentExpired ? (
@@ -774,7 +789,15 @@ export default function CourseInfoTabs({
                       <div className="flex items-start gap-3 min-w-0">
                         <div className="h-10 w-10 rounded-full overflow-hidden border border-slate-200 bg-indigo-100 shrink-0 flex items-center justify-center text-indigo-700 font-extrabold">
                           {r.studentAvatarUrl ? (
-                            <img src={r.studentAvatarUrl} alt={r.studentName} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                            <Image
+                              src={normalizeImageUrl(r.studentAvatarUrl)!}
+                              alt={r.studentName}
+                              width={40}
+                              height={40}
+                              sizes="40px"
+                              quality={60}
+                              className="w-full h-full object-cover"
+                            />
                           ) : (
                             initials
                           )}
@@ -949,7 +972,15 @@ export default function CourseInfoTabs({
                         <div className="flex items-start gap-3">
                           <div className="h-10 w-10 rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 shrink-0 flex items-center justify-center">
                             {c.userAvatarUrl ? (
-                              <img src={c.userAvatarUrl} alt={c.userName} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                              <Image
+                                src={normalizeImageUrl(c.userAvatarUrl)!}
+                                alt={c.userName}
+                                width={40}
+                                height={40}
+                                sizes="40px"
+                                quality={60}
+                                className="w-full h-full object-cover"
+                              />
                             ) : (
                               <div className="text-sm font-extrabold text-slate-600">{initials}</div>
                             )}
@@ -977,7 +1008,15 @@ export default function CourseInfoTabs({
                                       <div className="flex items-start gap-3">
                                         <div className="h-9 w-9 rounded-2xl overflow-hidden border border-slate-200 bg-white shrink-0 flex items-center justify-center">
                                           {r.userAvatarUrl ? (
-                                            <img src={r.userAvatarUrl} alt={r.userName} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                                            <Image
+                                              src={normalizeImageUrl(r.userAvatarUrl)!}
+                                              alt={r.userName}
+                                              width={36}
+                                              height={36}
+                                              sizes="36px"
+                                              quality={60}
+                                              className="w-full h-full object-cover"
+                                            />
                                           ) : (
                                             <div className="text-xs font-extrabold text-slate-600">{rInitials}</div>
                                           )}
@@ -1066,12 +1105,27 @@ export default function CourseInfoTabs({
           <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
             <div className="relative h-32 bg-slate-900">
               {mentor.profileCoverUrl ? (
-                <img src={mentor.profileCoverUrl} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+                <Image
+                  src={normalizeImageUrl(mentor.profileCoverUrl)!}
+                  alt=""
+                  fill
+                  sizes="(max-width: 1024px) 100vw, 960px"
+                  quality={65}
+                  className="object-cover"
+                />
               ) : null}
               <div className="absolute inset-0 bg-gradient-to-r from-slate-900/70 via-slate-900/30 to-transparent" />
               <div className="absolute -bottom-10 left-5 h-20 w-20 rounded-2xl overflow-hidden border-4 border-white bg-slate-100 flex items-center justify-center shadow-sm">
                 {mentor.avatarUrl ? (
-                  <img src={mentor.avatarUrl} alt={mentor.name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+                  <Image
+                    src={normalizeImageUrl(mentor.avatarUrl)!}
+                    alt={mentor.name}
+                    width={80}
+                    height={80}
+                    sizes="80px"
+                    quality={60}
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <div className="text-xl font-extrabold text-slate-600">{String(mentor.name || 'M').trim().slice(0, 1).toUpperCase()}</div>
                 )}

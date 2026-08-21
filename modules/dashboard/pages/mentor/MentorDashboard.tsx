@@ -63,8 +63,8 @@ export default function MentorDashboard({
   recentEnrollments = [],
   pendingSubmissions = [],
 }: MentorDashboardProps) {
-  const { data: stats, isLoading: statsLoading } = useMentorStats();
-  const { data: courses, isLoading: coursesLoading } = useMentorCourses();
+  const { data: stats, isLoading: statsLoading } = useMentorStats(initialStats);
+  const { data: courses, isLoading: coursesLoading } = useMentorCourses(initialCourses);
 
   const displayedStats = stats || initialStats;
   const displayedCoursesRaw = courses || initialCourses;
@@ -136,6 +136,35 @@ export default function MentorDashboard({
       </div>
       
       <Cards metrics={metrics} isLoading={statsLoading} />
+
+      <div className="bg-white rounded-2xl border border-slate-200 p-5">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div>
+            <div className="text-lg font-extrabold text-slate-900">Area Belajar Anda</div>
+            <div className="text-sm text-slate-600 mt-1">
+              Mentor tetap bisa belajar sebagai siswa dengan akun yang sama, termasuk melihat kursus yang diikuti dan progresnya.
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <Link href="/dashboard/student/courses" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 hover:bg-slate-100 transition-colors">
+            <div className="text-sm font-extrabold text-slate-900">Kursus Diikuti</div>
+            <div className="text-xs text-slate-600 mt-1">Lihat materi yang sedang Anda pelajari.</div>
+          </Link>
+          <Link href="/dashboard/student/analytics" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 hover:bg-slate-100 transition-colors">
+            <div className="text-sm font-extrabold text-slate-900">Progress Belajar</div>
+            <div className="text-xs text-slate-600 mt-1">Pantau progres, aktivitas, dan skor quiz.</div>
+          </Link>
+          <Link href="/dashboard/student/orders" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 hover:bg-slate-100 transition-colors">
+            <div className="text-sm font-extrabold text-slate-900">Riwayat Pembelian</div>
+            <div className="text-xs text-slate-600 mt-1">Cek pesanan kursus yang pernah Anda beli.</div>
+          </Link>
+          <Link href="/dashboard/student/certificates" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 hover:bg-slate-100 transition-colors">
+            <div className="text-sm font-extrabold text-slate-900">Sertifikat Saya</div>
+            <div className="text-xs text-slate-600 mt-1">Buka sertifikat dari kursus yang sudah selesai.</div>
+          </Link>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white rounded-2xl border border-slate-200 p-5">

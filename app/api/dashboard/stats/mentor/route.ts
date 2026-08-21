@@ -2,45 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
 import { Prisma } from '@prisma/client';
+import { getMentorRevenueSummary } from '@/modules/dashboard/api/performance';
 
-const SETTINGS_SLUG = '__course_settings__';
 const db = prisma as any;
-
-function safeParseJson(value: unknown) {
-  try {
-    if (typeof value !== 'string') return {};
-    const parsed = JSON.parse(value);
-    return parsed && typeof parsed === 'object' ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function toInt(value: unknown, fallback: number) {
-  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
-  if (!Number.isFinite(n)) return fallback;
-  return Math.trunc(n);
-}
-
-function toBool(value: unknown, fallback: boolean) {
-  if (typeof value === 'boolean') return value;
-  return fallback;
-}
-
-function getStoreDiscountAmount(it: any) {
-  const store = Number(it?.discountStoreAmount || 0);
-  const marketplace = Number(it?.discountMarketplaceAmount || 0);
-  if (store === 0 && marketplace === 0) return Number(it?.discountAmount || 0);
-  return store;
-}
-
-function getTotalDiscountAmount(it: any) {
-  const store = Number(it?.discountStoreAmount || 0);
-  const marketplace = Number(it?.discountMarketplaceAmount || 0);
-  const fallbackTotal = Number(it?.discountAmount || 0);
-  if (store === 0 && marketplace === 0) return fallbackTotal;
-  return store + marketplace;
-}
 
 function parseRange(searchParams: URLSearchParams): { from: Date; to: Date; range: '7d' | '30d' | '90d' } {
   const rangeRaw = String(searchParams.get('range') || '').trim().toLowerCase();
@@ -77,157 +41,15 @@ export async function GET(req: NextRequest) {
 
     const instructorId = String(user.id);
     const courseWhere = { instructorId, deletedAt: null };
-
-    const settingsPage = await prisma.page.findUnique({ where: { slug: SETTINGS_SLUG }, select: { content: true } });
-    const settings = safeParseJson(settingsPage?.content);
-    const enableRevenueSharing = toBool((settings as any).enableRevenueSharing, false);
-    const adminRevenueSharePercent = Math.max(0, Math.min(100, toInt((settings as any).adminRevenueSharePercent, 10)));
-    const platformFeePercent = enableRevenueSharing ? adminRevenueSharePercent : 0;
-
-    const myCourseIds = (
-      await prisma.course.findMany({
-        where: courseWhere,
-        select: { id: true },
-      })
-    ).map((c) => c.id);
-    const coCourseIds = (
-      await prisma.courseCoInstructor.findMany({
-        where: { userId: instructorId },
-        select: { courseId: true },
-      })
-    ).map((x) => x.courseId);
-    const courseIds = Array.from(new Set([...myCourseIds, ...coCourseIds]));
+    const revenueSummary = await getMentorRevenueSummary(instructorId);
+    const { scope, productsSold, totalEarning, platformFeeTotal, affiliateFeeTotal } = revenueSummary;
+    const { courseIds, vendorIds, productIds } = scope;
 
     const totalBundles = courseIds.length
       ? await prisma.courseBundle.count({ where: { published: true, courseIds: { hasSome: courseIds } } })
       : 0;
-
     const publishedPosts = await prisma.post.count({ where: { authorId: instructorId, published: true } });
-
-    const approvedVendors = await prisma.shopVendor.findMany({
-      where: { status: 'APPROVED', OR: [{ ownerId: instructorId }, { members: { some: { userId: instructorId } } }] },
-      select: { id: true, commissionType: true, commissionRate: true },
-    });
-    const vendorIds = approvedVendors.map((v) => v.id);
-
     const totalProducts = vendorIds.length ? await prisma.product.count({ where: { vendorId: { in: vendorIds } } }) : 0;
-
-    const productsWithVendor = vendorIds.length
-      ? await prisma.product.findMany({ where: { vendorId: { in: vendorIds } }, select: { id: true, vendorId: true } })
-      : [];
-    const vendorIdByProductId = new Map(productsWithVendor.map((p) => [p.id, p.vendorId] as const));
-    const productIds = productsWithVendor.map((p) => p.id);
-
-    const productPaidItems = productIds.length
-      ? await prisma.orderItem.findMany({
-          where: { productId: { in: productIds }, order: { is: { status: 'PAID' } } },
-          select: { productId: true, quantity: true, price: true, discountAmount: true, discountStoreAmount: true, discountMarketplaceAmount: true, refundAmount: true },
-        })
-      : [];
-
-    const productsSold = productPaidItems.reduce((sum, it) => sum + Number(it.quantity || 0), 0);
-    const productGross = productPaidItems.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.quantity || 0), 0);
-    const productStoreDiscount = productPaidItems.reduce((sum, it) => sum + getStoreDiscountAmount(it), 0);
-    const productRefund = productPaidItems.reduce((sum, it) => sum + Number(it.refundAmount || 0), 0);
-    const productNetSales = Math.max(0, productGross - productStoreDiscount - productRefund);
-
-    const vendorById = new Map(approvedVendors.map((v) => [v.id, v] as const));
-    const grossByVendor = new Map<string, { gross: number; sold: number }>();
-    for (const it of productPaidItems) {
-      const pid = typeof it.productId === 'string' ? it.productId : null;
-      if (!pid) continue;
-      const vid = vendorIdByProductId.get(pid);
-      if (!vid) continue;
-      const prev = grossByVendor.get(vid) || { gross: 0, sold: 0 };
-      const qty = Number(it.quantity || 0);
-      const lineSubtotal = Number(it.price || 0) * qty;
-      const discount = getStoreDiscountAmount(it);
-      const refund = Number(it.refundAmount || 0);
-      const gross = Math.max(0, lineSubtotal - discount - refund);
-      grossByVendor.set(vid, { gross: prev.gross + gross, sold: prev.sold + qty });
-    }
-    let productFee = 0;
-    for (const [vid, agg] of grossByVendor.entries()) {
-      const v = vendorById.get(vid);
-      if (!v) continue;
-      const rate = Number(v.commissionRate || 0);
-      const fee = v.commissionType === 'FLAT' ? Math.max(0, rate * agg.sold) : Math.max(0, (agg.gross * rate) / 100);
-      productFee += fee;
-    }
-    const productEarning = Math.max(0, productNetSales - productFee);
-
-    const coursePaidItems = courseIds.length
-      ? await prisma.orderItem.findMany({
-          where: { courseId: { in: courseIds }, order: { is: { status: 'PAID' } } },
-          select: { quantity: true, price: true, discountAmount: true, discountStoreAmount: true, discountMarketplaceAmount: true, refundAmount: true },
-        })
-      : [];
-    const courseGross = coursePaidItems.reduce((sum, it) => sum + Number(it.price || 0) * Number(it.quantity || 0), 0);
-    const courseStoreDiscount = coursePaidItems.reduce((sum, it) => sum + getStoreDiscountAmount(it), 0);
-    const courseRefund = coursePaidItems.reduce((sum, it) => sum + Number(it.refundAmount || 0), 0);
-    const courseNetSales = Math.max(0, courseGross - courseStoreDiscount - courseRefund);
-    const courseFee = Math.max(0, (courseNetSales * platformFeePercent) / 100);
-    const courseEarning = Math.max(0, courseNetSales - courseFee);
-
-    const platformFeeTotal = courseFee + productFee;
-    const commissionOrders =
-      courseIds.length || productIds.length
-        ? await prisma.order.findMany({
-            where: {
-              status: 'PAID',
-              commission: { isNot: null },
-              OR: [
-                ...(courseIds.length ? [{ items: { some: { courseId: { in: courseIds } } } }] : []),
-                ...(productIds.length ? [{ items: { some: { productId: { in: productIds } } } }] : []),
-              ],
-            },
-            select: {
-              total: true,
-              commission: { select: { amount: true, status: true } },
-              items: {
-                where: {
-                  OR: [
-                    ...(courseIds.length ? [{ courseId: { in: courseIds } }] : []),
-                    ...(productIds.length ? [{ productId: { in: productIds } }] : []),
-                  ],
-                },
-                select: {
-                  quantity: true,
-                  price: true,
-                  discountAmount: true,
-                  discountStoreAmount: true,
-                  discountMarketplaceAmount: true,
-                  refundAmount: true,
-                },
-              },
-            },
-          })
-        : [];
-
-    let affiliateFeeTotal = 0;
-    for (const o of commissionOrders) {
-      const orderTotal = Math.max(0, Number(o.total || 0));
-      const commissionAmount = Math.max(0, Number((o as any)?.commission?.amount || 0));
-      const commissionStatus = String((o as any)?.commission?.status || '').toUpperCase();
-      if (!orderTotal || !commissionAmount || commissionStatus.includes('REVERSED')) continue;
-
-      const items = Array.isArray((o as any)?.items) ? (o as any).items : [];
-      const mentorBuyerPaid = items.reduce((sum: number, it: any) => {
-        const qty = Number(it?.quantity || 0);
-        const price = Number(it?.price || 0);
-        const gross = Math.max(0, qty * price);
-        const refund = Math.max(0, Number(it?.refundAmount || 0));
-        const discountTotal = Math.max(0, getTotalDiscountAmount(it));
-        const buyerPaid = Math.max(0, gross - discountTotal - refund);
-        return sum + buyerPaid;
-      }, 0);
-      if (!mentorBuyerPaid) continue;
-
-      const orderShare = Math.max(0, Math.min(1, mentorBuyerPaid / orderTotal));
-      affiliateFeeTotal += Math.max(0, commissionAmount * orderShare);
-    }
-
-    const totalEarning = Math.max(0, courseEarning + productEarning - affiliateFeeTotal);
 
     const [
       totalCourses,

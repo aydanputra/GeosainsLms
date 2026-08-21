@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
+import { getCourseAccessContext } from '@/modules/course/api/performance';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -8,10 +9,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const token = req.cookies.get('token')?.value;
     const user = token ? await verifyToken(token) : null;
 
-    const course = (await prisma.course.findUnique({
-      where: { id: courseId },
-      select: ({ id: true, deletedAt: true, instructorId: true, reviewsEnabled: true } as any),
-    })) as any;
+    const course = await getCourseAccessContext(courseId);
 
     if (!course || course.deletedAt) {
       return NextResponse.json({ error: 'Course not found' }, { status: 404 });
@@ -20,19 +18,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Ulasan dinonaktifkan untuk kursus ini' }, { status: 403 });
     }
 
-    const summary = await prisma.courseReview.aggregate({
-      where: { courseId },
-      _avg: { rating: true },
-      _count: { rating: true },
-    });
-
-    const myReview =
+    const [summary, myReview] = await Promise.all([
+      prisma.courseReview.aggregate({
+        where: { courseId },
+        _avg: { rating: true },
+        _count: { rating: true },
+      }),
       user && user.id
-        ? await prisma.courseReview.findUnique({
+        ? prisma.courseReview.findUnique({
             where: { userId_courseId: { userId: user.id, courseId } },
             select: { rating: true, comment: true },
           })
-        : null;
+        : Promise.resolve(null),
+    ]);
 
     return NextResponse.json(
       {
@@ -65,10 +63,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Rating harus 1 sampai 5' }, { status: 400 });
     }
 
-    const course = await prisma.course.findUnique({
-      where: { id: courseId },
-      select: { id: true, deletedAt: true, instructorId: true },
-    });
+    const course = await getCourseAccessContext(courseId);
 
     if (!course || course.deletedAt) {
       return NextResponse.json({ error: 'Course not found' }, { status: 404 });

@@ -24,6 +24,11 @@ export async function GET(req: NextRequest) {
         contactPhone: true,
         ratingAvg: true,
         ratingCount: true,
+        _count: {
+          select: {
+            products: true,
+          },
+        },
         products: {
           where: { categoryRef: { slug: categorySlug } },
           select: { id: true },
@@ -35,6 +40,8 @@ export async function GET(req: NextRequest) {
       vendors.map((v) => ({
         ...v,
         serviceCount: Array.isArray(v.products) ? v.products.length : 0,
+        productCount: v._count?.products ?? 0,
+        _count: undefined,
         products: undefined,
       }))
     );

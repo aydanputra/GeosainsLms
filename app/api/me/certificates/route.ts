@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json(certificates);
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: 'Failed to fetch certificates' }, { status: 500 });
   }
 }

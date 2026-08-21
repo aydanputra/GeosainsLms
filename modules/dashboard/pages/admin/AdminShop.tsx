@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Table from '../../components/Tables';
 import Cards from '../../components/Cards';
 import EmptyState from '../../components/EmptyState';
@@ -15,6 +15,8 @@ import MediaPickerModal from '@/modules/media/components/MediaPickerModal';
 
 interface AdminShopProps {
   products: any[];
+  initialCategories?: Array<{ id: string; name: string }>;
+  initialVendors?: Array<{ id: string; name: string }>;
 }
 
 type ProductForm = {
@@ -23,7 +25,7 @@ type ProductForm = {
   slug: string;
   description: string;
   type: 'PHYSICAL' | 'SERVICE' | 'RENTAL';
-  price: number;
+  price: string;
   stock: number;
   category: 'BOOKS' | 'MERCH' | 'OTHER';
   categoryIds: string[];
@@ -38,6 +40,12 @@ function normalizeImageUrl(value: unknown) {
   if (!trimmed) return '';
   if (trimmed.startsWith('blob:')) return '';
   return trimmed;
+}
+
+function formatProductPriceLabel(product: { type?: string; price?: number | null }) {
+  const price = Number(product?.price || 0);
+  if (product?.type === 'RENTAL' && price <= 0) return 'Chat Admin';
+  return `IDR ${price.toLocaleString('id-ID')}`;
 }
 
 function normalizeProductForm(value: any): ProductForm {
@@ -59,7 +67,12 @@ function normalizeProductForm(value: any): ProductForm {
     slug: typeof value?.slug === 'string' ? value.slug : '',
     description: typeof value?.description === 'string' ? value.description : '',
     type: value?.type === 'SERVICE' || value?.type === 'RENTAL' || value?.type === 'PHYSICAL' ? value.type : 'PHYSICAL',
-    price: typeof value?.price === 'number' && Number.isFinite(value.price) ? value.price : 0,
+    price:
+      typeof value?.price === 'number' && Number.isFinite(value.price)
+        ? value.type === 'RENTAL' && value.price <= 0
+          ? ''
+          : String(value.price)
+        : '',
     stock: typeof value?.stock === 'number' && Number.isFinite(value.stock) ? value.stock : 0,
     category: value?.category === 'BOOKS' || value?.category === 'MERCH' || value?.category === 'OTHER' ? value.category : 'OTHER',
     categoryIds,
@@ -69,7 +82,11 @@ function normalizeProductForm(value: any): ProductForm {
   };
 }
 
-export default function AdminShop({ products: initialProducts }: AdminShopProps) {
+export default function AdminShop({
+  products: initialProducts,
+  initialCategories = [],
+  initialVendors = [],
+}: AdminShopProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [products, setProducts] = useState(initialProducts);
@@ -86,7 +103,7 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
     slug: '',
     description: '',
     type: 'PHYSICAL',
-    price: 0,
+    price: '',
     stock: 0,
     category: 'OTHER',
     categoryIds: [],
@@ -97,8 +114,8 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
   const [isSaving, setIsSaving] = useState(false);
   const [isMediaOpen, setIsMediaOpen] = useState(false);
   const [mediaTargetIndex, setMediaTargetIndex] = useState<number | null>(null);
-  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
-  const [vendors, setVendors] = useState<Array<{ id: string; name: string }>>([]);
+  const [categories] = useState<Array<{ id: string; name: string }>>(initialCategories);
+  const [vendors] = useState<Array<{ id: string; name: string }>>(initialVendors);
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false);
   const [categoryPickerQuery, setCategoryPickerQuery] = useState('');
   const categoryPickerRef = useRef<HTMLDivElement | null>(null);
@@ -124,27 +141,6 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
     const path = typeof window !== 'undefined' ? window.location.pathname : '/dashboard/vendor/shop';
     router.replace(path);
   }, [searchParams, products, router]);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const [categoriesRes, vendorsRes] = await Promise.all([fetch('/api/shop/categories'), fetch('/api/shop/vendors')]);
-        const categoriesData = await categoriesRes.json().catch(() => []);
-        const vendorsData = await vendorsRes.json().catch(() => []);
-        if (!active) return;
-        setCategories(Array.isArray(categoriesData) ? categoriesData : []);
-        setVendors(Array.isArray(vendorsData) ? vendorsData : []);
-      } catch {
-        if (!active) return;
-        setCategories([]);
-        setVendors([]);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase();
@@ -188,7 +184,7 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  const toggleAllVisible = () => {
+  const toggleAllVisible = useCallback(() => {
     setSelectedIds((prev) => {
       const prevSet = new Set(prev);
       const allSelected = visibleIds.length > 0 && visibleIds.every((id) => prevSet.has(id));
@@ -196,7 +192,7 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
       for (const id of visibleIds) prevSet.add(id);
       return Array.from(prevSet);
     });
-  };
+  }, [visibleIds]);
 
   const metrics = [
     { label: 'Total Produk', value: products.length, color: 'bg-blue-500' },
@@ -256,7 +252,7 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
         </div>
       )
       },
-      { header: 'Harga', accessorKey: 'price', cell: (val: number) => `IDR ${val.toLocaleString('id-ID')}` },
+      { header: 'Harga', accessorKey: 'price', cell: (_val: number, row: any) => formatProductPriceLabel(row) },
       {
         header: 'Jenis',
         accessorKey: 'type',
@@ -401,7 +397,7 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
       slug: '',
       description: '',
       type: 'PHYSICAL',
-      price: 0,
+      price: '',
       stock: 0,
       category: 'OTHER',
       categoryIds: [],
@@ -427,6 +423,16 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
       toast.error('Nama produk wajib diisi');
       return;
     }
+    const priceRaw = editorValue.price.trim();
+    const parsedPrice = priceRaw === '' ? 0 : Number(priceRaw);
+    if (editorValue.type !== 'RENTAL' && priceRaw === '') {
+      toast.error('Harga wajib diisi');
+      return;
+    }
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      toast.error('Harga tidak valid');
+      return;
+    }
     const vendorId = typeof editorValue.vendorId === 'string' ? editorValue.vendorId.trim() : '';
     if (!vendorId) {
       toast.error('Vendor wajib diisi');
@@ -446,7 +452,7 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
         slug: editorValue.slug.trim() || undefined,
         description: editorValue.description.trim() || undefined,
         type: editorValue.type,
-        price: Number(editorValue.price) || 0,
+        price: parsedPrice,
         stock: Number(editorValue.stock) || 0,
         category: editorValue.category,
         categoryId: categoryIds[0] || null,
@@ -637,7 +643,7 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
               
               <div className="flex justify-between items-center text-sm text-slate-500">
                 <span>Terjual: {product.sold}</span>
-                <span className="font-medium text-slate-900">IDR {product.price.toLocaleString('id-ID')}</span>
+                <span className="font-medium text-slate-900">{formatProductPriceLabel(product)}</span>
               </div>
 
               <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100 mt-2">
@@ -721,9 +727,13 @@ export default function AdminShop({ products: initialProducts }: AdminShopProps)
                     type="number"
                     min={0}
                     value={editorValue.price}
-                    onChange={(e) => setEditorValue((prev) => ({ ...prev, price: Number(e.target.value) }))}
+                    onChange={(e) => setEditorValue((prev) => ({ ...prev, price: e.target.value }))}
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-900 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    placeholder={editorValue.type === 'RENTAL' ? 'Kosongkan untuk Chat Admin' : '0'}
                   />
+                  {editorValue.type === 'RENTAL' ? (
+                    <div className="text-xs text-slate-500">Jika dikosongkan, tombol publik akan berubah menjadi Chat Admin.</div>
+                  ) : null}
                 </div>
                   <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-600">{editorValue.type === 'SERVICE' ? 'Kapasitas (opsional)' : 'Stok'}</label>

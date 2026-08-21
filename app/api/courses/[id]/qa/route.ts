@@ -2,20 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { CourseStatus } from '@prisma/client';
+import { getCourseAccessContext } from '@/modules/course/api/performance';
 
 async function enforceStudentCourseAccess(args: { userId: string; courseId: string }) {
   const { userId, courseId } = args;
-  const course = await prisma.course.findUnique({
-    where: { id: courseId },
-    select: {
-      id: true,
-      status: true,
-      deletedAt: true,
-      validityDays: true,
-      enableQA: true,
-      subscriptionEligible: true,
-    },
-  });
+  const course = await getCourseAccessContext(courseId);
   if (!course || course.deletedAt) return { status: 404 as const, error: 'Course not found' };
   if (course.status !== CourseStatus.PUBLISHED) return { status: 403 as const, error: 'Forbidden' };
   if (!course.enableQA) return { status: 403 as const, error: 'Q&A is disabled for this course' };
@@ -56,10 +47,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const user = await verifyToken(token);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const course = await prisma.course.findUnique({
-      where: { id: courseId },
-      select: { id: true, instructorId: true, status: true, deletedAt: true, enableQA: true },
-    });
+    const course = await getCourseAccessContext(courseId);
     if (!course || course.deletedAt) return NextResponse.json({ error: 'Course not found' }, { status: 404 });
 
     const isOwner = user.role === 'ADMIN' || (user.role === 'MENTOR' && user.id === course.instructorId);
@@ -123,10 +111,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const user = await verifyToken(token);
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const course = await prisma.course.findUnique({
-      where: { id: courseId },
-      select: { id: true, title: true, slug: true, instructorId: true, status: true, deletedAt: true, enableQA: true, validityDays: true },
-    });
+    const course = await getCourseAccessContext(courseId);
     if (!course || course.deletedAt) return NextResponse.json({ error: 'Course not found' }, { status: 404 });
 
     const isOwner = user.role === 'ADMIN' || (user.role === 'MENTOR' && user.id === course.instructorId);

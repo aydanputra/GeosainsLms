@@ -38,7 +38,7 @@ export const registerUser = async (data: unknown) => {
       email,
       password: hashedPassword,
       role: requestedRole,
-      emailVerifiedAt: requestedRole === 'STUDENT' ? new Date() : null,
+      emailVerifiedAt: null,
     },
   });
 
@@ -68,16 +68,16 @@ export const loginUser = async (data: unknown) => {
     throw new Error('Invalid credentials');
   }
 
-  if (!user.emailVerifiedAt && user.role !== 'ADMIN') {
-    const err = new Error('Email belum terverifikasi') as Error & { code?: string };
-    err.code = 'EMAIL_NOT_VERIFIED';
-    throw err;
-  }
-
   const isValid = await verifyPassword(password, user.password);
 
   if (!isValid) {
     throw new Error('Invalid credentials');
+  }
+
+  if (!user.emailVerifiedAt && user.role !== 'ADMIN') {
+    const err = new Error('Email belum terverifikasi') as Error & { code?: string };
+    err.code = 'EMAIL_NOT_VERIFIED';
+    throw err;
   }
 
   const token = await createToken({
@@ -86,6 +86,7 @@ export const loginUser = async (data: unknown) => {
     role: user.role,
     isSuperAdmin: Boolean((user as any).isSuperAdmin),
     totpEnabled: Boolean((user as any).totpEnabled),
+    sessionVersion: Number((user as any).sessionVersion || 0),
   });
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

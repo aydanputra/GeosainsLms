@@ -2,8 +2,6 @@
 
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Link from '@tiptap/extension-link';
-import Underline from '@tiptap/extension-underline';
 import Image from '@tiptap/extension-image';
 import { useEffect } from 'react';
 
@@ -65,18 +63,19 @@ export default function RichContentRenderer({ content, className }: RichContentR
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      StarterKit,
-      Underline,
-      Image,
-      Link.configure({
-        openOnClick: true,
-        autolink: true,
-        HTMLAttributes: {
+      StarterKit.configure({
+        underline: {},
+        link: {
+          openOnClick: true,
+          autolink: true,
+          HTMLAttributes: {
             target: '_blank',
             rel: 'noopener noreferrer',
             class: 'text-indigo-600 hover:underline',
-        }
+          },
+        },
       }),
+      Image,
     ],
     content: content,
     editable: false,

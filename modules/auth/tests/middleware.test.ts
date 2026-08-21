@@ -1,5 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
-import { middleware } from '../middleware/roleMiddleware';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 // Mock jose
@@ -8,7 +7,13 @@ vi.mock('jose', () => ({
 }));
 
 describe('Auth Middleware', () => {
+  beforeEach(() => {
+    process.env.JWT_SECRET = 'test-secret';
+    vi.resetModules();
+  });
+
   it('should redirect if no token is present', async () => {
+    const { middleware } = await import('../middleware/roleMiddleware');
     const req = new NextRequest('http://localhost/dashboard');
     const res = await middleware(req);
     expect(res.status).toBe(307);

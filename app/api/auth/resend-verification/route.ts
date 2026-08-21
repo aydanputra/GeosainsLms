@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
-import { enforceRateLimit, generateOpaqueToken, getClientIp, isSameOrigin, sha256Hex } from '@/modules/auth/utils/security';
-import { sendEmail } from '@/utils/email';
+import { enforceRateLimit, getClientIp, isSameOrigin } from '@/modules/auth/utils/security';
+import { issueVerificationEmail } from '@/modules/auth/utils/emailVerification';
+import { getAppUrl } from '@/modules/core/utils/appUrl';
+import { writeRateLimitAuditLog } from '@/utils/audit';
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,6 +14,12 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
     const rl = enforceRateLimit({ key: `auth:resend-verify:${ip}`, limit: 10, windowMs: 60 * 60 * 1000 });
     if (!rl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        action: 'AUTH_RESEND_VERIFICATION_RATE_LIMITED',
+        key: `auth:resend-verify:${ip}`,
+        retryAfterSeconds: rl.retryAfterSeconds,
+      });
       return NextResponse.json(
         { error: 'Terlalu banyak permintaan. Coba lagi nanti.' },
         { status: 429, headers: { 'Retry-After': String(rl.retryAfterSeconds) } }
@@ -33,26 +41,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, sent: true }, { status: 200 });
     }
 
-    const rawToken = generateOpaqueToken(32);
-    const tokenHash = sha256Hex(rawToken);
-    await prisma.$transaction(async (tx: any) => {
-      await tx.emailVerificationToken.deleteMany({ where: { userId: user.id, usedAt: null } });
-      await tx.emailVerificationToken.create({
-        data: {
-          userId: user.id,
-          tokenHash,
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-        },
-      });
+    const issued = await issueVerificationEmail({
+      userId: String(user.id),
+      email,
+      origin: getAppUrl(req.headers),
     });
-
-    const verifyUrl = `${req.nextUrl.origin}/verify-email?token=${encodeURIComponent(rawToken)}`;
-    await sendEmail({
-      to: email,
-      subject: 'Verifikasi Email - Geosains LMS',
-      text: `Klik link berikut untuk verifikasi email Anda:\n${verifyUrl}\n\nJika Anda tidak merasa mendaftar, abaikan email ini.`,
-    });
-    const devVerifyUrl = process.env.NODE_ENV !== 'production' ? verifyUrl : undefined;
+    const devVerifyUrl = process.env.NODE_ENV !== 'production' ? issued.verifyUrl : undefined;
 
     return NextResponse.json({ ok: true, sent: true, devVerifyUrl }, { status: 200 });
   } catch (error: any) {

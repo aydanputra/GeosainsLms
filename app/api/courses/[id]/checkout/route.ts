@@ -4,7 +4,10 @@ import { verifyToken } from '@/modules/auth/utils/auth';
 import { isSameOrigin } from '@/modules/auth/utils/security';
 import { createOrder } from '@/modules/shop/api/service';
 import { createPayment } from '@/modules/payment/api/service';
+import { sendStudentOrderCreatedEmail } from '@/utils/email-notifications';
+import { getAppUrl } from '@/modules/core/utils/appUrl';
 import { CourseStatus } from '@prisma/client';
+import { getCourseCommerceContext } from '@/modules/course/api/performance';
 
 function safeParse(content: string | null | undefined) {
   if (!content) return {};
@@ -157,25 +160,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const uniqueCode = Number.isFinite(uniqueCodeRaw) ? Math.floor(uniqueCodeRaw) : null;
     const preview = body?.preview === true;
 
-    const course = await prisma.course.findUnique({
-      where: { id: courseId },
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        price: true,
-        categoryId: true,
-        categoryIds: true,
-        status: true,
-        deletedAt: true,
-        instructorId: true,
-        enrollmentEndDate: true,
-        maxStudents: true,
-        validityDays: true,
-        subscriptionEligible: true,
-        requirements: true,
-      },
-    });
+    const course = await getCourseCommerceContext(courseId);
 
     if (!course || course.deletedAt) return NextResponse.json({ error: 'Kursus tidak ditemukan' }, { status: 404 });
 
@@ -296,6 +281,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const paymentMethod = methodRaw === 'MIDTRANS' || methodRaw === 'MANUAL' ? methodRaw : 'XENDIT';
 
     if (paymentMethod === 'MANUAL') {
+      if (profile.email) {
+        await sendStudentOrderCreatedEmail({
+          to: profile.email,
+          name: profile.name || null,
+          orderId: String(order.id),
+          total: Number(order.total || 0),
+          manualPayment: true,
+          actionUrl: `${getAppUrl(req.headers)}/dashboard/student/orders?orderId=${encodeURIComponent(String(order.id))}`,
+        });
+      }
       return NextResponse.json({
         message: 'Pesanan berhasil dibuat. Silakan lakukan pembayaran manual dan unggah bukti transfer.',
         enrolled: false,

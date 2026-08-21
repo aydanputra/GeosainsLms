@@ -1,19 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { 
-  GripVertical, 
-  Plus, 
-  Trash2, 
-  Edit2, 
-  Video, 
-  FileText, 
-  ChevronDown, 
-  ChevronUp,
-  Save,
-  X,
-  MoreVertical,
   Layout,
   List,
   Settings
@@ -23,27 +11,12 @@ import BasicInfoTab from './tabs/BasicInfoTab';
 import CurriculumTab from './tabs/CurriculumTab';
 import SettingsTab from './tabs/SettingsTab';
 
-interface Lesson {
-  id: string;
-  title: string;
-  type: 'VIDEO' | 'TEXT';
-  order: number;
-}
-
-interface Module {
-  id: string;
-  title: string;
-  lessons: Lesson[];
-  order: number;
-}
-
 interface CourseDetailProps {
   course: any; // Using any for now to be flexible with Prisma include structure
   mentors: { id: string; name: string }[];
 }
 
 export default function CourseDetail({ course, mentors }: CourseDetailProps) {
-  const router = useRouter();
   const [activeTab, setActiveTab] = useState<'info' | 'curriculum' | 'settings'>('info');
 
   const tabs = [
@@ -92,4 +65,3 @@ export default function CourseDetail({ course, mentors }: CourseDetailProps) {
     </div>
   );
 }
-

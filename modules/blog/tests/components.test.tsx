@@ -25,12 +25,12 @@ describe('Blog Components', () => {
       render(<PostCard post={mockPost} />);
       expect(screen.getByText('Test Post')).toBeDefined();
       expect(screen.getByText('Test Author')).toBeDefined();
-      expect(screen.getByText('Read more')).toBeDefined();
+      expect(screen.getByText('Baca selengkapnya →')).toBeDefined();
     });
 
     it('should format date correctly', () => {
       render(<PostCard post={mockPost} />);
-      expect(screen.getByText('January 1, 2023')).toBeDefined();
+      expect(screen.getByText('1 Januari 2023')).toBeDefined();
     });
   });
 

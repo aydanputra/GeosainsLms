@@ -68,22 +68,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ orde
         id: true,
         status: true,
         createdAt: true,
-        subtotal: true,
-        discountTotal: true,
-        discountStoreTotal: true,
-        discountMarketplaceTotal: true,
-        serviceFee: true,
-        uniqueCode: true,
-        refundTotal: true,
-        refundedAt: true,
         total: true,
-        affiliateCode: true,
-        affiliateReferralId: true,
-        manualPaymentStatus: true,
-        manualPaymentProofUrl: true,
-        manualPaymentNote: true,
-        manualPaymentSubmittedAt: true,
-        manualPaymentReviewedAt: true,
         shippingRecipientName: true,
         shippingPhone: true,
         shippingAddressLine1: true,
@@ -95,9 +80,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ orde
         shippingCourier: true,
         shippingTrackingNumber: true,
         shippedAt: true,
-        payment: { select: { status: true, provider: true } },
         user: { select: { id: true, name: true, email: true } },
-        coupon: { select: { code: true, funding: true, marketplaceSharePercent: true } },
         commission: { select: { amount: true, status: true } },
         items: {
           select: {
@@ -127,6 +110,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ orde
     });
 
     if (filteredItems.length === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const hasAllowedPhysicalItem = filteredItems.some((it) => String(it?.product?.type || '').toUpperCase() === 'PHYSICAL');
 
     const settingsPage = await prisma.page.findUnique({ where: { slug: SETTINGS_SLUG }, select: { content: true } });
     const settings = safeParseJson(settingsPage?.content);
@@ -243,14 +227,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ orde
     const pricing = {
       isPaid,
       order: {
-        subtotal: Number(order.subtotal || 0),
-        discountStoreTotal: Number(order.discountStoreTotal || 0),
-        discountMarketplaceTotal: Number(order.discountMarketplaceTotal || 0),
-        discountTotal: Number(order.discountTotal || 0),
-        serviceFee: Number((order as any).serviceFee || 0),
-        uniqueCode: Number((order as any).uniqueCode || 0),
-        total: Number(order.total || 0),
-        refundTotal: Number(order.refundTotal || 0),
+        subtotal: sums.gross,
+        discountStoreTotal: sums.discountStore,
+        discountMarketplaceTotal: sums.discountMarketplace,
+        discountTotal: sums.discountTotal,
+        serviceFee: 0,
+        uniqueCode: 0,
+        total: sums.buyerPaid,
+        refundTotal: sums.refund,
       },
       earnings: {
         gross: sums.gross,
@@ -273,7 +257,28 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ orde
       items: itemBreakdownWithAffiliate,
     };
 
-    return NextResponse.json({ ...order, items: filteredItems, pricing }, { status: 200 });
+    return NextResponse.json(
+      {
+        id: order.id,
+        status: order.status,
+        createdAt: order.createdAt,
+        user: order.user,
+        shippingRecipientName: hasAllowedPhysicalItem ? order.shippingRecipientName : null,
+        shippingPhone: hasAllowedPhysicalItem ? order.shippingPhone : null,
+        shippingAddressLine1: hasAllowedPhysicalItem ? order.shippingAddressLine1 : null,
+        shippingAddressLine2: hasAllowedPhysicalItem ? order.shippingAddressLine2 : null,
+        shippingCity: hasAllowedPhysicalItem ? order.shippingCity : null,
+        shippingProvince: hasAllowedPhysicalItem ? order.shippingProvince : null,
+        shippingPostalCode: hasAllowedPhysicalItem ? order.shippingPostalCode : null,
+        shippingCountry: hasAllowedPhysicalItem ? order.shippingCountry : null,
+        shippingCourier: hasAllowedPhysicalItem ? order.shippingCourier : null,
+        shippingTrackingNumber: hasAllowedPhysicalItem ? order.shippingTrackingNumber : null,
+        shippedAt: hasAllowedPhysicalItem ? order.shippedAt : null,
+        items: filteredItems,
+        pricing,
+      },
+      { status: 200 }
+    );
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Gagal memuat order' }, { status: 500 });
   }

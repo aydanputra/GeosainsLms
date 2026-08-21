@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Table from '../../components/Tables';
 import Cards from '../../components/Cards';
 import EmptyState from '../../components/EmptyState';
@@ -98,7 +98,7 @@ export default function AdminUsers({ users: initialUsers }: AdminUsersProps) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  const toggleAllVisible = () => {
+  const toggleAllVisible = useCallback(() => {
     setSelectedIds((prev) => {
       const prevSet = new Set(prev);
       const allSelected = visibleIds.length > 0 && visibleIds.every((id) => prevSet.has(id));
@@ -106,7 +106,7 @@ export default function AdminUsers({ users: initialUsers }: AdminUsersProps) {
       for (const id of visibleIds) prevSet.add(id);
       return Array.from(prevSet);
     });
-  };
+  }, [visibleIds]);
 
   const metrics = [
     { label: 'Total Pengguna', value: users.length, color: 'bg-blue-500' },
@@ -116,7 +116,7 @@ export default function AdminUsers({ users: initialUsers }: AdminUsersProps) {
     { label: 'Vendor', value: users.filter(u => u.role === 'VENDOR').length, color: 'bg-amber-500' },
   ];
 
-  const openEdit = (row: any) => {
+  const openEdit = useCallback((row: any) => {
     const id = typeof row?.id === 'string' ? row.id : '';
     if (!id) return;
     const rowRole = typeof row?.role === 'string' ? String(row.role).toUpperCase() : '';
@@ -132,7 +132,7 @@ export default function AdminUsers({ users: initialUsers }: AdminUsersProps) {
       isSuperAdmin: Boolean(row?.isSuperAdmin),
     });
     setEditOpen(true);
-  };
+  }, [actorIsSuperAdmin]);
 
   const renderPasswordInput = ({
     value,
@@ -341,7 +341,7 @@ export default function AdminUsers({ users: initialUsers }: AdminUsersProps) {
       ) 
     },
     { header: 'Status', accessorKey: 'status',
-      cell: (val: string) => (
+      cell: () => (
         <span className="px-3 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
           Aktif
         </span>
@@ -375,7 +375,7 @@ export default function AdminUsers({ users: initialUsers }: AdminUsersProps) {
       )
     }
   ];
-  }, [isAllVisibleSelected, isBulkDeleting, selectedIds, toggleAllVisible, visibleIds.length]);
+  }, [isAllVisibleSelected, isBulkDeleting, openEdit, selectedIds, toggleAllVisible, visibleIds.length]);
 
   const confirmDelete = () => {
     (async () => {

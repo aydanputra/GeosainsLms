@@ -3,6 +3,8 @@ import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { isSameOrigin } from '@/modules/auth/utils/security';
 import { writeAuditLog } from '@/utils/audit';
+import { sendStudentStatusUpdateEmail } from '@/utils/email-notifications';
+import { getAppUrl } from '@/modules/core/utils/appUrl';
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -29,7 +31,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     const reservation = await prisma.rentalReservation.findUnique({
       where: { id: reservationId },
-      include: { orderItem: { include: { order: true } }, product: { select: { id: true, name: true } } },
+      include: {
+        orderItem: { include: { order: true } },
+        product: { select: { id: true, name: true } },
+        user: { select: { name: true, email: true } },
+      },
     });
     if (!reservation) return NextResponse.json({ error: 'Reservasi tidak ditemukan' }, { status: 404 });
 
@@ -94,6 +100,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       },
     });
 
+    if (reservation.user?.email) {
+      await sendStudentStatusUpdateEmail({
+        to: reservation.user.email,
+        name: reservation.user.name || null,
+        title:
+          action === 'APPROVE'
+            ? 'Sewa Disetujui'
+            : action === 'START'
+              ? 'Sewa Dimulai'
+              : action === 'RETURN'
+                ? 'Sewa Selesai (Dikembalikan)'
+                : 'Sewa Dibatalkan',
+        itemName: reservation.product?.name || reservation.productId,
+        orderId: reservation.orderItem?.orderId || null,
+        note: note || null,
+        actionUrl: `${getAppUrl(req.headers)}/dashboard/student/orders?orderId=${encodeURIComponent(String(reservation.orderItem?.orderId || ''))}`,
+      });
+    }
+
     await writeAuditLog({
       req,
       actor: { id: String(admin.id), role: admin.role },
@@ -108,4 +133,3 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: error?.message || 'Gagal update reservasi' }, { status: 500 });
   }
 }
-

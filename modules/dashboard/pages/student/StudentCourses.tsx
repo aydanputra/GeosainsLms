@@ -2,20 +2,125 @@
 
 import { Play, Award, Clock, BookOpen, User, Star, X, Loader2 } from 'lucide-react';
 import Link from 'next/link';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import Image from 'next/image';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { normalizeImageUrl, toOptimizedImageUrl } from '@/modules/core/utils/image';
 
 interface StudentCoursesProps {
   courses: any[];
+  initialReviewState?: Record<
+    string,
+    {
+      ratingAvg: number;
+      ratingCount: number;
+      myRating: number | null;
+      myComment: string;
+    }
+  >;
 }
 
-export default function StudentCourses({ courses }: StudentCoursesProps) {
+function StudentCourseCard({ course, onOpenReview }: { course: any; onOpenReview: (course: any) => void }) {
+  const [imgError, setImgError] = useState(false);
+  const thumbnailUrl = normalizeImageUrl(course.thumbnailUrl, { fallback: '/placeholder-course.jpg' }) || '/placeholder-course.jpg';
+  const imageSrc = imgError
+    ? '/placeholder-course.jpg'
+    : toOptimizedImageUrl(thumbnailUrl, { width: 720, height: 405, fit: 'fill' }) || '/placeholder-course.jpg';
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow group flex flex-col">
+      <div className="aspect-video bg-slate-100 relative overflow-hidden">
+        <Image
+          src={imageSrc}
+          alt={course.title}
+          fill
+          sizes="(max-width: 768px) calc(100vw - 3rem), (max-width: 1280px) calc(50vw - 3rem), 360px"
+          className="object-cover group-hover:scale-105 transition-transform duration-500"
+          onError={() => setImgError(true)}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
+          <Link
+            href={`/courses/${course.slug}/learn`}
+            className="w-full bg-white/90 hover:bg-white text-slate-900 font-medium py-2 rounded-lg text-center text-sm backdrop-blur-sm transition-colors"
+          >
+            Lanjut Belajar
+          </Link>
+        </div>
+      </div>
+
+      <div className="p-5 flex-1 flex flex-col">
+        <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
+          <User className="w-3.5 h-3.5" />
+          <span>{course.instructorName}</span>
+        </div>
+
+        <h3 className="font-bold text-slate-900 line-clamp-2 mb-4 group-hover:text-indigo-600 transition-colors">
+          <Link href={`/courses/${course.slug}/learn`}>
+            {course.title}
+          </Link>
+        </h3>
+
+        <div className="mt-auto space-y-4">
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs font-medium">
+              <span className="text-slate-600">{course.progress}% Selesai</span>
+              <span className="text-slate-400">{course.completedLessons}/{course.totalLessons} Materi</span>
+            </div>
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-indigo-600 rounded-full transition-all duration-500"
+                style={{ width: `${course.progress}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+            {course.progress === 100 ? (
+              <Link
+                href="/dashboard/student/certificates"
+                className="text-xs font-bold text-emerald-600 flex items-center gap-1.5 hover:text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <Award className="w-4 h-4" /> Lihat Sertifikat
+              </Link>
+            ) : (
+              <span className="text-xs text-slate-400 flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" /> Terdaftar {course.enrolledAt}
+              </span>
+            )}
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={course.reviewsEnabled === false}
+                onClick={() => onOpenReview(course)}
+                className="p-2 bg-slate-50 text-amber-600 rounded-lg hover:bg-amber-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Beri Ulasan"
+              >
+                <Star className="w-4 h-4" fill="currentColor" />
+              </button>
+              <Link
+                href={`/courses/${course.slug}/learn`}
+                className="p-2 bg-slate-50 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
+                title="Lanjut Belajar"
+              >
+                <Play className="w-4 h-4 fill-current" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function StudentCourses({ courses, initialReviewState = {} }: StudentCoursesProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const didAutoOpenReviewRef = useRef(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewCourse, setReviewCourse] = useState<any | null>(null);
+  const [reviewSnapshotMap, setReviewSnapshotMap] = useState(initialReviewState);
   const [ratingAvg, setRatingAvg] = useState(0);
   const [ratingCount, setRatingCount] = useState(0);
   const [myRating, setMyRating] = useState<number | null>(null);
@@ -24,29 +129,21 @@ export default function StudentCourses({ courses }: StudentCoursesProps) {
   const [isSavingReview, setIsSavingReview] = useState(false);
 
   const openReview = async (course: any) => {
+    if (course?.reviewsEnabled === false) {
+      toast.error('Ulasan dinonaktifkan untuk kursus ini');
+      return;
+    }
     setReviewCourse(course);
     setReviewOpen(true);
-    setIsLoadingReview(true);
-    try {
-      const res = await fetch(`/api/courses/${encodeURIComponent(String(course.id))}/rating`, { cache: 'no-store' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error((data as any)?.error || 'Gagal memuat ulasan');
-      setRatingAvg(typeof (data as any)?.ratingAvg === 'number' ? (data as any).ratingAvg : 0);
-      setRatingCount(typeof (data as any)?.ratingCount === 'number' ? (data as any).ratingCount : 0);
-      setMyRating(typeof (data as any)?.myRating === 'number' ? (data as any).myRating : null);
-      setMyComment(typeof (data as any)?.myComment === 'string' ? (data as any).myComment : '');
-    } catch (e: any) {
-      toast.error(e?.message || 'Gagal memuat ulasan');
-      setRatingAvg(0);
-      setRatingCount(0);
-      setMyRating(null);
-      setMyComment('');
-    } finally {
-      setIsLoadingReview(false);
-    }
+    const snapshot = reviewSnapshotMap[String(course.id)];
+    setRatingAvg(typeof snapshot?.ratingAvg === 'number' ? snapshot.ratingAvg : 0);
+    setRatingCount(typeof snapshot?.ratingCount === 'number' ? snapshot.ratingCount : 0);
+    setMyRating(typeof snapshot?.myRating === 'number' ? snapshot.myRating : null);
+    setMyComment(typeof snapshot?.myComment === 'string' ? snapshot.myComment : '');
+    setIsLoadingReview(false);
   };
 
-  const closeReview = () => {
+  const closeReview = useCallback(() => {
     setReviewOpen(false);
     setReviewCourse(null);
     setRatingAvg(0);
@@ -60,7 +157,7 @@ export default function StudentCourses({ courses }: StudentCoursesProps) {
     if (typeof reviewCourseId === 'string' && reviewCourseId.trim()) {
       router.replace('/dashboard/student/courses');
     }
-  };
+  }, [router, searchParams]);
 
   const canSaveReview = useMemo(() => {
     return Boolean(reviewCourse?.id) && typeof myRating === 'number' && myRating >= 1 && myRating <= 5;
@@ -81,8 +178,18 @@ export default function StudentCourses({ courses }: StudentCoursesProps) {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error((data as any)?.error || 'Gagal menyimpan ulasan');
-      setRatingAvg(typeof (data as any)?.ratingAvg === 'number' ? (data as any).ratingAvg : ratingAvg);
-      setRatingCount(typeof (data as any)?.ratingCount === 'number' ? (data as any).ratingCount : ratingCount);
+      const nextSnapshot = {
+        ratingAvg: typeof (data as any)?.ratingAvg === 'number' ? (data as any).ratingAvg : ratingAvg,
+        ratingCount: typeof (data as any)?.ratingCount === 'number' ? (data as any).ratingCount : ratingCount,
+        myRating,
+        myComment,
+      };
+      setRatingAvg(nextSnapshot.ratingAvg);
+      setRatingCount(nextSnapshot.ratingCount);
+      setReviewSnapshotMap((prev) => ({
+        ...prev,
+        [String(reviewCourse.id)]: nextSnapshot,
+      }));
       toast.success('Ulasan berhasil disimpan');
       const nextRaw = searchParams?.get('next');
       const next = typeof nextRaw === 'string' ? nextRaw.trim() : '';
@@ -115,7 +222,7 @@ export default function StudentCourses({ courses }: StudentCoursesProps) {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [reviewOpen]);
+  }, [closeReview, reviewOpen]);
 
   if (!courses || courses.length === 0) {
     return (
@@ -146,88 +253,7 @@ export default function StudentCourses({ courses }: StudentCoursesProps) {
       
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {courses.map((course) => (
-          <div key={course.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:shadow-lg transition-shadow group flex flex-col">
-            {/* Thumbnail */}
-            <div className="aspect-video bg-slate-100 relative overflow-hidden">
-              <img 
-                src={course.thumbnailUrl || '/placeholder-course.jpg'} 
-                alt={course.title} 
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" 
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
-                <Link 
-                  href={`/courses/${course.slug}/learn`}
-                  className="w-full bg-white/90 hover:bg-white text-slate-900 font-medium py-2 rounded-lg text-center text-sm backdrop-blur-sm transition-colors"
-                >
-                  Lanjut Belajar
-                </Link>
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="p-5 flex-1 flex flex-col">
-              <div className="flex items-center gap-2 text-xs text-slate-500 mb-2">
-                <User className="w-3.5 h-3.5" />
-                <span>{course.instructorName}</span>
-              </div>
-              
-              <h3 className="font-bold text-slate-900 line-clamp-2 mb-4 group-hover:text-indigo-600 transition-colors">
-                <Link href={`/courses/${course.slug}/learn`}>
-                  {course.title}
-                </Link>
-              </h3>
-
-              <div className="mt-auto space-y-4">
-                {/* Progress Bar */}
-                <div className="space-y-2">
-                  <div className="flex justify-between text-xs font-medium">
-                    <span className="text-slate-600">{course.progress}% Selesai</span>
-                    <span className="text-slate-400">{course.completedLessons}/{course.totalLessons} Materi</span>
-                  </div>
-                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-indigo-600 rounded-full transition-all duration-500"
-                      style={{ width: `${course.progress}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Action Footer */}
-                <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                  {course.progress === 100 ? (
-                    <Link 
-                      href="/dashboard/student/certificates"
-                      className="text-xs font-bold text-emerald-600 flex items-center gap-1.5 hover:text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors"
-                    >
-                      <Award className="w-4 h-4" /> Lihat Sertifikat
-                    </Link>
-                  ) : (
-                    <span className="text-xs text-slate-400 flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" /> Terdaftar {course.enrolledAt}
-                    </span>
-                  )}
-                  
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openReview(course)}
-                      className="p-2 bg-slate-50 text-amber-600 rounded-lg hover:bg-amber-50 transition-colors"
-                      title="Beri Ulasan"
-                    >
-                      <Star className="w-4 h-4" fill="currentColor" />
-                    </button>
-                    <Link 
-                      href={`/courses/${course.slug}/learn`}
-                      className="p-2 bg-slate-50 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
-                      title="Lanjut Belajar"
-                    >
-                      <Play className="w-4 h-4 fill-current" />
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <StudentCourseCard key={course.id} course={course} onOpenReview={openReview} />
         ))}
       </div>
 

@@ -289,10 +289,10 @@ export default function AdminCourseReportDetail({ courseId, courseTitle, courseS
     const preset = getPresetDates('30D');
     setFromDate(preset.from);
     setToDate(preset.to);
-    loadOverview('30D');
-    loadStudents({ reset: true });
-    loadReviews({ reset: true });
-  }, []);
+    void loadOverview('30D');
+    void loadStudents({ reset: true });
+    void loadReviews({ reset: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const resetProgress = async (enrollmentId: string) => {
     try {

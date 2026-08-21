@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/utils/prisma';
 import { createToken, verifyPassword } from '@/modules/auth/utils/auth';
 import { enforceRateLimit, getClientIp, isSameOrigin } from '@/modules/auth/utils/security';
-import { writeAuditLog } from '@/utils/audit';
+import { writeAuditLog, writeRateLimitAuditLog } from '@/utils/audit';
 import { SignJWT } from 'jose';
+import { createPendingVerificationToken, setAuthCookies, setPendingVerificationCookie } from '@/modules/auth/utils/verificationAutoLogin';
 
 function getSecretKey() {
   const secret = process.env.JWT_SECRET;
@@ -20,6 +21,13 @@ export async function POST(req: NextRequest) {
     const ip = getClientIp(req);
     const ipRl = enforceRateLimit({ key: `auth:login:ip:${ip}`, limit: 25, windowMs: 15 * 60 * 1000 });
     if (!ipRl.ok) {
+      await writeRateLimitAuditLog({
+        req,
+        action: 'AUTH_LOGIN_RATE_LIMITED',
+        key: `auth:login:ip:${ip}`,
+        retryAfterSeconds: ipRl.retryAfterSeconds,
+        metadata: { scope: 'ip' },
+      });
       return NextResponse.json(
         { error: 'Terlalu banyak percobaan login. Coba lagi nanti.' },
         { status: 429, headers: { 'Retry-After': String(ipRl.retryAfterSeconds) } }
@@ -31,6 +39,13 @@ export async function POST(req: NextRequest) {
     if (email) {
       const emailRl = enforceRateLimit({ key: `auth:login:email:${email}:${ip}`, limit: 10, windowMs: 15 * 60 * 1000 });
       if (!emailRl.ok) {
+        await writeRateLimitAuditLog({
+          req,
+          action: 'AUTH_LOGIN_RATE_LIMITED',
+          key: `auth:login:email:${email}:${ip}`,
+          retryAfterSeconds: emailRl.retryAfterSeconds,
+          metadata: { scope: 'email', email },
+        });
         return NextResponse.json(
           { error: 'Terlalu banyak percobaan login untuk email ini. Coba lagi nanti.' },
           { status: 429, headers: { 'Retry-After': String(emailRl.retryAfterSeconds) } }
@@ -43,16 +58,20 @@ export async function POST(req: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { email },
-      select: { id: true, email: true, name: true, role: true, isSuperAdmin: true, emailVerifiedAt: true, password: true, totpEnabled: true },
+      select: { id: true, email: true, name: true, role: true, isSuperAdmin: true, emailVerifiedAt: true, password: true, totpEnabled: true, sessionVersion: true },
     });
 
     if (!user) return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
-    if (!user.emailVerifiedAt && user.role !== 'ADMIN') {
-      return NextResponse.json({ error: 'Email belum terverifikasi', code: 'EMAIL_NOT_VERIFIED' }, { status: 403 });
-    }
 
     const isValid = await verifyPassword(password, user.password);
     if (!isValid) return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
+
+    if (!user.emailVerifiedAt && user.role !== 'ADMIN') {
+      const response = NextResponse.json({ error: 'Email belum terverifikasi', code: 'EMAIL_NOT_VERIFIED' }, { status: 403 });
+      const pendingToken = await createPendingVerificationToken(String(user.id));
+      setPendingVerificationCookie(response, pendingToken);
+      return response;
+    }
 
     if (user.totpEnabled) {
       const tempToken = await new SignJWT({ purpose: 'totp_login', uid: String(user.id), method: 'password' })
@@ -77,6 +96,7 @@ export async function POST(req: NextRequest) {
       role: user.role,
       isSuperAdmin: Boolean((user as any).isSuperAdmin),
       totpEnabled: Boolean((user as any).totpEnabled),
+      sessionVersion: Number((user as any).sessionVersion || 0),
     });
 
     const response = NextResponse.json(
@@ -92,22 +112,7 @@ export async function POST(req: NextRequest) {
       }
     })();
 
-    // Set HttpOnly cookie
-    response.cookies.set('token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 24, // 1 day
-      path: '/',
-    });
-
-    response.cookies.set('sid', sessionId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 24, // 1 day
-      path: '/',
-    });
+    setAuthCookies(response, token, sessionId);
 
     const country =
       (req as any)?.geo?.country ||

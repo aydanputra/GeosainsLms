@@ -65,7 +65,7 @@ export default function LessonEditor({ courseId, moduleId, lesson, onClose }: Le
       toast.success('Pelajaran berhasil diperbarui');
       router.refresh();
       onClose();
-    } catch (error) {
+    } catch {
       toast.error('Terjadi kesalahan saat menyimpan pelajaran.');
     } finally {
       setIsSubmitting(false);

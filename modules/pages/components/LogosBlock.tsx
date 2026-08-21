@@ -105,7 +105,19 @@ export default function LogosBlock({ content }: { content: LogosContent }) {
   const grayscale = Boolean(content?.grayscale);
   const logoHeightPx = typeof content?.logoHeightPx === 'number' && Number.isFinite(content.logoHeightPx) ? content.logoHeightPx : 36;
   const durationSec = typeof content?.durationSec === 'number' && Number.isFinite(content.durationSec) ? content.durationSec : 22;
-  const items = useMemo(() => (Array.isArray(content?.items) ? content.items : []).filter((it) => it?.name || it?.imageUrl), [content]);
+  const items = useMemo(
+    () =>
+      (Array.isArray(content?.items) ? content.items : []).filter((it) => {
+        const name = typeof it?.name === 'string' ? it.name.trim() : '';
+        const imageUrl = typeof it?.imageUrl === 'string' ? it.imageUrl.trim() : '';
+        const href = typeof it?.href === 'string' ? it.href.trim() : '';
+
+        if (!name && !imageUrl) return false;
+        if (!imageUrl && !href && /^company\s+[a-z0-9]+$/i.test(name)) return false;
+        return true;
+      }),
+    [content]
+  );
   const marqueeViewportRef = useRef<HTMLDivElement | null>(null);
   const marqueeTrackRef = useRef<HTMLDivElement | null>(null);
   const marqueeMeasureRef = useRef<HTMLDivElement | null>(null);
@@ -126,18 +138,19 @@ export default function LogosBlock({ content }: { content: LogosContent }) {
     const name = typeof it.name === 'string' ? it.name : '';
     const href = typeof it.href === 'string' ? it.href : '';
     const imageUrl = typeof it.imageUrl === 'string' ? it.imageUrl : '';
-    const displayName = name || 'Logo';
+    const isGenericPlaceholder = /^company\s+[a-z0-9]+$/i.test(name.trim());
+    const displayName = isGenericPlaceholder ? 'Logo Partner' : name || 'Logo';
     const isBroken = Boolean(brokenMap[key]);
 
     const node = (
-      <div className={logoClassName} style={{ height: `${logoHeightPx + 24}px` }}>
+      <div className={logoClassName} style={{ height: `${logoHeightPx + 24}px`, contentVisibility: 'auto', containIntrinsicSize: '120px' }}>
         <div className="relative w-full" style={{ height: `${logoHeightPx}px` }}>
           {imageUrl && !isBroken ? (
             <Image
               src={imageUrl}
               alt={displayName}
               fill
-              unoptimized
+              sizes={`${Math.max(160, Math.round(logoHeightPx * 3))}px`}
               className="object-contain"
               onError={() => setBrokenMap((prev) => ({ ...prev, [key]: true }))}
             />

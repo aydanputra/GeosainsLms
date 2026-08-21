@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Table from '../../components/Tables';
 import Cards from '../../components/Cards';
@@ -40,12 +40,12 @@ export default function ArticleList({
     return visibleIds.every((id) => set.has(id));
   }, [canManage, selectedIds, visibleIds]);
 
-  const toggleOne = (id: string) => {
+  const toggleOne = useCallback((id: string) => {
     if (!canManage) return;
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  };
+  }, [canManage]);
 
-  const toggleAllVisible = () => {
+  const toggleAllVisible = useCallback(() => {
     if (!canManage) return;
     setSelectedIds((prev) => {
       const prevSet = new Set(prev);
@@ -54,7 +54,7 @@ export default function ArticleList({
       for (const id of visibleIds) prevSet.add(id);
       return Array.from(prevSet);
     });
-  };
+  }, [canManage, visibleIds]);
 
   const metrics = [
     { label: 'Total Artikel', value: posts.length, color: 'bg-blue-500' },

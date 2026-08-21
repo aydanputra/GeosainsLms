@@ -50,7 +50,7 @@ export const useAdminOrders = () => {
   });
 };
 
-export const useMentorStats = () => {
+export const useMentorStats = (initialData?: any) => {
   return useQuery({
     queryKey: ['mentorStats'],
     queryFn: async () => {
@@ -58,10 +58,12 @@ export const useMentorStats = () => {
       if (!res.ok) throw new Error('Failed to fetch mentor stats');
       return res.json();
     },
+    initialData,
+    staleTime: 60_000,
   });
 };
 
-export const useMentorCourses = () => {
+export const useMentorCourses = (initialData?: any) => {
   return useQuery({
     queryKey: ['mentorCourses'],
     queryFn: async () => {
@@ -81,10 +83,12 @@ export const useMentorCourses = () => {
       if (!res.ok) throw new Error('Failed to fetch mentor courses');
       return res.json();
     },
+    initialData,
+    staleTime: 60_000,
   });
 };
 
-export const useStudentStats = () => {
+export const useStudentStats = (initialData?: any) => {
   return useQuery({
     queryKey: ['studentStats'],
     queryFn: async () => {
@@ -92,10 +96,12 @@ export const useStudentStats = () => {
       if (!res.ok) throw new Error('Failed to fetch student stats');
       return res.json();
     },
+    initialData,
+    staleTime: 60_000,
   });
 };
 
-export const useStudentCourses = () => {
+export const useStudentCourses = (initialData?: any) => {
   return useQuery({
     queryKey: ['studentCourses'],
     queryFn: async () => {
@@ -103,5 +109,7 @@ export const useStudentCourses = () => {
       if (!res.ok) throw new Error('Failed to fetch student courses');
       return res.json();
     },
+    initialData,
+    staleTime: 60_000,
   });
 };
