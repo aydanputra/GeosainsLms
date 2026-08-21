@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { createProduct, ProductSchema } from '@/modules/shop/api/service';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
@@ -220,6 +221,11 @@ export async function POST(req: NextRequest) {
           vendorId,
         },
       });
+      revalidateTag('public-shop-products-page');
+      revalidateTag('public-shop-categories');
+      revalidateTag('public-product-route-ids');
+      revalidateTag('public-page-vendors');
+      revalidateTag('homepage-vendors');
       return NextResponse.json(created, { status: 201 });
     }
 
@@ -241,6 +247,11 @@ export async function POST(req: NextRequest) {
 
     const slug = parsed.data.slug ? await generateUniqueSlug(parsed.data.slug) : await generateUniqueSlug(parsed.data.name);
     const product = await createProduct({ ...parsed.data, slug });
+    revalidateTag('public-shop-products-page');
+    revalidateTag('public-shop-categories');
+    revalidateTag('public-product-route-ids');
+    revalidateTag('public-page-vendors');
+    revalidateTag('homepage-vendors');
     return NextResponse.json(product, { status: 201 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });

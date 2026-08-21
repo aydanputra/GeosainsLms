@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { getCourseById, updateCourse, deleteCourse } from '@/modules/course/api/service';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
@@ -333,6 +334,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     await updateCourse(id, body);
     
+    revalidateTag('public-course-detail-base');
+    revalidateTag('course-page-site-settings');
+    revalidateTag('public-course-catalog-data-shared');
+    revalidateTag('public-course-slugs');
+    revalidateTag('public-course-tag-slugs');
+    revalidateTag('public-page-courses');
+    revalidateTag('homepage-courses');
+    
     // Fetch updated course with full relations (modules, lessons, etc.)
     // This is crucial for CourseWizard state consistency, especially for Review step validation
     const updatedCourse = await getCourseById(id);
@@ -378,6 +387,15 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       entityType: 'Course',
       entityId: id,
     });
+
+    revalidateTag('public-course-detail-base');
+    revalidateTag('course-page-site-settings');
+    revalidateTag('public-course-catalog-data-shared');
+    revalidateTag('public-course-slugs');
+    revalidateTag('public-course-tag-slugs');
+    revalidateTag('public-page-courses');
+    revalidateTag('homepage-courses');
+
     return NextResponse.json({ message: 'Course deleted' });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

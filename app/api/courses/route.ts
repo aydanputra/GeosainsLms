@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { prisma } from '@/utils/prisma';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { CourseStatus } from '@prisma/client';
@@ -300,6 +301,11 @@ export async function POST(req: NextRequest) {
     // Use service layer for creation (handles slug generation)
     const course = await createCourse(parsedCourse.data);
     
+    revalidateTag('public-course-catalog-data-shared');
+    revalidateTag('public-course-slugs');
+    revalidateTag('public-course-tag-slugs');
+    revalidateTag('public-page-courses');
+    revalidateTag('homepage-courses');
     return NextResponse.json(course, { status: 201 });
   } catch (error: any) {
     console.error("Create Course Error:", error);

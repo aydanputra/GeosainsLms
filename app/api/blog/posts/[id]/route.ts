@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { updatePost, deletePost, getPostBySlug } from '@/modules/blog/api/service';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { prisma } from '@/utils/prisma';
@@ -56,6 +57,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       entityId: String(id),
       metadata: { changes: body },
     });
+    revalidateTag('blog-post-public-detail');
+    revalidateTag('public-blog-post-previews');
+    revalidateTag('public-blog-slugs');
+    revalidateTag('public-blog-category-slugs');
+    revalidateTag('public-blog-tag-slugs');
     return NextResponse.json(updated);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 400 });
@@ -86,6 +92,11 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       entityType: 'Post',
       entityId: String(id),
     });
+    revalidateTag('blog-post-public-detail');
+    revalidateTag('public-blog-post-previews');
+    revalidateTag('public-blog-slugs');
+    revalidateTag('public-blog-category-slugs');
+    revalidateTag('public-blog-tag-slugs');
     return NextResponse.json({ message: 'Post deleted' });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

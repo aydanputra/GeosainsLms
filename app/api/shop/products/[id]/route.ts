@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { verifyToken } from '@/modules/auth/utils/auth';
 import { getProductById, updateProduct, deleteProduct, ProductSchema } from '@/modules/shop/api/service';
 import { prisma } from '@/utils/prisma';
@@ -140,6 +141,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const slug = baseSlug ? await generateUniqueSlug(baseSlug, id) : undefined;
 
     const updated = await updateProduct(id, { ...parsed.data, ...(slug !== undefined ? { slug } : {}) });
+    revalidateTag('product-page-public-detail');
+    revalidateTag('public-shop-products-page');
+    revalidateTag('public-shop-categories');
+    revalidateTag('public-product-route-ids');
+    revalidateTag('public-page-vendors');
+    revalidateTag('homepage-vendors');
     return NextResponse.json(updated);
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Gagal memperbarui produk' }, { status: 500 });
@@ -179,6 +186,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
 
     await deleteProduct(id);
+    revalidateTag('product-page-public-detail');
+    revalidateTag('public-shop-products-page');
+    revalidateTag('public-shop-categories');
+    revalidateTag('public-product-route-ids');
     return NextResponse.json({ message: 'Produk dihapus' });
   } catch (error: any) {
     return NextResponse.json({ error: error.message || 'Gagal menghapus produk' }, { status: 500 });
